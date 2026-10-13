@@ -3,6 +3,7 @@ import type { Context } from '../../structure/conductor.ts';
 import type { Generator, NoteEvent } from '../types.ts';
 import { initialPattern } from './base.ts';
 import { compose } from './compose.ts';
+import { fill, type Fill } from './fill.ts';
 import { mutate } from './mutate.ts';
 import { ornament } from './ornament.ts';
 import type { Pattern } from './pattern.ts';
@@ -11,6 +12,7 @@ export interface PairLayers {
   /** Persistent pattern, rewritten only at 8-bar boundaries. */
   readonly base: Pattern;
   readonly ornaments: readonly NoteEvent[];
+  readonly fill: Fill | null;
 }
 
 export interface DrumGenerator extends Generator {
@@ -27,6 +29,7 @@ export function createDrumGenerator(): DrumGenerator {
     return {
       base,
       ornaments: ornament(base, ctx.seeds.ornament, ctx.params.m2),
+      fill: ctx.isSectionEnd ? fill(ctx.seeds.fill, ctx.fillIntensity) : null,
     };
   }
 
@@ -34,7 +37,7 @@ export function createDrumGenerator(): DrumGenerator {
     generateLayers,
     generate(ctx) {
       const layers = generateLayers(ctx);
-      return compose(layers.base, layers.ornaments);
+      return compose(layers.base, layers.ornaments, layers.fill);
     },
   };
 }

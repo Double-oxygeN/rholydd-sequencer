@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { canonicalPattern, initialPattern } from '../src/generators/drums/base.ts';
 import { satisfiesConstraints } from '../src/generators/drums/constraints.ts';
+import { FILL_KINDS, fill } from '../src/generators/drums/fill.ts';
 import { mutate } from '../src/generators/drums/mutate.ts';
 import { ORNAMENT_PARTS, ornament } from '../src/generators/drums/ornament.ts';
 import { patternsEqual } from '../src/generators/drums/pattern.ts';
@@ -70,5 +71,34 @@ describe('ornament', () => {
 
   it('adds nothing when m2 is 0', () => {
     for (let i = 0; i < 50; i++) expect(ornament(canonicalPattern(), hash(i), clampUnit(0))).toEqual([]);
+  });
+});
+
+describe('fill', () => {
+  it('fires according to the intensity', () => {
+    for (let i = 0; i < 50; i++) {
+      expect(fill(hash(i), clampUnit(0))).toBeNull();
+      expect(fill(hash(i), clampUnit(1))).not.toBeNull();
+    }
+  });
+
+  it('keeps the same template when only the intensity changes', () => {
+    for (let i = 0; i < 50; i++) {
+      const strong = fill(hash(i), clampUnit(1));
+      const weak = fill(hash(i), clampUnit(0.5));
+      if (weak !== null) expect(weak).toEqual(strong);
+    }
+  });
+
+  it('covers the last 1 or 2 beats without replacing the backbeat', () => {
+    const kinds = new Set<string>();
+    for (let i = 0; i < 200; i++) {
+      const result = fill(hash(i), clampUnit(1))!;
+      kinds.add(result.kind);
+      const lastBeats = ALL_STEPS.slice(32 - result.length).filter((s) => s !== 28);
+      expect(result.steps).toEqual(lastBeats);
+      for (const event of result.events) expect(result.steps).toContain(event.step);
+    }
+    expect([...kinds].sort()).toEqual([...FILL_KINDS].sort());
   });
 });
