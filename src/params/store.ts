@@ -27,7 +27,7 @@ export function randomSeed(): Seed {
 
 export const DEFAULT_LIVE_PARAMS: LiveParams = {
   m2: clampUnit(0.3),
-  // 0.25 from the requirements rounded every kick and hat mutation count to 0, freezing them for good.
+  // Raised from the 0.25 in the requirements so that kick and hat changes are audible with default settings.
   m8: clampUnit(0.35),
   fillIntensity: clampUnit(0.7),
 };

@@ -2,12 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { canonicalPattern, initialPattern } from '../src/generators/drums/base.ts';
 import { satisfiesConstraints } from '../src/generators/drums/constraints.ts';
 import { FILL_KINDS, fill } from '../src/generators/drums/fill.ts';
-import { mutate } from '../src/generators/drums/mutate.ts';
+import { mutate, mutationCount } from '../src/generators/drums/mutate.ts';
 import { ORNAMENT_PARTS, ornament } from '../src/generators/drums/ornament.ts';
-import { cellAt, patternsEqual } from '../src/generators/drums/pattern.ts';
-import { PROFILES, isAnchorStep, stepWeight } from '../src/generators/drums/weights.ts';
+import { cellAt, motifCell, patternsEqual } from '../src/generators/drums/pattern.ts';
+import { PROFILES, isAnchorStep, slotsOf, stepWeight } from '../src/generators/drums/weights.ts';
 import { ALL_STEPS, PARTS } from '../src/generators/types.ts';
-import { hash, toSeed } from '../src/random/rng.ts';
+import { createRng, hash, toSeed } from '../src/random/rng.ts';
 import { clampUnit } from '../src/units.ts';
 import { liveParams, run } from './helpers.ts';
 
@@ -51,6 +51,31 @@ describe('mutate', () => {
       pattern = mutate(pattern, hash(7, section), clampUnit(1));
       expect(satisfiesConstraints(pattern)).toBe(true);
     }
+  });
+
+  it('rounds the mutation count up with probability equal to the fraction', () => {
+    const rng = createRng(toSeed(5));
+    const n = 20_000;
+    for (const expected of [0, 0.28, 0.42, 1.05, 2.8]) {
+      const counts = Array.from({ length: n }, () => mutationCount(expected, rng));
+      for (const c of counts) expect([Math.floor(expected), Math.ceil(expected)]).toContain(c);
+      expect(Math.abs(counts.reduce((a, b) => a + b, 0) / n - expected)).toBeLessThan(0.02);
+    }
+  });
+
+  it('keeps mutating sparse parts instead of freezing them', () => {
+    const changed = { kick: 0, hat: 0 };
+    let pattern = canonicalPattern();
+    for (let section = 0; section < 500; section++) {
+      const next = mutate(pattern, hash(11, section), clampUnit(0.35));
+      for (const part of ['kick', 'hat'] as const) {
+        if (slotsOf(part).some((slot) => motifCell(next, part, slot) !== motifCell(pattern, part, slot))) changed[part]++;
+      }
+      pattern = next;
+    }
+    // Probabilistic rounding gives at least 0.28 expected mutations per boundary even at the sparsest pattern.
+    expect(changed.kick).toBeGreaterThan(100);
+    expect(changed.hat).toBeGreaterThan(100);
   });
 
   it('does nothing when m8 is 0', () => {

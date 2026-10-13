@@ -14,8 +14,18 @@ const OPERATIONS = ['add', 'remove', 'move'] as const;
 const PART_TAG: Readonly<Record<Part, number>> = { kick: 1, snare: 2, hat: 3, ghost: 4 };
 
 /** Counts onsets within the motif, so a repeated one-beat hat is mutated as one beat, not as 8 copies. */
-export function mutationCount(part: Part, pattern: Pattern, m8: UnitInterval): number {
-  return Math.round(m8 * PROFILES[part].mutability * motifOnsets(pattern, part).length);
+export function expectedMutations(part: Part, pattern: Pattern, m8: UnitInterval): number {
+  return m8 * PROFILES[part].mutability * motifOnsets(pattern, part).length;
+}
+
+/**
+ * Rounds up with probability equal to the fractional part, so the mean stays at the expected value.
+ * Plain rounding turned every expectation below 0.5 into 0 and froze sparse kicks and hats for good.
+ */
+export function mutationCount(expected: number, rng: Rng): number {
+  const whole = Math.floor(expected);
+  // Drawn even when the fraction is 0 so that the rest of the stream does not depend on m8.
+  return whole + (rng.float() < expected - whole ? 1 : 0);
 }
 
 /** Rewrites the base pattern at an 8-bar boundary. The result becomes the reference until the next boundary. */
@@ -24,7 +34,7 @@ export function mutate(base: Pattern, sectionSeed: Seed, m8: UnitInterval): Patt
   for (const part of PARTS) {
     // A separate stream per part keeps e.g. the hat mutations unchanged when the kick count changes.
     const rng = createRng(hash(sectionSeed, TAG.mutate, PART_TAG[part]));
-    const count = mutationCount(part, pattern, m8);
+    const count = mutationCount(expectedMutations(part, pattern, m8), rng);
     for (let i = 0; i < count; i++) pattern = mutateOnce(pattern, part, rng);
   }
   return pattern;
