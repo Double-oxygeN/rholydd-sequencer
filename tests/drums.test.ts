@@ -5,7 +5,7 @@ import { FILL_KINDS, fill } from '../src/generators/drums/fill.ts';
 import { mutate } from '../src/generators/drums/mutate.ts';
 import { ORNAMENT_PARTS, ornament } from '../src/generators/drums/ornament.ts';
 import { cellAt, patternsEqual } from '../src/generators/drums/pattern.ts';
-import { PROFILES, isAnchorStep } from '../src/generators/drums/weights.ts';
+import { PROFILES, isAnchorStep, stepWeight } from '../src/generators/drums/weights.ts';
 import { ALL_STEPS, PARTS } from '../src/generators/types.ts';
 import { hash, toSeed } from '../src/random/rng.ts';
 import { clampUnit } from '../src/units.ts';
@@ -22,6 +22,10 @@ describe('weight table', () => {
     expect(ALL_STEPS.filter((s) => isAnchorStep('kick', s))).toEqual([0]);
     expect(ALL_STEPS.filter((s) => isAnchorStep('snare', s))).toEqual([4, 12, 20, 28]);
     expect(ALL_STEPS.filter((s) => isAnchorStep('hat', s) || isAnchorStep('ghost', s))).toEqual([]);
+  });
+
+  it('allows no snare besides the backbeat', () => {
+    expect(ALL_STEPS.filter((s) => stepWeight('snare', s) > 0)).toEqual([4, 12, 20, 28]);
   });
 
   it('derives the hat from one beat of weights', () => {

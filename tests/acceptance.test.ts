@@ -38,6 +38,17 @@ describe('MVP acceptance', () => {
     expect(generateBars(42, 256)).toEqual(viaLayers);
   });
 
+  it('plays the snare only on beats 2 and 4 outside fills, without ever mutating it', () => {
+    for (const seed of SEEDS) {
+      for (const params of PARAM_SETS) {
+        for (const { events } of run(seed, BARS, () => params)) {
+          const snares = events.filter((e) => e.part === 'snare' && e.layer !== 'fill').map((e) => e.step);
+          expect(snares).toEqual([4, 12, 20, 28]);
+        }
+      }
+    }
+  });
+
   it('repeats one beat of hi-hat across the 2 bars apart from ornaments and fills', () => {
     for (const seed of SEEDS) {
       for (const params of PARAM_SETS) {

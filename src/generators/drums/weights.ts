@@ -42,16 +42,17 @@ export const PROFILES: Readonly<Record<Part, PartProfile>> = {
     maxOnsets: 7,
     velocity: [v(0.85), v(1.0)],
   },
+  // Only the backbeat: extra snares outside fills blurred the 2-step feel.
   snare: {
     period: STEPS_PER_PAIR,
     weights: motifWeights(
       STEPS_PER_PAIR,
-      [0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.1, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.1],
-      [0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.1, 0.0, 0.0, 1.0, 0.0, 0.2, 0.1],
+      [0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0],
+      [0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0],
     ),
-    mutability: clampUnit(0.3),
+    mutability: clampUnit(0),
     minOnsets: 4,
-    maxOnsets: 6,
+    maxOnsets: 4,
     velocity: [v(0.6), v(1.0)],
   },
   // One beat repeated over the 2 bars: a free 32-step hat line sounded aimless.
