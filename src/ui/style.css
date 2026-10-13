@@ -1,0 +1,223 @@
+:root {
+  --bg: #f6f6f4;
+  --fg: #1d1d1f;
+  --muted: #6b6b70;
+  --panel: #ffffff;
+  --line: #d9d9dd;
+  --cell: #ececef;
+  --accent: #e0457b;
+  --base: #2f6fdf;
+  --ornament: #1a9e74;
+  --fill: #e08a1e;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #141416;
+    --fg: #ececf0;
+    --muted: #9a9aa3;
+    --panel: #1d1d21;
+    --line: #34343a;
+    --cell: #26262b;
+    --accent: #ff6b9c;
+    --base: #6b9cff;
+    --ornament: #45cf9f;
+    --fill: #ffb24d;
+    color-scheme: dark;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: system-ui, sans-serif;
+}
+
+#app {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 24px 16px 48px;
+  display: grid;
+  gap: 20px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  letter-spacing: 0.04em;
+}
+
+.panel {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  padding: 16px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.field {
+  display: grid;
+  gap: 4px;
+  align-content: start;
+}
+
+.field-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.field small {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.row input[type='range'] {
+  flex: 1;
+  accent-color: var(--accent);
+}
+
+.row output {
+  font-variant-numeric: tabular-nums;
+  width: 3em;
+  text-align: right;
+}
+
+input[type='number'],
+input[type='text'] {
+  width: 100%;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+input:invalid {
+  border-color: var(--accent);
+}
+
+button {
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+button.play {
+  font-size: 1.1rem;
+  font-weight: 700;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+button.play.playing {
+  background: var(--fg);
+  border-color: var(--fg);
+  color: var(--bg);
+}
+
+.position {
+  display: grid;
+  gap: 8px;
+}
+
+.meter {
+  display: grid;
+  gap: 3px;
+  align-items: center;
+}
+
+.meter-label {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.meter span:not(.meter-label) {
+  height: 10px;
+  border-radius: 2px;
+  background: var(--cell);
+}
+
+.meter span.on {
+  background: var(--accent);
+}
+
+.position-total {
+  font-size: 0.9rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 4em repeat(32, 1fr);
+  gap: 3px;
+  padding: 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.grid-label {
+  font-size: 0.8rem;
+  color: var(--muted);
+  align-self: center;
+}
+
+.grid-cell {
+  aspect-ratio: 1 / 1.6;
+  border-radius: 2px;
+  background: var(--cell);
+}
+
+.grid-cell.beat {
+  box-shadow: inset 2px 0 0 var(--line);
+}
+
+.grid-cell.bar {
+  box-shadow: inset 3px 0 0 var(--muted);
+}
+
+.grid-cell[data-layer='base'] {
+  background: color-mix(in srgb, var(--base) calc(var(--velocity) * 100%), var(--cell));
+}
+
+.grid-cell[data-layer='ornament'] {
+  background: color-mix(in srgb, var(--ornament) calc(var(--velocity) * 100% + 30%), var(--cell));
+}
+
+.grid-cell[data-layer='fill'] {
+  background: color-mix(in srgb, var(--fill) calc(var(--velocity) * 100%), var(--cell));
+}
+
+.grid-cell.now {
+  outline: 2px solid var(--fg);
+  outline-offset: -1px;
+}
+
+.status {
+  margin: 0;
+  color: var(--muted);
+}
