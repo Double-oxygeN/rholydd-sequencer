@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { canonicalPattern, initialPattern } from '../src/generators/drums/base.ts';
 import { satisfiesConstraints } from '../src/generators/drums/constraints.ts';
 import { mutate } from '../src/generators/drums/mutate.ts';
+import { ORNAMENT_PARTS, ornament } from '../src/generators/drums/ornament.ts';
 import { patternsEqual } from '../src/generators/drums/pattern.ts';
 import { PROFILES, isAnchor } from '../src/generators/drums/weights.ts';
 import { ALL_STEPS, PARTS } from '../src/generators/types.ts';
@@ -50,5 +51,24 @@ describe('mutate', () => {
     const base = canonicalPattern();
     const changed = Array.from({ length: 20 }, (_, i) => !patternsEqual(mutate(base, hash(i), clampUnit(1)), base));
     expect(changed.filter(Boolean).length).toBeGreaterThan(15);
+  });
+});
+
+describe('ornament', () => {
+  it('adds only hats and ghosts to steps 24 to 31 with velocity 0.3 to 0.6', () => {
+    const base = canonicalPattern();
+    for (let i = 0; i < 200; i++) {
+      for (const event of ornament(base, hash(i), clampUnit(1))) {
+        expect(ORNAMENT_PARTS).toContain(event.part);
+        expect(event.step).toBeGreaterThanOrEqual(24);
+        expect(event.velocity).toBeGreaterThanOrEqual(0.3);
+        expect(event.velocity).toBeLessThanOrEqual(0.6);
+        expect(base[event.part][event.step]).toBeNull();
+      }
+    }
+  });
+
+  it('adds nothing when m2 is 0', () => {
+    for (let i = 0; i < 50; i++) expect(ornament(canonicalPattern(), hash(i), clampUnit(0))).toEqual([]);
   });
 });
