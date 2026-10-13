@@ -2,7 +2,8 @@ import { parseArgs } from 'node:util';
 import { compose } from '../src/generators/drums/compose.ts';
 import type { FillKind } from '../src/generators/drums/fill.ts';
 import { createDrumGenerator } from '../src/generators/drums/index.ts';
-import { cellAt, patternsEqual, type Pattern } from '../src/generators/drums/pattern.ts';
+import { motifCell, patternsEqual, type Pattern } from '../src/generators/drums/pattern.ts';
+import { slotsOf } from '../src/generators/drums/weights.ts';
 import { ALL_STEPS, PARTS, type Layer, type NoteEvent, type Part } from '../src/generators/types.ts';
 import { parseSeed, type Seed } from '../src/random/rng.ts';
 import { createConductor, type LiveParams } from '../src/structure/conductor.ts';
@@ -25,7 +26,7 @@ export interface SimulationReport {
   readonly mutation: {
     /** Number of 8-bar boundaries where the part's base pattern changed. */
     readonly changedSections: PerPart<number>;
-    /** Total number of cells rewritten across all boundaries. */
+    /** Total number of motif cells rewritten across all boundaries. */
     readonly changedCells: PerPart<number>;
     readonly boundaries: number;
   };
@@ -84,7 +85,9 @@ export function simulate({ bars, seed, live }: SimulationOptions): SimulationRep
         boundaries++;
         if (patternsEqual(before, layers.base)) repeatedSections++;
         for (const part of PARTS) {
-          const cells = ALL_STEPS.filter((step) => cellAt(before[part], step) !== cellAt(layers.base[part], step)).length;
+          const cells = slotsOf(part).filter(
+            (slot) => motifCell(before, part, slot) !== motifCell(layers.base, part, slot),
+          ).length;
           changedCells[part] += cells;
           if (cells > 0) changedSections[part]++;
         }

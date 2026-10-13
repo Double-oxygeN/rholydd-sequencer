@@ -8,7 +8,7 @@ export function compose(base: Pattern, ornaments: readonly NoteEvent[], fill: Fi
   const slotOf = (event: NoteEvent) => event.step * PARTS.length + PARTS.indexOf(event.part);
   for (const part of PARTS) {
     for (const step of ALL_STEPS) {
-      const velocity = cellAt(base[part], step);
+      const velocity = cellAt(base, part, step);
       if (velocity !== null) {
         const event: NoteEvent = { step, part, velocity, layer: 'base' };
         slots[slotOf(event)] = event;

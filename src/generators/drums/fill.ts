@@ -1,7 +1,7 @@
 import { createRng, type Seed } from '../../random/rng.ts';
 import type { UnitInterval } from '../../units.ts';
 import { STEPS_PER_PAIR, stepRange, type NoteEvent, type Part, type Step, type Velocity } from '../types.ts';
-import { isAnchor } from './weights.ts';
+import { isAnchorStep } from './weights.ts';
 
 export const FILL_KINDS = ['snareRoll', 'kickSnare', 'dropout', 'ghostRush'] as const;
 export type FillKind = (typeof FILL_KINDS)[number];
@@ -43,8 +43,8 @@ export function fill(seed: Seed, intensity: UnitInterval): Fill | null {
   const start = STEPS_PER_PAIR - length;
   const region = stepRange(start, STEPS_PER_PAIR);
   // Fills never replace the backbeat: F-06 takes priority over a complete dropout.
-  const steps = region.filter((step) => !isAnchor('snare', step));
-  const backbeats = region.filter((step) => isAnchor('snare', step));
+  const steps = region.filter((step) => !isAnchorStep('snare', step));
+  const backbeats = region.filter((step) => isAnchorStep('snare', step));
   const events = steps.flatMap((step) =>
     TEMPLATES[kind](step, (step - start + 1) / length).map(
       ([part, velocity]): NoteEvent => ({ step, part, velocity: velocity as Velocity, layer: 'fill' }),

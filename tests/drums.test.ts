@@ -4,8 +4,8 @@ import { satisfiesConstraints } from '../src/generators/drums/constraints.ts';
 import { FILL_KINDS, fill } from '../src/generators/drums/fill.ts';
 import { mutate } from '../src/generators/drums/mutate.ts';
 import { ORNAMENT_PARTS, ornament } from '../src/generators/drums/ornament.ts';
-import { patternsEqual } from '../src/generators/drums/pattern.ts';
-import { PROFILES, isAnchor } from '../src/generators/drums/weights.ts';
+import { cellAt, patternsEqual } from '../src/generators/drums/pattern.ts';
+import { PROFILES, isAnchorStep } from '../src/generators/drums/weights.ts';
 import { ALL_STEPS, PARTS } from '../src/generators/types.ts';
 import { hash, toSeed } from '../src/random/rng.ts';
 import { clampUnit } from '../src/units.ts';
@@ -19,9 +19,14 @@ describe('weight table', () => {
   });
 
   it('anchors the kick on step 0 and the snare on beats 2 and 4', () => {
-    expect(ALL_STEPS.filter((s) => isAnchor('kick', s))).toEqual([0]);
-    expect(ALL_STEPS.filter((s) => isAnchor('snare', s))).toEqual([4, 12, 20, 28]);
-    expect(ALL_STEPS.filter((s) => isAnchor('hat', s) || isAnchor('ghost', s))).toEqual([]);
+    expect(ALL_STEPS.filter((s) => isAnchorStep('kick', s))).toEqual([0]);
+    expect(ALL_STEPS.filter((s) => isAnchorStep('snare', s))).toEqual([4, 12, 20, 28]);
+    expect(ALL_STEPS.filter((s) => isAnchorStep('hat', s) || isAnchorStep('ghost', s))).toEqual([]);
+  });
+
+  it('derives the hat from one beat of weights', () => {
+    expect(PROFILES.hat.period).toBe(4);
+    expect(PROFILES.hat.weights).toEqual([0.5, 0.1, 0.8, 0.2]);
   });
 
   it('builds a canonical two-step that satisfies every constraint', () => {
@@ -65,7 +70,7 @@ describe('ornament', () => {
         expect(event.step).toBeGreaterThanOrEqual(24);
         expect(event.velocity).toBeGreaterThanOrEqual(0.3);
         expect(event.velocity).toBeLessThanOrEqual(0.6);
-        expect(base[event.part][event.step]).toBeNull();
+        expect(cellAt(base, event.part, event.step)).toBeNull();
       }
     }
   });

@@ -2,7 +2,7 @@ import { createRng, type Seed } from '../../random/rng.ts';
 import type { UnitInterval } from '../../units.ts';
 import { stepRange, velocityBetween, type NoteEvent, type Part, type Step, type Velocity } from '../types.ts';
 import { cellAt, type Pattern } from './pattern.ts';
-import { weightAt } from './weights.ts';
+import { stepWeight } from './weights.ts';
 
 /** Second half of the second bar. */
 export const ORNAMENT_STEPS = stepRange(24, 32);
@@ -19,7 +19,7 @@ export function ornament(base: Pattern, seed: Seed, m2: UnitInterval): NoteEvent
       // Both draws happen before any check so that the stream never depends on the pattern.
       const roll = rng.float();
       const loudness = rng.float();
-      if (roll < m2 * weightAt(part, step) && canOrnament(base, part, step)) {
+      if (roll < m2 * stepWeight(part, step) && canOrnament(base, part, step)) {
         events.push({ step, part, velocity: velocityBetween(...ORNAMENT_VELOCITY, loudness), layer: 'ornament' });
       }
     }
@@ -28,6 +28,6 @@ export function ornament(base: Pattern, seed: Seed, m2: UnitInterval): NoteEvent
 }
 
 function canOrnament(base: Pattern, part: Part, step: Step): boolean {
-  if (cellAt(base[part], step) !== null) return false;
-  return part !== 'ghost' || cellAt(base.snare, step) === null;
+  if (cellAt(base, part, step) !== null) return false;
+  return part !== 'ghost' || cellAt(base, 'snare', step) === null;
 }

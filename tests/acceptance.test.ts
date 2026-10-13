@@ -38,6 +38,25 @@ describe('MVP acceptance', () => {
     expect(generateBars(42, 256)).toEqual(viaLayers);
   });
 
+  it('repeats one beat of hi-hat across the 2 bars apart from ornaments and fills', () => {
+    for (const seed of SEEDS) {
+      for (const params of PARAM_SETS) {
+        for (const { events, layers } of run(seed, BARS, () => params)) {
+          const fillSteps = new Set<number>([...(layers.fill?.steps ?? []), ...(layers.fill?.backbeats ?? [])]);
+          const hats = events.filter((e) => e.part === 'hat' && e.layer === 'base');
+          const beat = hats.filter((e) => e.step < 4).map((e) => [e.step, e.velocity]);
+          for (let offset = 4; offset < 32; offset += 4) {
+            const expected = beat.filter(([step]) => !fillSteps.has(step! + offset));
+            const actual = hats
+              .filter((e) => e.step >= offset && e.step < offset + 4)
+              .map((e) => [e.step - offset, e.velocity]);
+            expect(actual).toEqual(expected);
+          }
+        }
+      }
+    }
+  });
+
   it('never plays the kick and the snare on the same step', () => {
     for (const seed of SEEDS) {
       for (const params of PARAM_SETS) {
@@ -61,7 +80,7 @@ describe('MVP acceptance', () => {
           ornamentsSeen += current.layers.ornaments.length;
           if (next.ctx.isSectionStart) continue;
           for (const { part, step } of current.layers.ornaments) {
-            expect(cellAt(next.layers.base[part], step)).toBeNull();
+            expect(cellAt(next.layers.base, part, step)).toBeNull();
             expect(next.events.filter((e) => e.part === part && e.step === step && e.layer === 'base')).toEqual([]);
           }
         }

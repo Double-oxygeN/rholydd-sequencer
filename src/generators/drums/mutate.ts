@@ -1,9 +1,9 @@
 import { TAG, createRng, hash, pickWeighted, type Rng, type Seed } from '../../random/rng.ts';
 import type { UnitInterval } from '../../units.ts';
-import { ALL_STEPS, PARTS, toStep, type Part, type Step } from '../types.ts';
+import { PARTS, type Part } from '../types.ts';
 import { satisfiesConstraints } from './constraints.ts';
-import { cellAt, onsets, withCell, type Pattern } from './pattern.ts';
-import { PROFILES, baseVelocity, isAnchor, weightAt } from './weights.ts';
+import { motifCell, motifOnsets, withSlot, type Pattern } from './pattern.ts';
+import { PROFILES, baseVelocity, isAnchor, slotsOf, toSlot, weightAt, type Slot } from './weights.ts';
 
 // One initial try plus up to 10 redraws, as the requirements specify.
 const MAX_ATTEMPTS = 11;
@@ -13,8 +13,9 @@ const OPERATIONS = ['add', 'remove', 'move'] as const;
 // Indexes into the hash are integers, matching the TAG convention in rng.ts.
 const PART_TAG: Readonly<Record<Part, number>> = { kick: 1, snare: 2, hat: 3, ghost: 4 };
 
+/** Counts onsets within the motif, so a repeated one-beat hat is mutated as one beat, not as 8 copies. */
 export function mutationCount(part: Part, pattern: Pattern, m8: UnitInterval): number {
-  return Math.round(m8 * PROFILES[part].mutability * onsets(pattern[part]).length);
+  return Math.round(m8 * PROFILES[part].mutability * motifOnsets(pattern, part).length);
 }
 
 /** Rewrites the base pattern at an 8-bar boundary. The result becomes the reference until the next boundary. */
@@ -41,41 +42,41 @@ function applyOperation(pattern: Pattern, part: Part, rng: Rng): Pattern | undef
   const operation = OPERATIONS[rng.int(OPERATIONS.length)];
   switch (operation) {
     case 'add': {
-      const step = pickStep(rng, emptyAllowedSteps(pattern, part), (s) => weightAt(part, s));
-      return step === undefined ? undefined : withCell(pattern, part, step, baseVelocity(part, step));
+      const slot = pickSlot(rng, emptyAllowedSlots(pattern, part), (s) => weightAt(part, s));
+      return slot === undefined ? undefined : withSlot(pattern, part, slot, baseVelocity(part, slot));
     }
     case 'remove': {
       // Weak positions are removed first so that accumulated mutations drift back toward the weight table.
-      const step = pickStep(rng, movableOnsets(pattern, part), (s) => 1 - weightAt(part, s));
-      return step === undefined ? undefined : withCell(pattern, part, step, null);
+      const slot = pickSlot(rng, movableOnsets(pattern, part), (s) => 1 - weightAt(part, s));
+      return slot === undefined ? undefined : withSlot(pattern, part, slot, null);
     }
     case 'move': {
-      const from = pickStep(rng, movableOnsets(pattern, part), (s) => 1 - weightAt(part, s));
+      const from = pickSlot(rng, movableOnsets(pattern, part), (s) => 1 - weightAt(part, s));
       if (from === undefined) return undefined;
-      const targets = MOVE_OFFSETS.map((offset) => toStep(from + offset)).filter(
-        (s): s is Step => s !== undefined && isEmptyAndAllowed(pattern, part, s),
+      const targets = MOVE_OFFSETS.map((offset) => toSlot(part, from + offset)).filter(
+        (s): s is Slot => s !== undefined && isEmptyAndAllowed(pattern, part, s),
       );
-      const to = pickStep(rng, targets, (s) => weightAt(part, s));
-      return to === undefined ? undefined : withCell(withCell(pattern, part, from, null), part, to, baseVelocity(part, to));
+      const to = pickSlot(rng, targets, (s) => weightAt(part, s));
+      return to === undefined ? undefined : withSlot(withSlot(pattern, part, from, null), part, to, baseVelocity(part, to));
     }
     case undefined:
       return undefined;
   }
 }
 
-function pickStep(rng: Rng, steps: readonly Step[], weightOf: (step: Step) => number): Step | undefined {
-  const index = pickWeighted(rng, steps.map(weightOf));
-  return index === undefined ? undefined : steps[index];
+function pickSlot(rng: Rng, slots: readonly Slot[], weightOf: (slot: Slot) => number): Slot | undefined {
+  const index = pickWeighted(rng, slots.map(weightOf));
+  return index === undefined ? undefined : slots[index];
 }
 
-function isEmptyAndAllowed(pattern: Pattern, part: Part, step: Step): boolean {
-  return cellAt(pattern[part], step) === null && weightAt(part, step) > 0;
+function isEmptyAndAllowed(pattern: Pattern, part: Part, slot: Slot): boolean {
+  return motifCell(pattern, part, slot) === null && weightAt(part, slot) > 0;
 }
 
-function emptyAllowedSteps(pattern: Pattern, part: Part): Step[] {
-  return ALL_STEPS.filter((step) => isEmptyAndAllowed(pattern, part, step));
+function emptyAllowedSlots(pattern: Pattern, part: Part): Slot[] {
+  return slotsOf(part).filter((slot) => isEmptyAndAllowed(pattern, part, slot));
 }
 
-function movableOnsets(pattern: Pattern, part: Part): Step[] {
-  return onsets(pattern[part]).filter((step) => !isAnchor(part, step));
+function movableOnsets(pattern: Pattern, part: Part): Slot[] {
+  return motifOnsets(pattern, part).filter((slot) => !isAnchor(part, slot));
 }
