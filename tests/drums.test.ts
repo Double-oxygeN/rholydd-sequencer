@@ -9,6 +9,7 @@ import { PROFILES, isAnchor } from '../src/generators/drums/weights.ts';
 import { ALL_STEPS, PARTS } from '../src/generators/types.ts';
 import { hash, toSeed } from '../src/random/rng.ts';
 import { clampUnit } from '../src/units.ts';
+import { liveParams, run } from './helpers.ts';
 
 const inCategory = (w: number) => w === 0 || w === 1 || (w >= 0.1 && w <= 0.3) || (w >= 0.5 && w <= 0.8);
 
@@ -100,5 +101,16 @@ describe('fill', () => {
       for (const event of result.events) expect(result.steps).toContain(event.step);
     }
     expect([...kinds].sort()).toEqual([...FILL_KINDS].sort());
+  });
+});
+
+describe('compose with a fill', () => {
+  it('keeps only the snare on a backbeat inside the fill', () => {
+    const pairs = run(42, 512, () => liveParams(1, 0.5, 1));
+    const closing = pairs.filter((p) => p.layers.fill !== null);
+    expect(closing.length).toBeGreaterThan(0);
+    for (const { events } of closing) {
+      expect(events.filter((e) => e.step === 28).map((e) => e.part)).toEqual(['snare']);
+    }
   });
 });

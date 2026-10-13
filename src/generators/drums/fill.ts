@@ -15,6 +15,8 @@ export interface Fill {
   readonly length: FillLength;
   /** Steps whose base and ornament hits are replaced by the fill. */
   readonly steps: readonly Step[];
+  /** Backbeats inside the fill: only the snare keeps sounding there. */
+  readonly backbeats: readonly Step[];
   readonly events: readonly NoteEvent[];
 }
 
@@ -39,12 +41,14 @@ export function fill(seed: Seed, intensity: UnitInterval): Fill | null {
   const length = FILL_LENGTHS[rng.int(FILL_LENGTHS.length)] ?? 4;
   if (!fires) return null;
   const start = STEPS_PER_PAIR - length;
+  const region = stepRange(start, STEPS_PER_PAIR);
   // Fills never replace the backbeat: F-06 takes priority over a complete dropout.
-  const steps = stepRange(start, STEPS_PER_PAIR).filter((step) => !isAnchor('snare', step));
+  const steps = region.filter((step) => !isAnchor('snare', step));
+  const backbeats = region.filter((step) => isAnchor('snare', step));
   const events = steps.flatMap((step) =>
     TEMPLATES[kind](step, (step - start + 1) / length).map(
       ([part, velocity]): NoteEvent => ({ step, part, velocity: velocity as Velocity, layer: 'fill' }),
     ),
   );
-  return { kind, length, steps, events };
+  return { kind, length, steps, backbeats, events };
 }

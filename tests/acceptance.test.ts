@@ -33,6 +33,11 @@ describe('MVP acceptance', () => {
     }
   });
 
+  it('generate() returns the composed layers', () => {
+    const viaLayers = run(42, 256).map((pair) => pair.events);
+    expect(generateBars(42, 256)).toEqual(viaLayers);
+  });
+
   it('never plays the kick and the snare on the same step', () => {
     for (const seed of SEEDS) {
       for (const params of PARAM_SETS) {
