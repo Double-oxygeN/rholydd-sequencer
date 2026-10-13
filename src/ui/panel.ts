@@ -1,6 +1,6 @@
 import { BPM_RANGE, clampBpm, randomSeed, type ParamStore, type Params } from '../params/store.ts';
 import { parseSeed } from '../random/rng.ts';
-import { clampUnit } from '../units.ts';
+import { clampUnit, type UnitInterval } from '../units.ts';
 
 type UnitKey = 'm2' | 'm8' | 'fillIntensity' | 'volume';
 
@@ -72,12 +72,16 @@ function slider(store: ParamStore, key: UnitKey): HTMLElement {
   const output = document.createElement('output');
   const render = (params: Params) => {
     range.value = String(params[key]);
-    output.textContent = params[key].toFixed(2);
+    output.textContent = formatPercent(params[key]);
   };
   range.addEventListener('input', () => store.update({ [key]: clampUnit(Number(range.value)) }));
   store.subscribe(render);
   render(store.get());
   return row(range, output);
+}
+
+function formatPercent(value: UnitInterval): string {
+  return `${Math.round(value * 100)}%`;
 }
 
 function field(label: string, control: HTMLElement): HTMLElement {
