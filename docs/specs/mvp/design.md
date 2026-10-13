@@ -1,0 +1,120 @@
+# MVP設計書
+
+[MVP要件定義書](./requirements.md) を実装するための設計です。要件の解釈が分かれる箇所は「仕様の解釈」にまとめています。
+
+## モジュール構成と依存方向
+
+```
+ui ──▶ engine ──▶ structure ──▶ random
+ │        │           ▲
+ │        └──▶ generators ──▶ random
+ └──▶ params
+tools/simulate ──▶ structure, generators   （Tone.js に依存しない）
+```
+
+| モジュール | 責務 | Tone.js 依存 |
+| --- | --- | --- |
+| `src/units.ts` | 別名型（brand）の基盤と、0〜1 の値 `UnitInterval` | なし |
+| `src/random/rng.ts` | splitmix32 によるシード派生、sfc32 本体 | なし |
+| `src/structure/form.ts` | 8bar 内の2bar の役割（反復・反復・反復・変奏） | なし |
+| `src/structure/conductor.ts` | 2bar 通し番号 → `Context`、パラメーターのラッチ | なし |
+| `src/generators/types.ts` | `Step` / `Velocity` / `NoteEvent` / `Generator` | なし |
+| `src/generators/drums/*` | 重み表、基本パターン、変異、装飾、フィル、合成 | なし |
+| `src/params/store.ts` | UI から操作するパラメーターの保持と通知 | なし |
+| `src/engine/audio.ts` | サンプル読込、ベロシティ付き発音、マスター音量 | あり |
+| `src/engine/transport.ts` | Transport の2bar 周期で生成を要求し、発音を予約 | あり |
+| `src/ui/*` | 操作パネル、小節位置、ステップグリッド | あり（Draw のみ） |
+
+## 型
+
+不正な状態を表現できないよう、プリミティブ型は brand 型で包み、スマートコンストラクタ経由でのみ作ります。
+
+| 型 | 中身 | 不変条件 |
+| --- | --- | --- |
+| `UnitInterval` | number | 0 ≦ x ≦ 1 |
+| `Seed` | number | 32bit 符号なし整数 |
+| `Step` | number | 0〜31 の整数（2bar 内の16分位置） |
+| `Velocity` | number | 0 < v ≦ 1。無音は `Velocity` ではなく「セルが空」で表す |
+| `Lane` | `readonly (Velocity \| null)[]` | 長さ 32 |
+| `Pattern` | `Record<Part, Lane>` | 全パートが `Lane` |
+| `PairIndex` / `SectionIndex` / `BarIndex` | number | 0 以上の整数 |
+| `Bpm` | number | 160〜180 |
+
+要件定義書の `Context` は `pairIn8` と `isSectionStart` / `isSectionEnd` / `relation` を独立に持ちますが、これらは `pairIn8` から一意に決まります。矛盾した組み合わせを作れないよう、`pairIn8` を判別子とする判別共用体にしました。
+
+```ts
+type PairRole =
+  | { pairIn8: 0;     isSectionStart: true;  isSectionEnd: false; relation: 'repeat' }
+  | { pairIn8: 1 | 2; isSectionStart: false; isSectionEnd: false; relation: 'repeat' }
+  | { pairIn8: 3;     isSectionStart: false; isSectionEnd: true;  relation: 'variant'; fillIntensity: UnitInterval };
+```
+
+`fillIntensity` はフィルを生成する最後の2bar にだけ存在します。`Context` を作れるのはコンダクターだけです。
+
+`NoteEvent` には要件の `step` / `part` / `velocity` に加えて、どの層から来た音かを示す `layer: 'base' | 'ornament' | 'fill'` を持たせます。受け入れテスト（装飾の持ち越し、基本パターンの変化タイミング）とシミュレーションの統計を、生成器の内部状態を覗かずに検証するためです。
+
+## 生成の流れ
+
+`DrumGenerator.generateLayers(ctx)` が層ごとの結果 `{ base, ornament, fill }` を返し、`generate(ctx)` はそれを合成して `NoteEvent[]` にします。
+
+1. **基本パターン**: 最初の呼び出しで重み表から生成する（`hash(seeds.section, TAG.base)`）。以降は `isSectionStart` のときだけ変異させる（パートごとに `hash(seeds.section, TAG.mutate, パート番号)`）。
+2. **装飾**: 毎回 `seeds.ornament` から乱数を作り直し、ステップ24〜31 のハイハットとゴーストに音を足す。
+3. **フィル**: `isSectionEnd` のときだけ `seeds.fill` から乱数を作り、確率 `fillIntensity` でテンプレートを適用する。
+4. **合成**: 基本パターンに装飾を重ね、フィルが置き換えるステップを全パート消してからフィルの音を書く。
+
+### 乱数の引き方（N-05）
+
+- 乱数生成器は用途（初期生成・パートごとの変異・装飾・フィル）ごとに別々に作り、共有しません。
+- 装飾は24〜31 の全ステップで「判定用」「ベロシティ用」の2つを必ず引いてから判定します。既存の音があって足せないステップでも引きます。
+- フィルは発動するかどうかに関係なく「発動判定・テンプレート・長さ」の3つを先に引きます。
+
+### パラメーターのラッチ
+
+コンダクターが2bar 通し番号に基づいてラッチします。壁時計ではなく生成要求の時点の小節で決まるため、lookAhead の揺れで結果が変わりません。
+
+| パラメーター | ラッチするタイミング |
+| --- | --- |
+| `m2`, `m8` | `pairIn8 = 0`（8bar の頭）の生成時 |
+| `fillIntensity` | `pairIn8 = 3`（8小節目を含む2bar）の生成時 |
+| `bpm`, `seed` | 再生開始時（`Sequencer.start` の引数として渡し、再生中は変更できない API にする） |
+| `volume` | 即時（生成には関与しない） |
+
+## 仕様の解釈
+
+### フィルとバックビートの衝突
+
+8小節目の4拍目のスネア（2bar 内のステップ28）は、フィルが置き換える範囲（最後の4〜8ステップ = 24〜31）に含まれます。F-06 と受け入れ基準「全小節でスネアの2拍目・4拍目が鳴っている」を優先し、**フィルはスネアのアンカーのステップを置き換えない**ことにしました。このため「ドロップアウト（全パート無音）」は、正確には「バックビートのスネアだけを残して無音」になります。
+
+### キックとスネアの交互打ち
+
+衝突0件の基準を満たすため、偶数ステップをスネア、奇数ステップをキックにします。ステップ28（アンカー）は偶数なのでスネアと一致します。
+
+### 衝突の範囲
+
+「キックとスネアの衝突」はキックと `snare` パートの同時発音を指します。加えて、ゴーストスネアと `snare` も同じステップに置きません（同じ太鼓を2回叩くことになるため）。キックとゴーストの同時発音は許します。
+
+### 変異
+
+- 1回の変異（追加・削除・移動）ごとに制約を確認し、満たさなければ最大10回引き直し、それでも駄目ならその1回を取り消します。
+- 追加先は重みに比例、削除対象は `1 − 重み` に比例して選びます。変異が累積しても、重みの高い位置に戻ろうとする（DnB の文法に平均回帰する）ためです。
+- 移動は ±1〜2 ステップで、アンカーは動かさず、重み0の位置へは動かしません。2bar の端をまたぐ移動はしません。
+- 変異回数 `round(m8 × 変異しやすさ × 発音数)` は要件どおりアンカーを含む発音数で計算します。ゴーストの最小発音数を 2 にしているのは、発音数0に到達すると変異回数も0になり二度と戻らないためです。
+
+### 反復率（未決事項への暫定定義）
+
+シミュレーションでは次の2つを出力します。目標値は試聴結果を見て決めます。
+
+- **2bar 反復率**: 直前の2bar とイベント列（ステップ・パート・ベロシティ）が完全一致した2bar の割合
+- **8bar 反復率**: 直前の8bar と基本パターンが完全一致した8bar の割合
+
+## 再生エンジン
+
+- `Tone.getTransport().scheduleRepeat(cb, '2m', 0)` のコールバックで、渡された `time` を基準に `time + step × 16分の秒数` で発音を予約します（N-01）。
+- 発音は `Tone.Sampler` の `triggerAttack(note, time, velocity)` を使います。発音ごとのノードは Tone.js が再生終了後に解放します（N-04）。
+- AudioContext は `latencyHint: 'playback'` と長めの lookAhead で作成し、Tone.js 既定の Worker クロックで刻みます（N-02）。
+- 停止時は Transport を止めてスケジュールを破棄し、予約済みの発音を止め、次の再生でコンダクターと生成器を作り直します（F-02）。
+- 小節位置とグリッドの表示は `Tone.getDraw()` で発音時刻に同期させます。
+
+## ドラムサンプル
+
+入手元とライセンスは未決事項のため、`tools/make-samples.ts` で合成した自作の仮サンプルを `public/samples/drums/` に置きます。ノイズは自前の乱数から作るので、何度生成しても同じファイルになります。正式な素材が決まったら同じファイル名で差し替えます。
