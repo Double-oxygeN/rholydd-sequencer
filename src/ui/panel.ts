@@ -4,11 +4,11 @@ import { clampUnit } from '../units.ts';
 
 type UnitKey = 'm2' | 'm8' | 'fillIntensity' | 'volume';
 
-const UNIT_CONTROLS: readonly { key: UnitKey; label: string; note: string }[] = [
-  { key: 'm2', label: '2bar 変化率', note: '次の8bar 境界から' },
-  { key: 'm8', label: '8bar 変化率', note: '次の8bar 境界から' },
-  { key: 'fillIntensity', label: 'フィル強度', note: '次の8小節目から' },
-  { key: 'volume', label: '音量', note: '即時' },
+const UNIT_CONTROLS: readonly { key: UnitKey; label: string }[] = [
+  { key: 'm2', label: '2bar 変化率' },
+  { key: 'm8', label: '8bar 変化率' },
+  { key: 'fillIntensity', label: 'フィル強度' },
+  { key: 'volume', label: '音量' },
 ];
 
 export interface Panel {
@@ -49,9 +49,9 @@ export function createPanel(store: ParamStore): Panel {
 
   element.append(
     play,
-    field('BPM', bpm, '停止中のみ'),
-    ...UNIT_CONTROLS.map(({ key, label, note }) => field(label, slider(store, key), note)),
-    field('シード', row(seed, dice), '次の再生から'),
+    field('BPM', bpm),
+    ...UNIT_CONTROLS.map(({ key, label }) => field(label, slider(store, key))),
+    field('シード', row(seed, dice)),
   );
 
   return {
@@ -80,15 +80,13 @@ function slider(store: ParamStore, key: UnitKey): HTMLElement {
   return row(range, output);
 }
 
-function field(label: string, control: HTMLElement, note: string): HTMLElement {
+function field(label: string, control: HTMLElement): HTMLElement {
   const wrapper = document.createElement('label');
   wrapper.className = 'field';
   const title = document.createElement('span');
   title.className = 'field-label';
   title.textContent = label;
-  const hint = document.createElement('small');
-  hint.textContent = note;
-  wrapper.append(title, control, hint);
+  wrapper.append(title, control);
   return wrapper;
 }
 
