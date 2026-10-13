@@ -25,12 +25,17 @@ export function randomSeed(): Seed {
   return toSeed(crypto.getRandomValues(new Uint32Array(1))[0] ?? 0);
 }
 
+export const DEFAULT_LIVE_PARAMS: LiveParams = {
+  m2: clampUnit(0.3),
+  // 0.25 from the requirements rounded every kick and hat mutation count to 0, freezing them for good.
+  m8: clampUnit(0.35),
+  fillIntensity: clampUnit(0.7),
+};
+
 export function defaultParams(): Params {
   return {
+    ...DEFAULT_LIVE_PARAMS,
     bpm: DEFAULT_BPM,
-    m2: clampUnit(0.3),
-    m8: clampUnit(0.25),
-    fillIntensity: clampUnit(0.7),
     volume: clampUnit(0.8),
     seed: randomSeed(),
   };

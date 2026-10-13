@@ -1,6 +1,7 @@
 import { compose } from '../src/generators/drums/compose.ts';
 import { createDrumGenerator, type PairLayers } from '../src/generators/drums/index.ts';
 import type { NoteEvent } from '../src/generators/types.ts';
+import { DEFAULT_LIVE_PARAMS } from '../src/params/store.ts';
 import { toSeed } from '../src/random/rng.ts';
 import { createConductor, type Context, type LiveParams } from '../src/structure/conductor.ts';
 import { clampUnit } from '../src/units.ts';
@@ -9,7 +10,7 @@ export function liveParams(m2: number, m8: number, fillIntensity: number): LiveP
   return { m2: clampUnit(m2), m8: clampUnit(m8), fillIntensity: clampUnit(fillIntensity) };
 }
 
-export const DEFAULT_LIVE = liveParams(0.3, 0.25, 0.7);
+export const DEFAULT_LIVE = DEFAULT_LIVE_PARAMS;
 
 export interface GeneratedPair {
   readonly ctx: Context;

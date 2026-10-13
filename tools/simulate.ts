@@ -5,6 +5,7 @@ import { createDrumGenerator } from '../src/generators/drums/index.ts';
 import { motifCell, patternsEqual, type Pattern } from '../src/generators/drums/pattern.ts';
 import { slotsOf } from '../src/generators/drums/weights.ts';
 import { ALL_STEPS, PARTS, type Layer, type NoteEvent, type Part } from '../src/generators/types.ts';
+import { DEFAULT_LIVE_PARAMS } from '../src/params/store.ts';
 import { parseSeed, type Seed } from '../src/random/rng.ts';
 import { createConductor, type LiveParams } from '../src/structure/conductor.ts';
 import { clampUnit } from '../src/units.ts';
@@ -166,9 +167,9 @@ function main() {
     options: {
       bars: { type: 'string', default: '4096' },
       seed: { type: 'string', default: '42' },
-      m2: { type: 'string', default: '0.3' },
-      m8: { type: 'string', default: '0.25' },
-      fill: { type: 'string', default: '0.7' },
+      m2: { type: 'string', default: String(DEFAULT_LIVE_PARAMS.m2) },
+      m8: { type: 'string', default: String(DEFAULT_LIVE_PARAMS.m8) },
+      fill: { type: 'string', default: String(DEFAULT_LIVE_PARAMS.fillIntensity) },
       json: { type: 'boolean', default: false },
     },
   });
