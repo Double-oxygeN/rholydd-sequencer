@@ -65,7 +65,7 @@ gendnb/
 
 ## セットアップ
 
-必要環境は Node.js 24 以上と、Web Audio API に対応したモダンブラウザ（Chrome / Firefox / Safari / Edge の最新版）です。
+必要環境は Node.js 24.2 以上（`tools/simulate.ts` が `import.meta.main` を使うため）と、Web Audio API に対応したモダンブラウザ（Chrome / Firefox / Safari / Edge の最新版）です。
 
 ```bash
 git clone <repository-url> gendnb
