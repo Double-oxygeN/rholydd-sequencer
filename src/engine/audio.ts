@@ -249,15 +249,18 @@ function createVoices(to: VoiceInputs): Voices {
       filter: { type: 'lowpass', Q: 2, rolloff: -24 },
       filterEnvelope: { attack: 0.01, decay: 0.25, sustain: 0.3, release: 0.1, baseFrequency: 200, octaves: 3 },
     }).connect(to.reese),
+    // A voice is held from about a look-ahead before its note until the oscillator's ended event reaches the main
+    // thread. Stabs 2 steps apart then overlap three or four deep, and 8 voices for 3-note chords dropped notes.
     stab: new Tone.PolySynth({
-      maxPolyphony: 8,
+      maxPolyphony: 12,
       voice: Tone.Synth,
       options: {
         oscillator: { type: 'fatsquare', count: 2, spread: 15 },
         envelope: { attack: 0.003, decay: 0.12, sustain: 0.15, release: 0.15 },
       },
     }).connect(to.stab),
-    // Re-struck every 2 bars while the previous chord still releases, hence more voices than 4 notes need.
+    // Re-struck every 2 bars while the previous chord still releases, so two 4-note chords overlap, plus slack for
+    // the same early hold and late release as the stabs.
     pad: new Tone.PolySynth({
       maxPolyphony: 12,
       voice: Tone.Synth,
