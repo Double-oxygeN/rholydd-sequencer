@@ -24,6 +24,10 @@ const SOURCE_TRIM_DB: Readonly<Record<Exclude<ChannelId, 'reverbReturn'>, number
 
 // A pure sine has no harmonics, so small speakers would lose the bass pitch entirely.
 const SUB_DRIVE = 0.15;
+// Keeps the base octave (up to E2, 82 Hz) and tames the octave jumps and the drive's harmonics, which stood
+// out once the sub was raised to match the kick. The reese now carries the pitch into the mid range.
+// A Q of 0.7 keeps each of the two stages flat below the cutoff, so the top of the base octave is not boosted.
+const SUB_LOWPASS = { frequency: 100, type: 'lowpass', rolloff: -24, Q: 0.7 } as const;
 // Cut below the sub so that the two basses never stack up in the lowest octave.
 const REESE_HIGHPASS_HZ = 120;
 const STAB_LOWPASS_HZ = 3000;
@@ -101,7 +105,7 @@ export async function loadInstruments(drumSamplesUrl: string, mixer: MixerSettin
   };
   let carried: Record<DuckedPart, Dip | null> = { sub: null, reese: null, pad: null };
   const inputs: VoiceInputs = {
-    sub: new Tone.Distortion(SUB_DRIVE).connect(ducks.sub),
+    sub: new Tone.Distortion(SUB_DRIVE).chain(new Tone.Filter(SUB_LOWPASS), ducks.sub),
     reese: new Tone.Filter(REESE_HIGHPASS_HZ, 'highpass').connect(ducks.reese),
     stab: new Tone.Filter(STAB_LOWPASS_HZ, 'lowpass').connect(strips.stab.input),
     pad: new Tone.Filter(PAD_LOWPASS_HZ, 'lowpass').connect(ducks.pad),
