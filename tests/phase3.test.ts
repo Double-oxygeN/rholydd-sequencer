@@ -11,7 +11,6 @@ import {
   cycleScenes,
   cycleSections,
   leadsIntoDrop,
-  plays,
   sceneEnergy,
 } from '../src/structure/arrangement.ts';
 import { DEFAULT_KEY } from '../src/structure/key.ts';
@@ -27,17 +26,39 @@ const runs = SEEDS.flatMap((seed) => PARAM_SETS.map((params) => ({ params, pairs
 const voiceOf = (event: NoteEvent) => (event.instrument === 'drums' ? event.part : event.instrument);
 const endOf = (event: NoteEvent) => (event.instrument === 'drums' ? event.step + 1 : event.step + event.length);
 
+// The table of parts per scene in the requirements, written out again so that a mistake in the code's table shows.
+const PARTS_BY_SCENE: Readonly<Record<string, readonly string[]>> = {
+  intro: ['kick', 'snare', 'hat', 'ghost', 'sub', 'pad'],
+  build: ['kick', 'snare', 'hat', 'ghost', 'stab', 'pad'],
+  drop: ['kick', 'snare', 'hat', 'ghost', 'sub', 'reese', 'stab', 'pad'],
+  breakdown: ['hat', 'stab', 'pad'],
+};
+
 describe('phase 3 acceptance: parts per scene', () => {
   it('plays only the parts of the scene, apart from the snare roll that ends a breakdown', () => {
     for (const { pairs } of runs) {
       for (const { ctx, heard } of pairs) {
         for (const event of heard) {
-          if (plays(ctx.sceneRole, voiceOf(event))) continue;
+          if (PARTS_BY_SCENE[ctx.sceneRole.scene]!.includes(voiceOf(event))) continue;
           expect(ctx.sceneRole.scene).toBe('breakdown');
           expect(changesScene(ctx)).toBe(true);
           expect(event).toMatchObject({ part: 'snare', layer: 'fill' });
         }
       }
+    }
+  });
+
+  it('plays every part of each scene somewhere in a long run', () => {
+    const heardIn = new Map<string, Set<string>>();
+    for (const { pairs } of runs) {
+      for (const { ctx, heard } of pairs) {
+        const voices = heardIn.get(ctx.sceneRole.scene) ?? new Set<string>();
+        for (const event of heard) voices.add(voiceOf(event));
+        heardIn.set(ctx.sceneRole.scene, voices);
+      }
+    }
+    for (const [scene, parts] of Object.entries(PARTS_BY_SCENE)) {
+      for (const part of parts) expect(heardIn.get(scene)?.has(part), `${part} in ${scene}`).toBe(true);
     }
   });
 
