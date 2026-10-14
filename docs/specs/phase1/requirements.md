@@ -212,7 +212,8 @@ interface BassGenerator { generate(ctx: ContextWithDrums): readonly BassNote[] }
 
 - `phrase = hash(master, TAG.phrase, 32bar の通し番号)`
 - `section = hash(phrase, TAG.section, sectionIn32)`
-- `ornament = hash(section, REL[pairRelation])`、`fill = hash(section, TAG.fill)` は MVP のまま
+- `ornament = hash(section, TAG.ornament, REL[pairRelation])`。MVP では `REL.variant` と `TAG.fill` が同じ値で、変奏の2bar の装飾とフィルが同じシードになっていたため、専用のタグを加える
+- `fill = hash(section, TAG.fill)` は MVP のまま
 - 強い変異: パートごとに `hash(phrase, TAG.mutate32, パート番号)`
 - 変奏の変異: パートごとに `hash(section, TAG.mutate, パート番号)`（MVP のまま）
 - 転換: `hash(phrase, TAG.transition)`
