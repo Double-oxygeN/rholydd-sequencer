@@ -1,6 +1,6 @@
 import { createRng, pickWeighted, type Seed } from '../../random/rng.ts';
 import type { UnitInterval } from '../../units.ts';
-import { STEPS_PER_PAIR, stepRange, type NoteEvent, type Part, type Step, type Velocity } from '../types.ts';
+import { STEPS_PER_PAIR, stepRange, type DrumHit, type Part, type Step, type Velocity } from '../types.ts';
 import { isAnchorStep } from './weights.ts';
 
 /** Fills at the end of 8 bars. */
@@ -33,12 +33,14 @@ export const FILL_LENGTHS: readonly FillLength[] = LENGTH_CHANCES.map(([length])
 export interface Fill {
   readonly kind: FillKind;
   readonly length: FillLength;
+  /** First step taken over by the fill. */
+  readonly start: Step;
   /** Steps taken over by the fill. */
   readonly steps: readonly Step[];
   /** Part that keeps its regular hits inside the fill. Every other part is silenced there. */
   readonly kept: Part | null;
   /** Hits the fill adds on top of the kept part. */
-  readonly events: readonly NoteEvent[];
+  readonly events: readonly DrumHit[];
 }
 
 type Hit = readonly [Part, number];
@@ -102,13 +104,15 @@ export function phraseFill(seed: Seed, intensity: UnitInterval): Fill | null {
 }
 
 function buildFill(kind: FillKind, length: FillLength): Fill {
-  const start = STEPS_PER_PAIR - length;
+  const start = (STEPS_PER_PAIR - length) as Step;
   const steps = stepRange(start, STEPS_PER_PAIR);
   const template = TEMPLATES[kind];
   const events = steps.flatMap((step) =>
     template
       .hits(step, { index: step - start, length })
-      .map(([part, velocity]): NoteEvent => ({ step, part, velocity: velocity as Velocity, layer: 'fill' })),
+      .map(
+        ([part, velocity]): DrumHit => ({ instrument: 'drums', step, part, velocity: velocity as Velocity, layer: 'fill' }),
+      ),
   );
-  return { kind, length, steps, kept: template.kept, events };
+  return { kind, length, start, steps, kept: template.kept, events };
 }

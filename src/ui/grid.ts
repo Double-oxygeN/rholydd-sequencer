@@ -38,7 +38,9 @@ export function createStepGrid(): StepGrid {
         cell.dataset.layer = '';
         cell.style.removeProperty('--velocity');
       }
-      for (const { part, step, velocity, layer } of events) {
+      for (const event of events) {
+        if (event.instrument !== 'drums') continue;
+        const { part, step, velocity, layer } = event;
         const cell = cells.get(`${part}:${step}`);
         if (cell === undefined) continue;
         cell.dataset.layer = layer;

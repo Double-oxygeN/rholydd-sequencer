@@ -2,6 +2,7 @@ import * as Tone from 'tone';
 import { configureAudioContext, loadDrumKit } from './engine/audio.ts';
 import { createSequencer } from './engine/transport.ts';
 import { createParamStore, defaultParams } from './params/store.ts';
+import { DEFAULT_KEY } from './structure/key.ts';
 import { createStepGrid } from './ui/grid.ts';
 import { createPanel } from './ui/panel.ts';
 import { createPositionView } from './ui/position.ts';
@@ -47,7 +48,7 @@ async function boot(root: HTMLElement) {
       // Browsers only allow the AudioContext to start from a user gesture.
       await Tone.start();
       const { bpm, seed } = store.get();
-      sequencer.start({ bpm, seed });
+      sequencer.start({ bpm, seed, key: DEFAULT_KEY });
     }
     playing = !playing;
     panel.setPlaying(playing);

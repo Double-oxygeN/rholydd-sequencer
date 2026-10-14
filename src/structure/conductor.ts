@@ -1,6 +1,7 @@
 import { REL, TAG, hash, type Seed } from '../random/rng.ts';
 import type { Brand, UnitInterval } from '../units.ts';
 import { sectionEnergy } from './energy.ts';
+import { DEFAULT_KEY, type Key } from './key.ts';
 import {
   BARS_PER_PAIR,
   PAIRS_PER_SECTION,
@@ -57,6 +58,8 @@ export type Context = PairRole & {
   readonly sectionRole: SectionRole;
   /** Fixed for the whole 8-bar section so that its repeat units stay identical. */
   readonly energy: UnitInterval;
+  /** Fixed for the session. Only transposes pitches and never feeds a seed, so changing it keeps the same piece. */
+  readonly key: Key;
   readonly seeds: Seeds;
   readonly params: GenerationParams;
 };
@@ -66,7 +69,7 @@ export interface Conductor {
   next(live: LiveParams): Context;
 }
 
-export function createConductor(master: Seed): Conductor {
+export function createConductor(master: Seed, key: Key = DEFAULT_KEY): Conductor {
   let pair = 0;
   let sectionParams: SectionParams | undefined;
   let phraseParams: PhraseParams | undefined;
@@ -94,6 +97,7 @@ export function createConductor(master: Seed): Conductor {
         phrase: phrase as PhraseIndex,
         sectionRole: inPhrase,
         energy,
+        key,
         seeds: {
           phrase: phraseSeed,
           section: sectionSeed,

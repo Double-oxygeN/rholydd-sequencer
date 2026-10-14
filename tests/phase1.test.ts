@@ -5,8 +5,9 @@ import { motifCell, motifsEqual, patternsEqual } from '../src/generators/drums/p
 import { slotsOf } from '../src/generators/drums/weights.ts';
 import { PARTS } from '../src/generators/types.ts';
 import { toSeed } from '../src/random/rng.ts';
+import { ALL_KEYS, DEFAULT_KEY, degreeOf } from '../src/structure/key.ts';
 import { simulate } from '../tools/simulate.ts';
-import { PARAM_SETS, SEEDS, liveParams, run } from './helpers.ts';
+import { DEFAULT_LIVE, PARAM_SETS, SEEDS, liveParams, run, type GeneratedPair } from './helpers.ts';
 
 // Automated acceptance criteria from docs/specs/phase1/requirements.md.
 
@@ -124,6 +125,88 @@ describe('phase 1 acceptance: energy curve', () => {
       const totals = [total(0), total(1), total(2), total(3)];
       expect(Math.min(...totals)).toBe(total(2));
       expect(Math.max(...totals)).toBe(total(3));
+    }
+  });
+});
+
+describe('phase 1 acceptance: bass', () => {
+  const runs = SEEDS.flatMap((seed) => PARAM_SETS.map((params) => run(seed, BARS, () => params)));
+  const cutFrom = ({ ctx }: GeneratedPair) =>
+    ctx.drums.fill !== null && ctx.drums.fill.kept !== 'kick' ? ctx.drums.fill.from : 32;
+
+  it('keeps every note in the natural minor of the key between F1 and E3, starting each 2 bars between F1 and E2', () => {
+    for (const key of ALL_KEYS) {
+      for (const { bass } of run(42, 256, () => DEFAULT_LIVE, key)) {
+        for (const note of bass.notes) {
+          expect(degreeOf(key, note.pitch)).toBeDefined();
+          expect(note.pitch).toBeGreaterThanOrEqual(29);
+          expect(note.pitch).toBeLessThanOrEqual(52);
+        }
+        if (bass.notes[0] !== undefined) expect(bass.notes[0].pitch).toBeLessThanOrEqual(40);
+      }
+    }
+  });
+
+  it('keeps notes inside the 2 bars and out of fills other than the kick solo', () => {
+    for (const pairs of runs) {
+      for (const pair of pairs) {
+        for (const note of pair.bass.notes) {
+          expect(note.length).toBeGreaterThanOrEqual(1);
+          expect(note.step + note.length).toBeLessThanOrEqual(cutFrom(pair));
+        }
+      }
+    }
+  });
+
+  it('strikes step 0 unless a fill cuts it, and follows the kick exactly in the kick-follow style', () => {
+    let kickFollowPairs = 0;
+    for (const pairs of runs) {
+      for (const pair of pairs) {
+        const cut = cutFrom(pair);
+        if (cut > 0) expect(pair.bass.notes[0]?.step).toBe(0);
+        else expect(pair.bass.notes).toEqual([]);
+        if (pair.bass.style !== 'kickFollow') continue;
+        kickFollowPairs++;
+        const kicks = pair.events.filter((e) => e.part === 'kick' && e.step < cut).map((e) => e.step);
+        expect(pair.bass.notes.map((n) => n.step)).toEqual(kicks);
+      }
+    }
+    expect(kickFollowPairs).toBeGreaterThan(0);
+  });
+
+  it('uses a different style in section B than in A of the same 32 bars', () => {
+    for (const pairs of runs) {
+      for (let i = 0; i + 8 < pairs.length; i += 16) {
+        expect(pairs[i + 8]!.ctx.sectionRole.relation).toBe('transition');
+        expect(pairs[i + 8]!.bass.style).not.toBe(pairs[i]!.bass.style);
+      }
+    }
+  });
+
+  it('repeats the same bass for the three repeat units of each 8 bars', () => {
+    for (const pairs of runs) {
+      for (let i = 0; i < pairs.length; i += 4) {
+        expect(pairs[i + 1]!.bass).toEqual(pairs[i]!.bass);
+        expect(pairs[i + 2]!.bass).toEqual(pairs[i]!.bass);
+      }
+    }
+  });
+
+  it('only transposes the bass when the key changes, leaving the drums and the rhythm as they were', () => {
+    for (const seed of SEEDS) {
+      const inF = run(seed, 512, () => DEFAULT_LIVE, DEFAULT_KEY);
+      for (const key of ALL_KEYS) {
+        const other = run(seed, 512, () => DEFAULT_LIVE, key);
+        for (let i = 0; i < inF.length; i++) {
+          expect(other[i]!.events).toEqual(inF[i]!.events);
+          const a = inF[i]!.bass.notes;
+          const b = other[i]!.bass.notes;
+          expect(b.map((n) => [n.step, n.length])).toEqual(a.map((n) => [n.step, n.length]));
+          for (let j = 0; j < a.length; j++) {
+            expect((((b[j]!.pitch - a[j]!.pitch - (key - DEFAULT_KEY)) % 12) + 12) % 12).toBe(0);
+          }
+        }
+      }
     }
   });
 });

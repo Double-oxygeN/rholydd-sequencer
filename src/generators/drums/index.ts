@@ -1,6 +1,6 @@
 import { TAG, hash } from '../../random/rng.ts';
 import type { Context } from '../../structure/conductor.ts';
-import type { Generator, NoteEvent } from '../types.ts';
+import type { DrumHit, DrumOutcome, Generator } from '../types.ts';
 import { initialPattern } from './base.ts';
 import { compose } from './compose.ts';
 import { fill, phraseFill, type Fill } from './fill.ts';
@@ -17,12 +17,20 @@ export interface PairLayers {
   readonly sectionBase: Pattern;
   /** sectionBase thinned out by the section's energy. This is what plays. */
   readonly base: Pattern;
-  readonly ornaments: readonly NoteEvent[];
+  readonly ornaments: readonly DrumHit[];
   readonly fill: Fill | null;
 }
 
-export interface DrumGenerator extends Generator {
+export interface DrumGenerator extends Generator<Context, DrumOutcome> {
   generateLayers(ctx: Context): PairLayers;
+}
+
+export function drumOutcome(layers: PairLayers): DrumOutcome {
+  const { fill } = layers;
+  return {
+    hits: compose(layers.base, layers.ornaments, fill),
+    fill: fill === null ? null : { from: fill.start, kept: fill.kept },
+  };
 }
 
 /** Call with consecutive contexts from one conductor. A new generator is needed to start over. */
@@ -50,10 +58,7 @@ export function createDrumGenerator(): DrumGenerator {
 
   return {
     generateLayers,
-    generate(ctx) {
-      const layers = generateLayers(ctx);
-      return compose(layers.base, layers.ornaments, layers.fill);
-    },
+    generate: (ctx) => drumOutcome(generateLayers(ctx)),
   };
 }
 

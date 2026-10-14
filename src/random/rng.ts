@@ -36,6 +36,9 @@ export const TAG = {
   transition: 7,
   ornament: 8,
   thin: 9,
+  bassStyle: 10,
+  bassRhythm: 11,
+  bassPitch: 12,
 } as const;
 export const REL = { repeat: 1, variant: 2 } as const;
 
@@ -87,7 +90,11 @@ export function createRng(seed: Seed): Rng {
  * Always consumes exactly one draw so that the stream does not depend on the weights.
  */
 export function pickWeighted(rng: Rng, weights: readonly number[]): number | undefined {
-  const r = rng.float();
+  return weightedIndex(rng.float(), weights);
+}
+
+/** Picks an index from a roll in [0, 1) drawn beforehand, for streams that must draw before knowing the weights. */
+export function weightedIndex(r: number, weights: readonly number[]): number | undefined {
   const total = weights.reduce((sum, w) => sum + w, 0);
   if (total <= 0) return undefined;
   let acc = 0;

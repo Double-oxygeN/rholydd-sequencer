@@ -1,17 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { createDrumGenerator } from '../src/generators/drums/index.ts';
+import { createEnsemble } from '../src/generators/ensemble.ts';
 import { cellAt, patternsEqual } from '../src/generators/drums/pattern.ts';
 import { ALL_STEPS, type NoteEvent, type Step } from '../src/generators/types.ts';
 import { toSeed } from '../src/random/rng.ts';
-import { createConductor } from '../src/structure/conductor.ts';
+import { DEFAULT_KEY } from '../src/structure/key.ts';
 import { DEFAULT_LIVE, PARAM_SETS, SEEDS, eventsAt, liveParams, run } from './helpers.ts';
 
 // Automated acceptance criteria from docs/specs/mvp/requirements.md.
 
 function generateBars(seed: number, bars: number): (readonly NoteEvent[])[] {
-  const conductor = createConductor(toSeed(seed));
-  const generator = createDrumGenerator();
-  return Array.from({ length: bars / 2 }, () => generator.generate(conductor.next(DEFAULT_LIVE)));
+  const ensemble = createEnsemble({ seed: toSeed(seed), key: DEFAULT_KEY });
+  return Array.from({ length: bars / 2 }, () => ensemble.next(DEFAULT_LIVE).events);
 }
 
 const BARS = 1024;
@@ -37,8 +36,8 @@ describe('MVP acceptance', () => {
     }
   });
 
-  it('generate() returns the composed layers', () => {
-    const viaLayers = run(42, 256).map((pair) => pair.events);
+  it('plays the composed drum layers followed by the bass', () => {
+    const viaLayers = run(42, 256).map((pair) => [...pair.events, ...pair.bass.notes]);
     expect(generateBars(42, 256)).toEqual(viaLayers);
   });
 
@@ -121,12 +120,11 @@ describe('MVP acceptance', () => {
     }
   });
 
-  it('generates 2 bars in 5 ms or less on average', () => {
-    const conductor = createConductor(toSeed(42));
-    const generator = createDrumGenerator();
+  it('generates 2 bars of drums and bass in 5 ms or less on average', () => {
+    const ensemble = createEnsemble({ seed: toSeed(42), key: DEFAULT_KEY });
     const pairs = 2048;
     const start = performance.now();
-    for (let i = 0; i < pairs; i++) generator.generate(conductor.next(liveParams(1, 1, 1)));
+    for (let i = 0; i < pairs; i++) ensemble.next(liveParams(1, 1, 1, 1, 1));
     expect((performance.now() - start) / pairs).toBeLessThan(5);
   });
 
