@@ -10,15 +10,16 @@ import { duckPoints, type Dip, type Seconds } from './ducking.ts';
 const ROOT_NOTE = 'C3';
 
 // Evens out the sources so that every fader starts at 0 dB; velocities still come from the generators.
+// Measured alone, the drums otherwise peaked right at full scale and left the limiter no headroom.
 const SOURCE_TRIM_DB: Readonly<Record<Exclude<ChannelId, 'reverbReturn'>, number>> = {
-  kick: 0,
-  snare: -2,
-  hat: -6,
-  ghost: 0,
-  sub: -6,
-  reese: -14,
-  stab: -16,
-  pad: -20,
+  kick: -8,
+  snare: -10,
+  hat: -14,
+  ghost: -8,
+  sub: 0,
+  reese: -10,
+  stab: -13,
+  pad: -16,
 };
 
 // A pure sine has no harmonics, so small speakers would lose the bass pitch entirely.
