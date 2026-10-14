@@ -11,8 +11,15 @@ export function liveParams(
   m8: number,
   fillIntensity: number,
   m32: number = DEFAULT_LIVE_PARAMS.m32,
+  energyDepth: number = DEFAULT_LIVE_PARAMS.energyDepth,
 ): LiveParams {
-  return { m2: clampUnit(m2), m8: clampUnit(m8), m32: clampUnit(m32), fillIntensity: clampUnit(fillIntensity) };
+  return {
+    m2: clampUnit(m2),
+    m8: clampUnit(m8),
+    m32: clampUnit(m32),
+    fillIntensity: clampUnit(fillIntensity),
+    energyDepth: clampUnit(energyDepth),
+  };
 }
 
 export const DEFAULT_LIVE = DEFAULT_LIVE_PARAMS;
@@ -46,7 +53,7 @@ export function eventsAt(events: readonly NoteEvent[], part: NoteEvent['part'], 
 export const SEEDS = [0, 1, 42, 123456789, 0xffffffff];
 export const PARAM_SETS: readonly LiveParams[] = [
   DEFAULT_LIVE,
-  liveParams(0, 0, 0, 0),
-  liveParams(1, 1, 1, 1),
-  liveParams(1, 0.5, 1, 0.5),
+  liveParams(0, 0, 0, 0, 0),
+  liveParams(1, 1, 1, 1, 1),
+  liveParams(1, 0.5, 1, 0.5, 0.5),
 ];

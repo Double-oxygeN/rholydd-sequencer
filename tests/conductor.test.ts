@@ -91,6 +91,10 @@ function derivedSeeds(ctx: Context): number[] {
     hash(phrase, TAG.base),
     hash(phrase, TAG.transition),
     ...Array.from({ length: 11 }, (_, attempt) => hash(phrase, TAG.transition, attempt)),
-    ...PARTS.flatMap((part) => [hash(phrase, TAG.mutate32, PART_TAG[part]), hash(section, TAG.mutate, PART_TAG[part])]),
+    ...PARTS.flatMap((part) => [
+      hash(phrase, TAG.mutate32, PART_TAG[part]),
+      hash(section, TAG.mutate, PART_TAG[part]),
+      hash(section, TAG.thin, PART_TAG[part]),
+    ]),
   ];
 }

@@ -31,6 +31,7 @@ export const DEFAULT_LIVE_PARAMS: LiveParams = {
   m8: clampUnit(0.35),
   m32: clampUnit(0.6),
   fillIntensity: clampUnit(0.7),
+  energyDepth: clampUnit(0.5),
 };
 
 export function defaultParams(): Params {

@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import { satisfiesConstraints } from '../src/generators/drums/constraints.ts';
 import { mutate } from '../src/generators/drums/mutate.ts';
-import { motifsEqual, patternsEqual } from '../src/generators/drums/pattern.ts';
-import { PARAM_SETS, SEEDS, run } from './helpers.ts';
+import { motifCell, motifsEqual, patternsEqual } from '../src/generators/drums/pattern.ts';
+import { slotsOf } from '../src/generators/drums/weights.ts';
+import { PARTS } from '../src/generators/types.ts';
+import { toSeed } from '../src/random/rng.ts';
+import { simulate } from '../tools/simulate.ts';
+import { PARAM_SETS, SEEDS, liveParams, run } from './helpers.ts';
 
 // Automated acceptance criteria from docs/specs/phase1/requirements.md.
 
@@ -45,10 +50,12 @@ describe('phase 1 acceptance: 32-bar form', () => {
           if (!ctx.isSectionStart) continue;
           switch (ctx.sectionRole.relation) {
             case 'repeat':
-              expect(layers.base).toEqual(layers.reference);
+              expect(layers.sectionBase).toEqual(layers.reference);
               break;
             case 'variant':
-              expect(layers.base).toEqual(mutate(layers.reference, ctx.seeds.section, ctx.params.m8, 'variant'));
+              expect(layers.sectionBase).toEqual(
+                mutate(layers.reference, ctx.seeds.section, ctx.params.m8, 'variant'),
+              );
               break;
             case 'transition':
               break;
@@ -65,10 +72,58 @@ describe('phase 1 acceptance: 32-bar form', () => {
         for (const { ctx, layers } of run(seed, BARS, () => params)) {
           if (!ctx.isSectionStart || ctx.sectionRole.relation !== 'transition') continue;
           transitions++;
-          expect(motifsEqual(layers.base, layers.reference, 'kick')).toBe(false);
+          expect(motifsEqual(layers.sectionBase, layers.reference, 'kick')).toBe(false);
         }
       }
     }
     expect(transitions).toBeGreaterThan(1000);
+  });
+});
+
+describe('phase 1 acceptance: energy curve', () => {
+  it('keeps the energy constant within each 8 bars', () => {
+    for (const seed of SEEDS) {
+      const pairs = run(seed, BARS, (i) => liveParams(0.3, 0.35, 0.7, 0.6, (i % 7) / 6));
+      for (let i = 0; i < pairs.length; i += 4) {
+        const energies = pairs.slice(i, i + 4).map((p) => p.ctx.energy);
+        expect(new Set(energies).size).toBe(1);
+        const bases = pairs.slice(i, i + 4).map((p) => p.layers.base);
+        for (const base of bases) expect(base).toEqual(bases[0]);
+      }
+    }
+  });
+
+  it('thins nothing when the energy depth is 0', () => {
+    for (const seed of SEEDS) {
+      for (const { ctx, layers } of run(seed, BARS, () => liveParams(1, 1, 1, 1, 0))) {
+        expect(ctx.energy).toBe(1);
+        expect(layers.base).toEqual(layers.sectionBase);
+      }
+    }
+  });
+
+  it('only removes non-anchor hits and never drops below the minimum count', () => {
+    for (const seed of SEEDS) {
+      for (const { layers } of run(seed, BARS, () => liveParams(1, 1, 1, 1, 1))) {
+        expect(satisfiesConstraints(layers.base)).toBe(true);
+        for (const part of PARTS) {
+          for (const slot of slotsOf(part)) {
+            if (motifCell(layers.base, part, slot) !== null) {
+              expect(motifCell(layers.base, part, slot)).toBe(motifCell(layers.sectionBase, part, slot));
+            }
+          }
+        }
+      }
+    }
+  });
+
+  it('makes B the sparsest and A\'\' the densest section at full depth', () => {
+    for (const seed of [42, 7]) {
+      const { densityBySection } = simulate({ bars: 4096, seed: toSeed(seed), live: liveParams(0.3, 0.35, 0.7, 0.6, 1) });
+      const total = (s: 0 | 1 | 2 | 3) => PARTS.reduce((sum, part) => sum + densityBySection[s][part], 0);
+      const totals = [total(0), total(1), total(2), total(3)];
+      expect(Math.min(...totals)).toBe(total(2));
+      expect(Math.max(...totals)).toBe(total(3));
+    }
   });
 });

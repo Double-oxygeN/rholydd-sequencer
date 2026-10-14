@@ -7,12 +7,15 @@ import { fill, phraseFill, type Fill } from './fill.ts';
 import { mutate } from './mutate.ts';
 import { ornament } from './ornament.ts';
 import type { Pattern } from './pattern.ts';
+import { thin } from './thin.ts';
 import { transitionPattern } from './transition.ts';
 
 export interface PairLayers {
   /** Pattern of section A, rewritten only at 32-bar boundaries. */
   readonly reference: Pattern;
   /** Pattern of the current 8-bar section, derived afresh from the reference at every 8-bar boundary. */
+  readonly sectionBase: Pattern;
+  /** sectionBase thinned out by the section's energy. This is what plays. */
   readonly base: Pattern;
   readonly ornaments: readonly NoteEvent[];
   readonly fill: Fill | null;
@@ -25,17 +28,20 @@ export interface DrumGenerator extends Generator {
 /** Call with consecutive contexts from one conductor. A new generator is needed to start over. */
 export function createDrumGenerator(): DrumGenerator {
   let reference: Pattern | undefined;
+  let sectionBase: Pattern | undefined;
   let base: Pattern | undefined;
 
   function generateLayers(ctx: Context): PairLayers {
-    if (reference === undefined || base === undefined || ctx.isSectionStart) {
+    if (reference === undefined || sectionBase === undefined || base === undefined || ctx.isSectionStart) {
       reference = nextReference(reference, ctx);
-      base = sectionPattern(reference, ctx);
+      sectionBase = sectionPattern(reference, ctx);
+      base = thin(sectionBase, ctx.seeds.section, ctx.energy);
     }
     return {
       reference,
+      sectionBase,
       base,
-      ornaments: ornament(base, ctx.seeds.ornament, ctx.params.m2),
+      ornaments: ornament(base, ctx.seeds.ornament, ctx.params.m2, ctx.energy),
       fill: ctx.isSectionEnd
         ? (ctx.sectionRole.isPhraseEnd ? phraseFill : fill)(ctx.seeds.fill, ctx.fillIntensity)
         : null,

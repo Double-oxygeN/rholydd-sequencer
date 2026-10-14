@@ -172,7 +172,7 @@ function formatReport(report: SimulationReport): string {
   const num = (x: number) => x.toFixed(2).padStart(6);
   const { live, mutation } = report;
   const lines = [
-    `bars: ${report.bars}  seed: ${report.seed}  m2: ${live.m2}  m8: ${live.m8}  m32: ${live.m32}  fillIntensity: ${live.fillIntensity}`,
+    `bars: ${report.bars}  seed: ${report.seed}  m2: ${live.m2}  m8: ${live.m8}  m32: ${live.m32}  energyDepth: ${live.energyDepth}  fillIntensity: ${live.fillIntensity}`,
     '',
     'Density (hits per bar)',
     '  part     total   base ornament   fill',
@@ -220,6 +220,7 @@ function main() {
       m2: { type: 'string', default: String(DEFAULT_LIVE_PARAMS.m2) },
       m8: { type: 'string', default: String(DEFAULT_LIVE_PARAMS.m8) },
       m32: { type: 'string', default: String(DEFAULT_LIVE_PARAMS.m32) },
+      energy: { type: 'string', default: String(DEFAULT_LIVE_PARAMS.energyDepth) },
       fill: { type: 'string', default: String(DEFAULT_LIVE_PARAMS.fillIntensity) },
       json: { type: 'boolean', default: false },
     },
@@ -232,6 +233,7 @@ function main() {
     m2: clampUnit(Number(values.m2)),
     m8: clampUnit(Number(values.m8)),
     m32: clampUnit(Number(values.m32)),
+    energyDepth: clampUnit(Number(values.energy)),
     fillIntensity: clampUnit(Number(values.fill)),
   };
   const report = simulate({ bars, seed, live });

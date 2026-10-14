@@ -1,5 +1,6 @@
 import { REL, TAG, hash, type Seed } from '../random/rng.ts';
 import type { Brand, UnitInterval } from '../units.ts';
+import { sectionEnergy } from './energy.ts';
 import {
   BARS_PER_PAIR,
   PAIRS_PER_SECTION,
@@ -44,6 +45,8 @@ export type GenerationParams = SectionParams & PhraseParams;
 /** Values read from the UI each time a 2-bar unit is generated. */
 export interface LiveParams extends SectionParams, PhraseParams {
   readonly fillIntensity: UnitInterval;
+  /** How far the energy curve dips below full energy. Read at 8-bar boundaries. */
+  readonly energyDepth: UnitInterval;
 }
 
 export type Context = PairRole & {
@@ -52,6 +55,8 @@ export type Context = PairRole & {
   readonly section: SectionIndex;
   readonly phrase: PhraseIndex;
   readonly sectionRole: SectionRole;
+  /** Fixed for the whole 8-bar section so that its repeat units stay identical. */
+  readonly energy: UnitInterval;
   readonly seeds: Seeds;
   readonly params: GenerationParams;
 };
@@ -65,13 +70,17 @@ export function createConductor(master: Seed): Conductor {
   let pair = 0;
   let sectionParams: SectionParams | undefined;
   let phraseParams: PhraseParams | undefined;
+  let energy: UnitInterval | undefined;
   return {
     next(live) {
       const section = Math.floor(pair / PAIRS_PER_SECTION);
       const phrase = Math.floor(section / SECTIONS_PER_PHRASE);
       const role = pairRole((pair % PAIRS_PER_SECTION) as PairIn8, live.fillIntensity);
       const inPhrase = sectionRole((section % SECTIONS_PER_PHRASE) as SectionIn32);
-      if (role.isSectionStart || sectionParams === undefined) sectionParams = { m2: live.m2, m8: live.m8 };
+      if (role.isSectionStart || sectionParams === undefined || energy === undefined) {
+        sectionParams = { m2: live.m2, m8: live.m8 };
+        energy = sectionEnergy(inPhrase.sectionIn32, live.energyDepth);
+      }
       if ((role.isSectionStart && inPhrase.isPhraseStart) || phraseParams === undefined) {
         phraseParams = { m32: live.m32 };
       }
@@ -84,6 +93,7 @@ export function createConductor(master: Seed): Conductor {
         section: section as SectionIndex,
         phrase: phrase as PhraseIndex,
         sectionRole: inPhrase,
+        energy,
         seeds: {
           phrase: phraseSeed,
           section: sectionSeed,

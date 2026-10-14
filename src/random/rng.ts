@@ -35,6 +35,7 @@ export const TAG = {
   mutate32: 6,
   transition: 7,
   ornament: 8,
+  thin: 9,
 } as const;
 export const REL = { repeat: 1, variant: 2 } as const;
 

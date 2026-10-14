@@ -95,7 +95,7 @@ describe('ornament', () => {
   it('adds only hats and ghosts to steps 24 to 31 with velocity 0.3 to 0.6', () => {
     const base = canonicalPattern();
     for (let i = 0; i < 200; i++) {
-      for (const event of ornament(base, hash(i), clampUnit(1))) {
+      for (const event of ornament(base, hash(i), clampUnit(1), clampUnit(1))) {
         expect(ORNAMENT_PARTS).toContain(event.part);
         expect(event.step).toBeGreaterThanOrEqual(24);
         expect(event.velocity).toBeGreaterThanOrEqual(0.3);
@@ -106,7 +106,7 @@ describe('ornament', () => {
   });
 
   it('adds nothing when m2 is 0', () => {
-    for (let i = 0; i < 50; i++) expect(ornament(canonicalPattern(), hash(i), clampUnit(0))).toEqual([]);
+    for (let i = 0; i < 50; i++) expect(ornament(canonicalPattern(), hash(i), clampUnit(0), clampUnit(1))).toEqual([]);
   });
 });
 
