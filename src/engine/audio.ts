@@ -44,10 +44,13 @@ export async function loadInstruments(drumSamplesUrl: string): Promise<Instrumen
       ),
     ]),
   ) as Record<Part, Tone.Sampler>;
-  const bass = new Tone.Synth({
-    oscillator: { type: 'sine' },
-    envelope: { attack: 0.005, decay: 0.05, sustain: 1, release: 0.03 },
-  }).chain(new Tone.Distortion(BASS_DRIVE), new Tone.Volume(BASS_TRIM_DB), gate);
+  const bassBus = new Tone.Distortion(BASS_DRIVE).chain(new Tone.Volume(BASS_TRIM_DB), gate);
+  const createBass = () =>
+    new Tone.Synth({
+      oscillator: { type: 'sine' },
+      envelope: { attack: 0.005, decay: 0.05, sustain: 1, release: 0.03 },
+    }).connect(bassBus);
+  let bass = createBass();
   await Tone.loaded();
 
   return {
@@ -59,6 +62,10 @@ export async function loadInstruments(drumSamplesUrl: string): Promise<Instrumen
       bass.triggerAttackRelease(frequency, Math.max(LEGATO_GAP_SECONDS, seconds - LEGATO_GAP_SECONDS), time, velocity);
     },
     open(time) {
+      // Notes of the previous session stay scheduled on the synth's timelines, and the gate would let them
+      // collide with the new ones on this mono voice. A fresh synth drops them all at once.
+      bass.dispose();
+      bass = createBass();
       gate.gain.cancelScheduledValues(time);
       gate.gain.setValueAtTime(1, time);
     },

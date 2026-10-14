@@ -205,7 +205,8 @@ interface DrumOutcome {
 type ContextWithDrums = Context & { drums: DrumOutcome };
 
 interface DrumGenerator { generate(ctx: Context): DrumOutcome }
-interface BassGenerator { generate(ctx: ContextWithDrums): readonly BassNote[] }
+// 選ばれた型も返し、A と B で型が異なることを検証できるようにする
+interface BassGenerator { generate(ctx: ContextWithDrums): { style: BassStyle; notes: readonly BassNote[] } }
 ```
 
 ### シードの派生
@@ -216,7 +217,7 @@ interface BassGenerator { generate(ctx: ContextWithDrums): readonly BassNote[] }
 - `fill = hash(section, TAG.fill)` は MVP のまま
 - 強い変異: パートごとに `hash(phrase, TAG.mutate32, パート番号)`
 - 変奏の変異: パートごとに `hash(section, TAG.mutate, パート番号)`（MVP のまま）
-- 転換: `hash(phrase, TAG.transition)`
+- 転換: `hash(phrase, TAG.transition, 試行番号)`
 - 間引き: パートごとに `hash(section, TAG.thin, パート番号)`
 - ベースの型: `hash(phrase, TAG.bassStyle)`
 - ベースのリズム: 反復・変奏の8bar は `hash(phrase, TAG.bassRhythm, REL[pairRelation])`、転換の8bar は `hash(section, TAG.bassRhythm, REL[pairRelation])`
