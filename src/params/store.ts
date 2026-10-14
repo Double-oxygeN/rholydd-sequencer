@@ -37,7 +37,7 @@ export const DEFAULT_LIVE_PARAMS: LiveParams = {
   // Raised from the 0.25 in the requirements so that kick and hat changes are audible with default settings.
   m8: clampUnit(0.35),
   m32: clampUnit(0.6),
-  fillIntensity: clampUnit(0.7),
+  fillIntensity: clampUnit(0.3),
   energyDepth: clampUnit(0.5),
 };
 
@@ -45,7 +45,7 @@ export function defaultParams(): Params {
   return {
     ...DEFAULT_LIVE_PARAMS,
     bpm: DEFAULT_BPM,
-    volume: clampUnit(0.8),
+    volume: clampUnit(0.5),
     seed: randomSeed(),
     key: DEFAULT_KEY,
     mixer: DEFAULT_MIXER,
