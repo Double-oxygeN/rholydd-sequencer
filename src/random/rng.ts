@@ -25,7 +25,17 @@ function mix32(x: number): number {
 }
 
 // Tags are integers rather than strings so that hashing needs only 32-bit arithmetic.
-export const TAG = { section: 1, fill: 2, base: 3, mutate: 4 } as const;
+// Every value is distinct: two uses sharing a tag would share a random stream.
+export const TAG = {
+  section: 1,
+  fill: 2,
+  base: 3,
+  mutate: 4,
+  phrase: 5,
+  mutate32: 6,
+  transition: 7,
+  ornament: 8,
+} as const;
 export const REL = { repeat: 1, variant: 2 } as const;
 
 export function hash(...xs: readonly number[]): Seed {

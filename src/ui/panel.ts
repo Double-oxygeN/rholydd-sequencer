@@ -2,11 +2,12 @@ import { BPM_RANGE, clampBpm, randomSeed, type ParamStore, type Params } from '.
 import { parseSeed } from '../random/rng.ts';
 import { clampUnit, type UnitInterval } from '../units.ts';
 
-type UnitKey = 'm2' | 'm8' | 'fillIntensity' | 'volume';
+type UnitKey = 'm2' | 'm8' | 'm32' | 'fillIntensity' | 'volume';
 
 const UNIT_CONTROLS: readonly { key: UnitKey; label: string }[] = [
   { key: 'm2', label: '2bar 変化率' },
   { key: 'm8', label: '8bar 変化率' },
+  { key: 'm32', label: '32bar 変化率' },
   { key: 'fillIntensity', label: 'フィル強度' },
   { key: 'volume', label: '音量' },
 ];

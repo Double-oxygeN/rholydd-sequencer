@@ -35,6 +35,10 @@ export function withSlot(pattern: Pattern, part: Part, slot: Slot, cell: Cell): 
   return { ...pattern, [part]: toMotif(part, cells) };
 }
 
+export function motifsEqual(a: Pattern, b: Pattern, part: Part): boolean {
+  return slotsOf(part).every((slot) => motifCell(a, part, slot) === motifCell(b, part, slot));
+}
+
 export function patternsEqual(a: Pattern, b: Pattern): boolean {
-  return PARTS.every((part) => slotsOf(part).every((slot) => motifCell(a, part, slot) === motifCell(b, part, slot)));
+  return PARTS.every((part) => motifsEqual(a, b, part));
 }

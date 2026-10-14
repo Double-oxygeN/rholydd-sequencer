@@ -11,11 +11,20 @@ const MOVE_OFFSETS = [-2, -1, 1, 2] as const;
 const OPERATIONS = ['add', 'remove', 'move'] as const;
 
 // Indexes into the hash are integers, matching the TAG convention in rng.ts.
-const PART_TAG: Readonly<Record<Part, number>> = { kick: 1, snare: 2, hat: 3, ghost: 4 };
+export const PART_TAG: Readonly<Record<Part, number>> = { kick: 1, snare: 2, hat: 3, ghost: 4 };
+
+/** variant: reference → A' or A'' at an 8-bar boundary. strong: reference → next reference at a 32-bar boundary. */
+export type MutationKind = 'variant' | 'strong';
+
+const KIND_TAG: Readonly<Record<MutationKind, number>> = { variant: TAG.mutate, strong: TAG.mutate32 };
+
+function mutability(part: Part, kind: MutationKind): UnitInterval {
+  return kind === 'variant' ? PROFILES[part].mutability : PROFILES[part].strongMutability;
+}
 
 /** Counts onsets within the motif, so a repeated one-beat hat is mutated as one beat, not as 8 copies. */
-export function expectedMutations(part: Part, pattern: Pattern, m8: UnitInterval): number {
-  return m8 * PROFILES[part].mutability * motifOnsets(pattern, part).length;
+export function expectedMutations(part: Part, pattern: Pattern, amount: UnitInterval, kind: MutationKind): number {
+  return amount * mutability(part, kind) * motifOnsets(pattern, part).length;
 }
 
 /**
@@ -28,13 +37,13 @@ export function mutationCount(expected: number, rng: Rng): number {
   return whole + (rng.float() < expected - whole ? 1 : 0);
 }
 
-/** Rewrites the base pattern at an 8-bar boundary. The result becomes the reference until the next boundary. */
-export function mutate(base: Pattern, sectionSeed: Seed, m8: UnitInterval): Pattern {
+/** Returns a mutated copy of the pattern. amount is m8 for variants and m32 for strong mutations. */
+export function mutate(base: Pattern, seed: Seed, amount: UnitInterval, kind: MutationKind = 'variant'): Pattern {
   let pattern = base;
   for (const part of PARTS) {
     // A separate stream per part keeps e.g. the hat mutations unchanged when the kick count changes.
-    const rng = createRng(hash(sectionSeed, TAG.mutate, PART_TAG[part]));
-    const count = mutationCount(expectedMutations(part, pattern, m8), rng);
+    const rng = createRng(hash(seed, KIND_TAG[kind], PART_TAG[part]));
+    const count = mutationCount(expectedMutations(part, pattern, amount, kind), rng);
     for (let i = 0; i < count; i++) pattern = mutateOnce(pattern, part, rng);
   }
   return pattern;

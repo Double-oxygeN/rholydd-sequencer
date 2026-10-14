@@ -15,9 +15,16 @@ describe('simulate', () => {
     expect(report.repetition.pair).toBeGreaterThanOrEqual(0.5);
   });
 
-  it('reports no mutation when m8 is 0', () => {
-    const report = simulate({ bars: 256, seed: toSeed(1), live: liveParams(0.3, 0, 0.7) });
-    expect(report.repetition.section).toBe(1);
-    expect(report.repetition.distinctBasePatterns).toBe(1);
+  // Section B is always a fresh pattern, so only the reference and the variants can stay put.
+  it('reports no reference change when m32 is 0 and only B differing when m8 is 0 too', () => {
+    const report = simulate({ bars: 256, seed: toSeed(1), live: liveParams(0.3, 0, 0.7, 0) });
+    const phrases = 256 / 32;
+    expect(report.phrase).toEqual({ boundaries: phrases - 1, referenceChanges: 0 });
+    expect(report.repetition.distinctBasePatterns).toBe(1 + phrases);
+  });
+
+  it('reports reference changes when m32 is high', () => {
+    const report = simulate({ bars: 512, seed: toSeed(1), live: liveParams(0.3, 0.35, 0.7, 1) });
+    expect(report.phrase.referenceChanges).toBeGreaterThan(report.phrase.boundaries / 2);
   });
 });

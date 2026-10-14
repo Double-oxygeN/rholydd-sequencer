@@ -7,9 +7,12 @@ import { fill, type Fill } from './fill.ts';
 import { mutate } from './mutate.ts';
 import { ornament } from './ornament.ts';
 import type { Pattern } from './pattern.ts';
+import { transitionPattern } from './transition.ts';
 
 export interface PairLayers {
-  /** Persistent pattern, rewritten only at 8-bar boundaries. */
+  /** Pattern of section A, rewritten only at 32-bar boundaries. */
+  readonly reference: Pattern;
+  /** Pattern of the current 8-bar section, derived afresh from the reference at every 8-bar boundary. */
   readonly base: Pattern;
   readonly ornaments: readonly NoteEvent[];
   readonly fill: Fill | null;
@@ -21,12 +24,16 @@ export interface DrumGenerator extends Generator {
 
 /** Call with consecutive contexts from one conductor. A new generator is needed to start over. */
 export function createDrumGenerator(): DrumGenerator {
+  let reference: Pattern | undefined;
   let base: Pattern | undefined;
 
   function generateLayers(ctx: Context): PairLayers {
-    if (base === undefined) base = initialPattern(hash(ctx.seeds.section, TAG.base));
-    else if (ctx.isSectionStart) base = mutate(base, ctx.seeds.section, ctx.params.m8);
+    if (reference === undefined || base === undefined || ctx.isSectionStart) {
+      reference = nextReference(reference, ctx);
+      base = sectionPattern(reference, ctx);
+    }
     return {
+      reference,
       base,
       ornaments: ornament(base, ctx.seeds.ornament, ctx.params.m2),
       fill: ctx.isSectionEnd ? fill(ctx.seeds.fill, ctx.fillIntensity) : null,
@@ -40,4 +47,22 @@ export function createDrumGenerator(): DrumGenerator {
       return compose(layers.base, layers.ornaments, layers.fill);
     },
   };
+}
+
+function nextReference(previous: Pattern | undefined, ctx: Context): Pattern {
+  if (previous === undefined) return initialPattern(hash(ctx.seeds.phrase, TAG.base));
+  return ctx.sectionRole.isPhraseStart ? mutate(previous, ctx.seeds.phrase, ctx.params.m32, 'strong') : previous;
+}
+
+// Variants and transitions start from the reference every time instead of accumulating,
+// so that each phrase audibly returns to A.
+function sectionPattern(reference: Pattern, ctx: Context): Pattern {
+  switch (ctx.sectionRole.relation) {
+    case 'repeat':
+      return reference;
+    case 'variant':
+      return mutate(reference, ctx.seeds.section, ctx.params.m8, 'variant');
+    case 'transition':
+      return transitionPattern(reference, ctx.seeds.phrase);
+  }
 }

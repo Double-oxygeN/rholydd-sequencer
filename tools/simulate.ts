@@ -8,6 +8,7 @@ import { ALL_STEPS, PARTS, type Layer, type NoteEvent, type Part } from '../src/
 import { DEFAULT_LIVE_PARAMS } from '../src/params/store.ts';
 import { parseSeed, type Seed } from '../src/random/rng.ts';
 import { createConductor, type LiveParams } from '../src/structure/conductor.ts';
+import type { SectionIn32 } from '../src/structure/form.ts';
 import { clampUnit } from '../src/units.ts';
 
 export interface SimulationOptions {
@@ -17,6 +18,10 @@ export interface SimulationOptions {
 }
 
 type PerPart<T> = Record<Part, T>;
+type PerSection<T> = Record<SectionIn32, T>;
+
+const SECTION_LABEL: PerSection<string> = { 0: 'A', 1: "A'", 2: 'B', 3: "A''" };
+const SECTIONS_IN_32: readonly SectionIn32[] = [0, 1, 2, 3];
 
 export interface SimulationReport {
   readonly bars: number;
@@ -24,6 +29,14 @@ export interface SimulationReport {
   readonly live: LiveParams;
   /** Average hits per bar for each part, split by layer. */
   readonly density: PerPart<Record<Layer | 'total', number>>;
+  /** Average hits per bar for each part within each section of the 32-bar phrase. */
+  readonly densityBySection: PerSection<PerPart<number>>;
+  readonly phrase: {
+    /** Number of 32-bar boundaries after the first phrase. */
+    readonly boundaries: number;
+    /** Number of those boundaries where the strong mutation changed the reference pattern. */
+    readonly referenceChanges: number;
+  };
   readonly mutation: {
     /** Number of 8-bar boundaries where the part's base pattern changed. */
     readonly changedSections: PerPart<number>;
@@ -52,6 +65,11 @@ export function simulate({ bars, seed, live }: SimulationOptions): SimulationRep
   const pairs = Math.ceil(bars / 2);
 
   const hits = perPart(() => ({ base: 0, ornament: 0, fill: 0, total: 0 }));
+  const sectionHits = Object.fromEntries(SECTIONS_IN_32.map((s) => [s, perPart(() => 0)])) as PerSection<PerPart<number>>;
+  const sectionBars = Object.fromEntries(SECTIONS_IN_32.map((s) => [s, 0])) as PerSection<number>;
+  let phraseBoundaries = 0;
+  let referenceChanges = 0;
+  let previousReference: Pattern | undefined;
   const changedSections = perPart(() => 0);
   const changedCells = perPart(() => 0);
   const fills = Object.fromEntries([...FILL_KINDS, 'none'].map((kind) => [kind, 0])) as Record<FillKind | 'none', number>;
@@ -74,9 +92,19 @@ export function simulate({ bars, seed, live }: SimulationOptions): SimulationRep
     totalMs += elapsed;
     maxMs = Math.max(maxMs, elapsed);
 
+    const { sectionIn32 } = ctx.sectionRole;
+    sectionBars[sectionIn32] += 2;
     for (const event of events) {
       hits[event.part][event.layer]++;
       hits[event.part].total++;
+      sectionHits[sectionIn32][event.part]++;
+    }
+    if (ctx.isSectionStart && ctx.sectionRole.isPhraseStart) {
+      if (previousReference !== undefined) {
+        phraseBoundaries++;
+        if (!patternsEqual(previousReference, layers.reference)) referenceChanges++;
+      }
+      previousReference = layers.reference;
     }
     if (previousEvents !== undefined && sameEvents(previousEvents, events)) repeatedPairs++;
     previousEvents = events;
@@ -113,6 +141,13 @@ export function simulate({ bars, seed, live }: SimulationOptions): SimulationRep
         return [part, { base: perBar(base), ornament: perBar(ornament), fill: perBar(fill), total: perBar(total) }];
       }),
     ) as SimulationReport['density'],
+    densityBySection: Object.fromEntries(
+      SECTIONS_IN_32.map((s) => [
+        s,
+        Object.fromEntries(PARTS.map((part) => [part, sectionHits[s][part] / Math.max(1, sectionBars[s])])),
+      ]),
+    ) as PerSection<PerPart<number>>,
+    phrase: { boundaries: phraseBoundaries, referenceChanges },
     mutation: { changedSections, changedCells, boundaries },
     repetition: {
       pair: pairs > 1 ? repeatedPairs / (pairs - 1) : 0,
@@ -137,7 +172,7 @@ function formatReport(report: SimulationReport): string {
   const num = (x: number) => x.toFixed(2).padStart(6);
   const { live, mutation } = report;
   const lines = [
-    `bars: ${report.bars}  seed: ${report.seed}  m2: ${live.m2}  m8: ${live.m8}  fillIntensity: ${live.fillIntensity}`,
+    `bars: ${report.bars}  seed: ${report.seed}  m2: ${live.m2}  m8: ${live.m8}  m32: ${live.m32}  fillIntensity: ${live.fillIntensity}`,
     '',
     'Density (hits per bar)',
     '  part     total   base ornament   fill',
@@ -146,7 +181,15 @@ function formatReport(report: SimulationReport): string {
       return `  ${part.padEnd(6)} ${num(d.total)} ${num(d.base)}   ${num(d.ornament)} ${num(d.fill)}`;
     }),
     '',
-    `Mutation (${mutation.boundaries} boundaries)`,
+    'Density by section of the 32-bar phrase (hits per bar)',
+    `  section ${PARTS.map((part) => part.padStart(6)).join(' ')}`,
+    ...SECTIONS_IN_32.map(
+      (s) => `  ${SECTION_LABEL[s].padEnd(7)} ${PARTS.map((part) => num(report.densityBySection[s][part])).join(' ')}`,
+    ),
+    '',
+    `Reference changed at ${report.phrase.referenceChanges} of ${report.phrase.boundaries} 32-bar boundaries`,
+    '',
+    `Mutation at 8-bar boundaries (${mutation.boundaries} boundaries)`,
     '  part    changed sections   changed cells',
     ...PARTS.map(
       (part) =>
@@ -176,6 +219,7 @@ function main() {
       seed: { type: 'string', default: '42' },
       m2: { type: 'string', default: String(DEFAULT_LIVE_PARAMS.m2) },
       m8: { type: 'string', default: String(DEFAULT_LIVE_PARAMS.m8) },
+      m32: { type: 'string', default: String(DEFAULT_LIVE_PARAMS.m32) },
       fill: { type: 'string', default: String(DEFAULT_LIVE_PARAMS.fillIntensity) },
       json: { type: 'boolean', default: false },
     },
@@ -187,6 +231,7 @@ function main() {
   const live: LiveParams = {
     m2: clampUnit(Number(values.m2)),
     m8: clampUnit(Number(values.m8)),
+    m32: clampUnit(Number(values.m32)),
     fillIntensity: clampUnit(Number(values.fill)),
   };
   const report = simulate({ bars, seed, live });
