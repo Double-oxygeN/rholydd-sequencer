@@ -2,6 +2,8 @@ import * as Tone from 'tone';
 import { PARTS, type Part, type Pitch, type Velocity, type Voicing } from '../generators/types.ts';
 import { CHANNEL_IDS, isSending, type ChannelId, type DuckingSettings, type MixerSettings } from '../params/mixer.ts';
 import { clampUnit, type UnitInterval } from '../units.ts';
+import { CLIP_METER_NAME, type LevelReport } from './clip.ts';
+import clipWorkletUrl from './clip-worklet.ts?worker&url';
 import { duckPoints, type Dip, type Seconds } from './ducking.ts';
 
 /** Every sample is mapped to one note and played back at its original pitch. */
@@ -58,6 +60,8 @@ export interface Instruments {
   setMixer(mixer: MixerSettings): void;
   /** Dips the sub, the reese and the pad on the given kicks, continuing the dips of the previous call. */
   duck(kicks: readonly Seconds[], ducking: DuckingSettings): void;
+  /** Reports the peak and the clipped samples after the limiter about ten times a second. */
+  onLevel(listener: (report: LevelReport) => void): void;
 }
 
 export function configureAudioContext(): void {
@@ -69,7 +73,12 @@ export async function loadInstruments(drumSamplesUrl: string, mixer: MixerSettin
   // Notes scheduled within the look-ahead window keep playing after Transport.stop, so stop needs a gate.
   // It sits last so that it also cuts the reverb tail.
   const gate = new Tone.Gain(0).connect(listening);
-  const limiter = new Tone.Limiter(LIMITER_THRESHOLD_DB).connect(gate);
+  // Tone.Limiter is a fast compressor rather than a brickwall, so whatever still overshoots is counted here.
+  const context = Tone.getContext();
+  await context.addAudioWorkletModule(clipWorkletUrl);
+  const clipMeter = context.createAudioWorkletNode(CLIP_METER_NAME, { outputChannelCount: [2] });
+  Tone.connect(clipMeter, gate);
+  const limiter = new Tone.Limiter(LIMITER_THRESHOLD_DB).connect(clipMeter);
   const mixBus = new Tone.Gain().chain(new Tone.Compressor(MASTER_BUS), limiter);
   const drumBus = new Tone.Compressor(DRUM_BUS).connect(mixBus);
   const reverbIn = new Tone.Gain();
@@ -146,6 +155,9 @@ export async function loadInstruments(drumSamplesUrl: string, mixer: MixerSettin
     },
     setMixer(next) {
       for (const id of CHANNEL_IDS) strips[id].apply(next[id]);
+    },
+    onLevel(listener) {
+      clipMeter.port.onmessage = (message: MessageEvent<LevelReport>) => listener(message.data);
     },
     duck(kicks, { depth, release }) {
       for (const part of DUCKED_PARTS) {

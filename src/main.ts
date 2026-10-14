@@ -28,6 +28,7 @@ async function boot(root: HTMLElement) {
   const instruments = await loadInstruments(SAMPLE_BASE_URL, store.get().mixer);
   status.textContent = '';
   instruments.setVolume(store.get().volume);
+  instruments.onLevel((report) => mixerView.showLevel(report));
   let mixer = store.get().mixer;
   store.subscribe((params) => {
     instruments.setVolume(params.volume);
@@ -54,6 +55,7 @@ async function boot(root: HTMLElement) {
       // Browsers only allow the AudioContext to start from a user gesture.
       await Tone.start();
       const { bpm, seed, key } = store.get();
+      mixerView.resetLevel();
       sequencer.start({ bpm, seed, key });
     }
     playing = !playing;

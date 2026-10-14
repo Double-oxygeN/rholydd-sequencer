@@ -12,6 +12,7 @@ import {
   type MixerSettings,
   type Pan,
 } from '../params/mixer.ts';
+import { peakDbfs, type LevelReport } from '../engine/clip.ts';
 import type { ParamStore } from '../params/store.ts';
 import { clampUnit, type UnitInterval } from '../units.ts';
 
@@ -29,6 +30,9 @@ const CHANNEL_LABEL: Readonly<Record<ChannelId, string>> = {
 
 export interface MixerView {
   readonly element: HTMLElement;
+  showLevel(report: LevelReport): void;
+  /** Clears the held peak and the clip count, for a new session. */
+  resetLevel(): void;
 }
 
 export function createMixerView(store: ParamStore): MixerView {
@@ -39,7 +43,8 @@ export function createMixerView(store: ParamStore): MixerView {
   table.append(...['', '音量', 'パン', 'センド', ''].map((text) => cell('mixer-head', text)));
   const renders = CHANNEL_IDS.map((id) => channelRow(store, id, table));
   const ducking = duckingControls(store);
-  element.append(table, ducking.element);
+  const level = levelMeter();
+  element.append(table, ducking.element, level.element);
 
   const render = (mixer: MixerSettings) => {
     for (const r of renders) r(mixer);
@@ -50,7 +55,52 @@ export function createMixerView(store: ParamStore): MixerView {
   });
   render(store.get().mixer);
   ducking.render(store.get().ducking);
-  return { element };
+  return { element, showLevel: level.show, resetLevel: level.reset };
+}
+
+// The meter's floor; anything quieter shows as empty.
+const METER_FLOOR_DB = -48;
+
+function levelMeter() {
+  const element = document.createElement('div');
+  element.className = 'level';
+  const bar = document.createElement('div');
+  bar.className = 'level-bar';
+  const fill = document.createElement('div');
+  fill.className = 'level-fill';
+  bar.append(fill);
+  const peakText = document.createElement('span');
+  const clipText = document.createElement('span');
+  clipText.className = 'level-clips';
+  element.append(field('マスターのピーク', bar), peakText, clipText);
+
+  let held = 0;
+  let clips = 0;
+  const render = (current: number) => {
+    const db = peakDbfs(current);
+    fill.style.width = `${Math.max(0, Math.min(1, 1 - db / METER_FLOOR_DB)) * 100}%`;
+    peakText.textContent = `最大 ${formatDbfs(held)}`;
+    clipText.textContent = `クリップ ${clips} サンプル`;
+    clipText.classList.toggle('on', clips > 0);
+  };
+  render(0);
+  return {
+    element,
+    show(report: LevelReport) {
+      held = Math.max(held, report.peak);
+      clips += report.clips;
+      render(report.peak);
+    },
+    reset() {
+      held = 0;
+      clips = 0;
+      render(0);
+    },
+  };
+}
+
+function formatDbfs(peak: number): string {
+  return peak <= 0 ? '−∞ dBFS' : `${peakDbfs(peak).toFixed(1).replace('-', '−')} dBFS`;
 }
 
 function duckingControls(store: ParamStore) {
