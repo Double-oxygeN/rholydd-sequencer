@@ -102,4 +102,4 @@ export interface DuckingSettings {
   readonly release: Milliseconds;
 }
 
-export const DEFAULT_DUCKING: DuckingSettings = { depth: clampUnit(0.6), release: 100 as Milliseconds };
+export const DEFAULT_DUCKING: DuckingSettings = { depth: clampUnit(0.6), release: 200 as Milliseconds };
