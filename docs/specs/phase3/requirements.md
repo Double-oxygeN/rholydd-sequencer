@@ -66,7 +66,7 @@ MVP、フェーズ1、フェーズ2の要件は、ここに挙げたもの以外
 3. 構造のコンテキストにドラムの確定結果を加えたコンテキストを作る
 4. 音程のある4パートの各生成器が、そのコンテキストからノートを作る
 5. アレンジが、シーンで鳴らさないパートのイベントを取り除く
-6. FX 生成器が、構造のコンテキストから FX のイベントを作る
+6. FX 生成器が、構造のコンテキストと手順5で残ったイベントから FX のイベントを作る（リバーブスローは、実際に鳴る最後のスネアに合わせるため）
 
 手順2〜4は、シーンにかかわらず全パートぶん実行します。鳴らさないパートも生成を続けることで、乱数列がシーンの並びに左右されず、パートが戻ってきたときにその時点の続きから鳴るようにするためです。パートの出し入れを再生側のミュートで扱わないのは、シミュレーションと単体テストで「ブレイクダウンにキックがない」ことを検証できるようにするためです。
 
@@ -301,22 +301,31 @@ type SceneRole =
   | ({ scene: 'drop'; drop: 'first' | 'second' } & DropPosition)
   | ({ scene: 'breakdown' } & LeadPosition);
 
+type SectionInCycle = Brand<number, 'SectionInCycle'>;   // サイクル内の8bar の番号
+
 // Context に追加するもの。コンダクターが作る
 interface ArrangementContext {
   readonly cycle: CycleIndex;
   readonly layout: CycleLayout;
+  readonly sectionInCycle: SectionInCycle;
   readonly sceneRole: SceneRole;
+  // Context は2bar ごとに独立して作るので、次の8bar のシーンを持たせる。サイクルの最後では次のサイクルのイントロ
+  readonly nextScene: SceneRole['scene'];
 }
+// Seeds には、サイクル内で共有するシード cycle を加える
+
+type StepEnd = Brand<number, 'StepEnd'>;   // 区間の終わり（その位置は含まない）。1〜32
 
 // 2bar 内の区間。progress はシーン内の進み具合（0〜1）
-interface FxSpan { from: Step; to: Step; startProgress: UnitInterval; endProgress: UnitInterval }
+interface FxSpan { from: Step; to: StepEnd; startProgress: UnitInterval; endProgress: UnitInterval }
 
 interface RiserSegment { fx: 'riser'; span: FxSpan }
 interface Impact       { fx: 'impact'; step: Step }
 interface ReverbThrow  { fx: 'throw'; step: Step }                       // 対象はスネアだけ
 interface SweepSegment { fx: 'sweep'; filter: 'lowpass' | 'highpass'; span: FxSpan }
 interface FilterReset  { fx: 'filterReset'; step: Step }                 // ビルドの後のドロップの頭
-type FxEvent = RiserSegment | Impact | ReverbThrow | SweepSegment | FilterReset;
+interface Gap          { fx: 'gap'; from: Step }                         // 溜め。その2bar の終わりまで。再生側はパッドを切る
+type FxEvent = RiserSegment | Impact | ReverbThrow | SweepSegment | FilterReset | Gap;
 ```
 
 `SceneRole` と、`Context` がすでに持つ8bar の役割（`sectionRole`）との対応は、サイクル内の位置とレイアウトから一意に決まります。食い違う組を作れないよう、コンダクターだけが両方を作ります。サイクルの長さが一定でないので、小節の通し番号からサイクルの番号を計算では求められません。コンダクターがサイクルの頭と長さを保持して進めます。
