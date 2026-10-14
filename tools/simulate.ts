@@ -3,9 +3,14 @@ import { ALL_FILL_KINDS, FILL_LENGTHS, type FillKind, type FillLength } from '..
 import { motifCell, patternsEqual, type Pattern } from '../src/generators/drums/pattern.ts';
 import { slotsOf } from '../src/generators/drums/weights.ts';
 import { createEnsemble } from '../src/generators/ensemble.ts';
-import { LOWEST_PITCH } from '../src/generators/sub/pitch.ts';
+import { PAD_HIGHEST, PAD_LOWEST } from '../src/generators/pad/index.ts';
+import { REESE_HIGHEST, REESE_LOWEST } from '../src/generators/reese/index.ts';
+import { REESE_STYLES, type ReeseStyle } from '../src/generators/reese/styles.ts';
+import { STAB_HIGHEST, STAB_LOWEST } from '../src/generators/stab/index.ts';
+import { STAB_STYLES, type StabStyle } from '../src/generators/stab/styles.ts';
+import { HIGHEST_PITCH, LOWEST_PITCH } from '../src/generators/sub/pitch.ts';
 import { SUB_STYLES, type SubStyle } from '../src/generators/sub/styles.ts';
-import { PARTS, type Layer, type NoteEvent, type Part } from '../src/generators/types.ts';
+import { PARTS, type Layer, type NoteEvent, type Part, type PitchedEvent } from '../src/generators/types.ts';
 import { DEFAULT_LIVE_PARAMS } from '../src/params/store.ts';
 import { parseSeed, type Seed } from '../src/random/rng.ts';
 import { chordOf, type Context, type LiveParams } from '../src/structure/conductor.ts';
@@ -72,12 +77,18 @@ export interface SimulationReport {
     readonly transition: Record<string, number>;
     /** Number of 32-bar boundaries where the main progression changed. */
     readonly mainChanges: number;
-    /** Notes outside the chord of their 2 bars. The generators should never produce one. */
+    /** Notes of any pitched part outside the chord of their 2 bars. The generators should never produce one. */
     readonly outOfChord: number;
+    /** Notes of any pitched part outside the part's range. The generators should never produce one. */
+    readonly outOfRange: number;
   };
+  /** Average notes per 2 bars of each pitched part. A chord counts as one. */
+  readonly notesPerPair: Record<PitchedPart, number>;
+  readonly reese: { readonly styles: StyleCounts<ReeseStyle> };
+  readonly stab: { readonly styles: StyleCounts<StabStyle> };
   readonly sub: {
     /** Number of phrases using each style for A, A' and A'', and for B. */
-    readonly styles: Record<SubStyle, { readonly main: number; readonly transition: number }>;
+    readonly styles: StyleCounts<SubStyle>;
     /** Share of notes on each scale degree counted from the key's tonic. */
     readonly degrees: Record<(typeof DEGREE_NAMES)[number], number>;
     readonly octaveJumps: number;
@@ -90,6 +101,22 @@ export interface SimulationReport {
   readonly generationMs: { readonly mean: number; readonly max: number };
 }
 
+type PitchedPart = PitchedEvent['instrument'];
+const PITCHED_PARTS: readonly PitchedPart[] = ['sub', 'reese', 'stab', 'pad'];
+const RANGES: Readonly<Record<PitchedPart, readonly [number, number]>> = {
+  sub: [LOWEST_PITCH, HIGHEST_PITCH],
+  reese: [REESE_LOWEST, REESE_HIGHEST],
+  stab: [STAB_LOWEST, STAB_HIGHEST],
+  pad: [PAD_LOWEST, PAD_HIGHEST],
+};
+
+/** Number of phrases using each style for A, A' and A'', and for B. */
+type StyleCounts<S extends string> = Record<S, { main: number; transition: number }>;
+
+function styleCounts<S extends string>(styles: readonly S[]): StyleCounts<S> {
+  return Object.fromEntries(styles.map((s) => [s, { main: 0, transition: 0 }])) as StyleCounts<S>;
+}
+
 const perPart = <T>(make: () => T): PerPart<T> =>
   Object.fromEntries(PARTS.map((part) => [part, make()])) as PerPart<T>;
 
@@ -97,10 +124,11 @@ export function simulate({ bars, seed, live, key = DEFAULT_KEY }: SimulationOpti
   const ensemble = createEnsemble({ seed, key });
   const pairs = Math.ceil(bars / 2);
 
-  const styles = Object.fromEntries(SUB_STYLES.map((s) => [s, { main: 0, transition: 0 }])) as Record<
-    SubStyle,
-    { main: number; transition: number }
-  >;
+  const styles = styleCounts(SUB_STYLES);
+  const reeseStyles = styleCounts(REESE_STYLES);
+  const stabStyles = styleCounts(STAB_STYLES);
+  const pitchedNotes: Record<PitchedPart, number> = { sub: 0, reese: 0, stab: 0, pad: 0 };
+  let outOfRange = 0;
   const mainProgressions = Object.fromEntries(MAIN_PROGRESSIONS.map((p) => [progressionName(p), 0]));
   const transitionProgressions = Object.fromEntries(TRANSITION_PROGRESSIONS.map((p) => [progressionName(p), 0]));
   let previousMain: MainProgression | undefined;
@@ -132,7 +160,7 @@ export function simulate({ bars, seed, live, key = DEFAULT_KEY }: SimulationOpti
 
   for (let i = 0; i < pairs; i++) {
     const start = performance.now();
-    const { ctx, drumLayers: layers, sub, events } = ensemble.next(live);
+    const { ctx, drumLayers: layers, sub, reese, stab, pad, events } = ensemble.next(live);
     const elapsed = performance.now() - start;
     totalMs += elapsed;
     maxMs = Math.max(maxMs, elapsed);
@@ -140,7 +168,10 @@ export function simulate({ bars, seed, live, key = DEFAULT_KEY }: SimulationOpti
     const { sectionIn32 } = ctx.sectionRole;
     sectionBars[sectionIn32] += 2;
     if (ctx.isSectionStart && (ctx.sectionRole.isPhraseStart || ctx.sectionRole.relation === 'transition')) {
-      styles[sub.style][ctx.sectionRole.relation === 'transition' ? 'transition' : 'main']++;
+      const plan = ctx.sectionRole.relation === 'transition' ? 'transition' : 'main';
+      styles[sub.style][plan]++;
+      reeseStyles[reese.style][plan]++;
+      stabStyles[stab.style][plan]++;
     }
     if (ctx.isSectionStart && ctx.sectionRole.isPhraseStart) {
       const main = ctx.progression as MainProgression;
@@ -152,10 +183,18 @@ export function simulate({ bars, seed, live, key = DEFAULT_KEY }: SimulationOpti
       transitionProgressions[progressionName(ctx.progression)]! += 1;
     }
     const chord = chordOf(ctx);
+    for (const event of [...sub.notes, ...reese.notes, ...stab.hits, pad]) {
+      pitchedNotes[event.instrument]++;
+      const [lowest, highest] = RANGES[event.instrument];
+      for (const pitch of 'pitch' in event ? [event.pitch] : event.voicing) {
+        const degree = degreeOf(key, pitch);
+        if (degree === undefined || !isChordTone(chord, degree)) outOfChord++;
+        if (pitch < lowest || pitch > highest) outOfRange++;
+      }
+    }
     for (const note of sub.notes) {
       const degree = degreeOf(key, note.pitch);
       if (degree !== undefined) degrees[DEGREE_NAMES[degree]!]++;
-      if (degree === undefined || !isChordTone(chord, degree)) outOfChord++;
       subNotes++;
       subSteps += note.length;
       if (note.pitch >= LOWEST_PITCH + 12) octaveJumps++;
@@ -222,7 +261,13 @@ export function simulate({ bars, seed, live, key = DEFAULT_KEY }: SimulationOpti
       section: boundaries > 0 ? repeatedSections / boundaries : 0,
       distinctBasePatterns: distinctBases.size,
     },
-    harmony: { main: mainProgressions, transition: transitionProgressions, mainChanges, outOfChord },
+    harmony: { main: mainProgressions, transition: transitionProgressions, mainChanges, outOfChord, outOfRange },
+    notesPerPair: Object.fromEntries(PITCHED_PARTS.map((part) => [part, pitchedNotes[part] / pairs])) as Record<
+      PitchedPart,
+      number
+    >,
+    reese: { styles: reeseStyles },
+    stab: { styles: stabStyles },
     sub: {
       styles,
       degrees: Object.fromEntries(DEGREE_NAMES.map((d) => [d, degrees[d] / Math.max(1, subNotes)])) as Record<
@@ -241,7 +286,8 @@ export function simulate({ bars, seed, live, key = DEFAULT_KEY }: SimulationOpti
 
 /**
  * What a 2-bar unit sounds like apart from the chord it is played on. Layers do not change what is heard, and
- * pitches count from the chord root, so that repeat units on different chords count as repeats.
+ * pitches count from the chord root, so that repeat units on different chords count as repeats. Chords count as
+ * sets of tones because voice leading changes their inversion from one chord to the next.
  */
 function heardShape(ctx: Context, events: readonly NoteEvent[]): string {
   const root = rootDegree(chordOf(ctx));
@@ -256,7 +302,7 @@ function heardShape(ctx: Context, events: readonly NoteEvent[]): string {
           return `${e.instrument}${e.step}:${e.length}:${fromRoot(e.pitch)}`;
         case 'stab':
         case 'pad':
-          return `${e.instrument}${e.step}:${e.length}:${e.voicing.map(fromRoot).join(',')}`;
+          return `${e.instrument}${e.step}:${e.length}:${[...new Set(e.voicing.map(fromRoot))].sort().join(',')}`;
       }
     })
     .join(' ');
@@ -300,7 +346,8 @@ function formatReport(report: SimulationReport): string {
     ...Object.entries(report.harmony.main).map(([name, count]) => `  A/A'/A''  ${name.padEnd(18)} ${String(count).padStart(6)}`),
     ...Object.entries(report.harmony.transition).map(([name, count]) => `  B         ${name.padEnd(18)} ${String(count).padStart(6)}`),
     `  main progression changed at ${report.harmony.mainChanges} of ${report.phrase.boundaries} 32-bar boundaries`,
-    `  notes outside the chord: ${report.harmony.outOfChord}`,
+    `  notes outside the chord: ${report.harmony.outOfChord}  outside the range: ${report.harmony.outOfRange}`,
+    `  notes per 2 bars: ${PITCHED_PARTS.map((part) => `${part} ${report.notesPerPair[part].toFixed(2)}`).join('  ')}`,
     '',
     'Sub bass',
     `  notes per 2 bars: ${report.sub.notesPerPair.toFixed(2)}  mean length: ${report.sub.meanLength.toFixed(2)} steps  octave jumps: ${pct(report.sub.octaveJumps)}`,
@@ -311,6 +358,10 @@ function formatReport(report: SimulationReport): string {
     ),
     `  degrees: ${DEGREE_NAMES.map((d) => `${d} ${pct(report.sub.degrees[d])}`).join('  ')}`,
     '',
+    ...formatStyles('Reese', report.reese.styles),
+    '',
+    ...formatStyles('Stab', report.stab.styles),
+    '',
     'Fills (per 8 bars)',
     ...Object.entries(report.fills).map(([kind, count]) => `  ${kind.padEnd(10)} ${String(count).padStart(6)}`),
     '',
@@ -320,6 +371,16 @@ function formatReport(report: SimulationReport): string {
     `Generation time per 2 bars: mean ${report.generationMs.mean.toFixed(3)} ms, max ${report.generationMs.max.toFixed(3)} ms`,
   ];
   return lines.join('\n');
+}
+
+function formatStyles<S extends string>(title: string, styles: StyleCounts<S>): string[] {
+  return [
+    `${title}`,
+    '  style          A/A\'/A\'\'      B',
+    ...Object.entries<{ main: number; transition: number }>(styles).map(
+      ([style, { main, transition }]) => `  ${style.padEnd(12)} ${String(main).padStart(8)} ${String(transition).padStart(6)}`,
+    ),
+  ];
 }
 
 function main() {

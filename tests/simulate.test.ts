@@ -27,4 +27,12 @@ describe('simulate', () => {
     const report = simulate({ bars: 512, seed: toSeed(1), live: liveParams(0.3, 0.35, 0.7, 1) });
     expect(report.phrase.referenceChanges).toBeGreaterThan(report.phrase.boundaries / 2);
   });
+
+  it('reports every pitched part on the chord and within its range', () => {
+    const report = simulate({ bars: 512, seed: toSeed(3), live: DEFAULT_LIVE });
+    expect(report.harmony.outOfChord).toBe(0);
+    expect(report.harmony.outOfRange).toBe(0);
+    expect(report.notesPerPair.pad).toBe(1);
+    expect(report.notesPerPair.reese).toBeGreaterThan(report.notesPerPair.stab);
+  });
 });

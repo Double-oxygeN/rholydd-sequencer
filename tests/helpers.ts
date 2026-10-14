@@ -1,7 +1,9 @@
 import type { PairLayers } from '../src/generators/drums/index.ts';
 import { createEnsemble } from '../src/generators/ensemble.ts';
+import type { ReeseLine } from '../src/generators/reese/index.ts';
+import type { StabLine } from '../src/generators/stab/index.ts';
 import type { SubLine } from '../src/generators/sub/index.ts';
-import type { ContextWithDrums, DrumHit, PitchedEvent } from '../src/generators/types.ts';
+import type { ContextWithDrums, DrumHit, PadChord, PitchedEvent } from '../src/generators/types.ts';
 import { DEFAULT_LIVE_PARAMS } from '../src/params/store.ts';
 import { toSeed } from '../src/random/rng.ts';
 import { chordOf, type LiveParams } from '../src/structure/conductor.ts';
@@ -33,6 +35,11 @@ export interface GeneratedPair {
   /** Drum hits only: most tests look at one part at a time. */
   readonly events: readonly DrumHit[];
   readonly sub: SubLine;
+  readonly reese: ReeseLine;
+  readonly stab: StabLine;
+  readonly pad: PadChord;
+  /** Every pitched event: sub, reese, stab and pad. */
+  readonly pitched: readonly PitchedEvent[];
 }
 
 /** Generates the given number of bars (rounded up to whole 2-bar units) from a fresh ensemble. */
@@ -44,8 +51,9 @@ export function run(
 ): GeneratedPair[] {
   const ensemble = createEnsemble({ seed: toSeed(seed), key });
   return Array.from({ length: Math.ceil(bars / 2) }, (_, i) => {
-    const { ctx, drumLayers, sub } = ensemble.next(live(i));
-    return { ctx, layers: drumLayers, events: ctx.drums.hits, sub };
+    const { ctx, drumLayers, sub, reese, stab, pad } = ensemble.next(live(i));
+    const pitched = [...sub.notes, ...reese.notes, ...stab.hits, pad];
+    return { ctx, layers: drumLayers, events: ctx.drums.hits, sub, reese, stab, pad, pitched };
   });
 }
 
@@ -69,6 +77,7 @@ export function relativeShape(ctx: ContextWithDrums, events: readonly PitchedEve
   return events.map((e) => [
     e.step,
     e.length,
-    'pitch' in e ? steps(e.pitch) : e.voicing.map(steps),
+    // Voice leading may change the inversion of a chord, so chords compare as sets of tones.
+    'pitch' in e ? steps(e.pitch) : [...new Set(e.voicing.map(steps))].sort(),
   ]);
 }

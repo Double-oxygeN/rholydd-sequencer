@@ -92,8 +92,12 @@ function derivedSeeds(ctx: Context): number[] {
     hash(phrase, TAG.transition),
     hash(phrase, TAG.subStyle),
     hash(phrase, TAG.progression),
+    hash(phrase, TAG.reeseStyle),
+    hash(phrase, TAG.stabStyle),
     ...[phrase, section].flatMap((seed) =>
-      [REL.repeat, REL.variant].flatMap((rel) => [hash(seed, TAG.subRhythm, rel), hash(seed, TAG.subPitch, rel)]),
+      [REL.repeat, REL.variant].flatMap((rel) =>
+        [TAG.subRhythm, TAG.subPitch, TAG.reeseRhythm, TAG.reesePitch, TAG.stabRhythm].map((tag) => hash(seed, tag, rel)),
+      ),
     ),
     ...Array.from({ length: 11 }, (_, attempt) => hash(phrase, TAG.transition, attempt)),
     ...PARTS.flatMap((part) => [

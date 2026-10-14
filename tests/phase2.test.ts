@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { PAD_HIGHEST, PAD_LOWEST, sectionVoicings } from '../src/generators/pad/index.ts';
+import type { PitchedEvent } from '../src/generators/types.ts';
 import { hash } from '../src/random/rng.ts';
 import { chordOf } from '../src/structure/conductor.ts';
 import {
@@ -11,7 +13,7 @@ import {
 } from '../src/structure/harmony.ts';
 import { ALL_KEYS, DEFAULT_KEY, degreeOf, parseKey } from '../src/structure/key.ts';
 import { clampUnit } from '../src/units.ts';
-import { DEFAULT_LIVE, PARAM_SETS, SEEDS, liveParams, run, type GeneratedPair } from './helpers.ts';
+import { DEFAULT_LIVE, PARAM_SETS, SEEDS, liveParams, relativeShape, run, type GeneratedPair } from './helpers.ts';
 
 // Automated acceptance criteria from docs/specs/phase2/requirements.md.
 
@@ -101,30 +103,146 @@ describe('phase 2 acceptance: chord progression', () => {
 });
 
 describe('phase 2 acceptance: parts on the chords', () => {
-  it('plays only chord tones of the 2 bars in the sub bass', () => {
+  const runs = SEEDS.flatMap((seed) => PARAM_SETS.map((params) => run(seed, BARS, () => params)));
+  const isPhraseEnd = ({ ctx }: GeneratedPair) => ctx.isSectionEnd && ctx.sectionRole.isPhraseEnd;
+  const cutFrom = (pair: GeneratedPair) => (isPhraseEnd(pair) ? (pair.ctx.drums.fill?.from ?? 32) : 32);
+
+  it('plays only chord tones of the 2 bars, each part within its range', () => {
     for (const key of ALL_KEYS) {
       for (const params of PARAM_SETS) {
-        for (const pair of run(7, 512, () => params, key)) {
-          for (const pitch of pitchesOf(pair)) {
-            const degree = degreeOf(key, pitch);
-            expect(degree).toBeDefined();
-            expect(isChordTone(chordOf(pair.ctx), degree!)).toBe(true);
+        for (const pair of run(7, 256, () => params, key)) {
+          for (const event of pair.pitched) {
+            const [lowest, highest] = RANGES[event.instrument];
+            for (const pitch of pitchesOf(event)) {
+              const degree = degreeOf(key, pitch);
+              expect(degree).toBeDefined();
+              expect(isChordTone(chordOf(pair.ctx), degree!)).toBe(true);
+              expect(pitch).toBeGreaterThanOrEqual(lowest);
+              expect(pitch).toBeLessThanOrEqual(highest);
+            }
           }
         }
       }
     }
   });
 
-  it('starts the sub bass of every 2 bars on the chord root', () => {
-    for (const pair of run(42, BARS, () => liveParams(0.3, 0.35, 0.7))) {
-      const first = pair.sub.notes[0];
-      if (first === undefined) continue;
-      expect(degreeOf(pair.ctx.key, first.pitch)).toBe(chordOf(pair.ctx).root);
+  it('starts the sub bass and the reese of every 2 bars on the chord root', () => {
+    for (const pair of run(42, BARS)) {
+      for (const first of [pair.sub.notes[0], pair.reese.notes[0]]) {
+        if (first === undefined) continue;
+        expect(first.step).toBe(0);
+        expect(degreeOf(pair.ctx.key, first.pitch)).toBe(chordOf(pair.ctx).root);
+      }
     }
   });
 
+  it('only transposes every pitched part when the key changes, leaving the drums as they were', () => {
+    for (const seed of SEEDS) {
+      const inF = run(seed, 256, () => DEFAULT_LIVE, DEFAULT_KEY);
+      for (const key of ALL_KEYS) {
+        const other = run(seed, 256, () => DEFAULT_LIVE, key);
+        for (let i = 0; i < inF.length; i++) {
+          expect(other[i]!.events).toEqual(inF[i]!.events);
+          const a = inF[i]!.pitched;
+          const b = other[i]!.pitched;
+          expect(b.map((e) => [e.instrument, e.step, e.length])).toEqual(a.map((e) => [e.instrument, e.step, e.length]));
+          // Folding into a fixed range reorders the tones of a chord, so the pitch classes compare as sets.
+          const classes = (event: PitchedEvent, shift: number) =>
+            [...new Set(pitchesOf(event).map((pitch) => (((pitch - shift) % 12) + 12) % 12))].sort();
+          a.forEach((event, j) => expect(classes(b[j]!, key - DEFAULT_KEY)).toEqual(classes(event, 0)));
+        }
+      }
+    }
+  });
+
+  it('repeats every pitched part relative to the chord for the three repeat units of each 8 bars', () => {
+    for (const pairs of runs) {
+      for (let i = 0; i < pairs.length; i += 4) {
+        const shape = (pair: GeneratedPair) => relativeShape(pair.ctx, pair.pitched);
+        expect(shape(pairs[i + 1]!)).toEqual(shape(pairs[i]!));
+        expect(shape(pairs[i + 2]!)).toEqual(shape(pairs[i]!));
+      }
+    }
+  });
+
+  it('keeps the sub, the reese and the stabs within the 2 bars and out of the big fill, while the pad plays on', () => {
+    let padsInBigFills = 0;
+    for (const pairs of runs) {
+      for (const pair of pairs) {
+        for (const event of [...pair.sub.notes, ...pair.reese.notes, ...pair.stab.hits]) {
+          expect(event.length).toBeGreaterThanOrEqual(1);
+          expect(event.step + event.length).toBeLessThanOrEqual(cutFrom(pair));
+        }
+        expect([pair.pad.step, pair.pad.length]).toEqual([0, 32]);
+        if (cutFrom(pair) < 32) padsInBigFills++;
+      }
+    }
+    expect(padsInBigFills).toBeGreaterThan(0);
+  });
+
+  it('plays the same pitched parts whether or not an 8-bar fill plays', () => {
+    for (const seed of SEEDS) {
+      const withFills = run(seed, BARS, () => liveParams(0.3, 0.35, 1));
+      const without = run(seed, BARS, () => liveParams(0.3, 0.35, 0));
+      for (let i = 0; i < withFills.length; i++) {
+        if (isPhraseEnd(withFills[i]!)) continue;
+        expect(withFills[i]!.pitched).toEqual(without[i]!.pitched);
+      }
+    }
+  });
+
+  it('never plays a stab on beats 2 and 4', () => {
+    let stabs = 0;
+    for (const pairs of runs) {
+      for (const pair of pairs) {
+        for (const hit of pair.stab.hits) {
+          stabs++;
+          expect([4, 12, 20, 28]).not.toContain(hit.step);
+        }
+      }
+    }
+    expect(stabs).toBeGreaterThan(0);
+  });
+
+  it('uses different reese and stab styles in section B than in A of the same 32 bars', () => {
+    for (const pairs of runs) {
+      for (let i = 0; i + 8 < pairs.length; i += 16) {
+        expect(pairs[i + 8]!.reese.style).not.toBe(pairs[i]!.reese.style);
+        expect(pairs[i + 8]!.stab.style).not.toBe(pairs[i]!.stab.style);
+      }
+    }
+  });
 });
 
-function pitchesOf(pair: GeneratedPair): number[] {
-  return pair.sub.notes.map((n) => n.pitch);
+describe('pad voicing', () => {
+  it('starts each section in root position and moves the voices as little as the candidates allow', () => {
+    for (const key of ALL_KEYS) {
+      for (const progression of [...MAIN_PROGRESSIONS, ...TRANSITION_PROGRESSIONS]) {
+        const voicings = sectionVoicings(key, progression);
+        expect(degreeOf(key, voicings[0]![0])).toBe(progression[0].root);
+        for (const voicing of voicings) {
+          expect(voicing).toHaveLength(4);
+          expect([...voicing].sort((a, b) => a - b)).toEqual(voicing);
+          expect(voicing[0]).toBeGreaterThanOrEqual(PAD_LOWEST);
+          expect(voicing.at(-1)).toBeLessThanOrEqual(PAD_HIGHEST);
+        }
+        for (let n = 1; n < voicings.length; n++) {
+          // Close voicings of seventh chords are at most a few semitones per voice apart once led well.
+          const moved = voicings[n]!.reduce((sum, p, v) => sum + Math.abs(p - voicings[n - 1]![v]!), 0);
+          expect(moved).toBeLessThanOrEqual(8);
+        }
+      }
+    }
+  });
+});
+
+const RANGES: Readonly<Record<PitchedEvent['instrument'], readonly [number, number]>> = {
+  sub: [29, 52],
+  reese: [41, 52],
+  stab: [60, 71],
+  pad: [53, 76],
+};
+
+function pitchesOf(event: PitchedEvent): readonly number[] {
+  return 'pitch' in event ? [event.pitch] : event.voicing;
 }

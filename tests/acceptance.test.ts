@@ -37,7 +37,7 @@ describe('MVP acceptance', () => {
   });
 
   it('plays the composed drum layers followed by the pitched parts', () => {
-    const viaLayers = run(42, 256).map((pair) => [...pair.events, ...pair.sub.notes]);
+    const viaLayers = run(42, 256).map((pair) => [...pair.events, ...pair.pitched]);
     expect(generateBars(42, 256)).toEqual(viaLayers);
   });
 
