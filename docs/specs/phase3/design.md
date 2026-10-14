@@ -233,7 +233,7 @@ function fxAutomation(events: readonly FxEvent[], pairStart: Seconds, stepSecond
 | スイープ | 区間の頭で開始時の周波数に `set`、終わりへ `exponential` |
 | フィルターのリセット | ハイパスとローパスを開いた周波数に `set` |
 | リバーブスロー | 打音の 5 ms 前に送り量を `set`、120 ms 後に0へ `set` |
-| 溜め | 開始で1に `set`、30 ms でパッドのゲートを0へ `linear`、2bar の終わりで1に `set` |
+| 溜め | 開始で1に `set`、30 ms でパッドのゲートを0へ `linear`。2bar の終わりで0に `set` し、0.4 秒（パッドのアタック）で1へ `linear`。すぐに1に戻すと、溜めで切ったパッドのリリースがドロップの頭で聞こえ直すため |
 
 インパクトは点ではなく発音なので、エンジンが直接鳴らします。
 
