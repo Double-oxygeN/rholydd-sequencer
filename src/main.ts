@@ -3,6 +3,7 @@ import { configureAudioContext, loadInstruments } from './engine/audio.ts';
 import { createSequencer } from './engine/transport.ts';
 import { createParamStore, defaultParams } from './params/store.ts';
 import { createStepGrid } from './ui/grid.ts';
+import { createMixerView } from './ui/mixer.ts';
 import { createPanel } from './ui/panel.ts';
 import { createPositionView } from './ui/position.ts';
 import './ui/style.css';
@@ -15,18 +16,24 @@ async function boot(root: HTMLElement) {
   const panel = createPanel(store);
   const position = createPositionView();
   const grid = createStepGrid();
+  const mixerView = createMixerView(store);
 
   const title = document.createElement('h1');
   title.textContent = 'GenDnB';
   const status = document.createElement('p');
   status.className = 'status';
   status.textContent = 'サンプルを読み込み中…';
-  root.append(title, panel.element, position.element, grid.element, status);
+  root.append(title, panel.element, position.element, grid.element, mixerView.element, status);
 
-  const instruments = await loadInstruments(SAMPLE_BASE_URL);
+  const instruments = await loadInstruments(SAMPLE_BASE_URL, store.get().mixer);
   status.textContent = '';
   instruments.setVolume(store.get().volume);
-  store.subscribe((params) => instruments.setVolume(params.volume));
+  let mixer = store.get().mixer;
+  store.subscribe((params) => {
+    instruments.setVolume(params.volume);
+    if (params.mixer !== mixer) instruments.setMixer(params.mixer);
+    mixer = params.mixer;
+  });
 
   const sequencer = createSequencer(instruments, store.get, {
     pairStarted: (_, events) => grid.show(events),

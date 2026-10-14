@@ -1,19 +1,37 @@
 import * as Tone from 'tone';
 import { PARTS, type Part, type Pitch, type Velocity, type Voicing } from '../generators/types.ts';
+import { CHANNEL_IDS, isSending, type ChannelId, type MixerSettings } from '../params/mixer.ts';
 import type { UnitInterval } from '../units.ts';
 
 /** Every sample is mapped to one note and played back at its original pitch. */
 const ROOT_NOTE = 'C3';
 
-// Balances the self-made samples against each other; velocities still come from the generator.
-const PART_TRIM_DB: Readonly<Record<Part, number>> = { kick: 0, snare: -2, hat: -6, ghost: 0 };
-const SUB_TRIM_DB = -6;
-const REESE_TRIM_DB = -14;
-const STAB_TRIM_DB = -16;
-const PAD_TRIM_DB = -20;
+// Evens out the sources so that every fader starts at 0 dB; velocities still come from the generators.
+const SOURCE_TRIM_DB: Readonly<Record<Exclude<ChannelId, 'reverbReturn'>, number>> = {
+  kick: 0,
+  snare: -2,
+  hat: -6,
+  ghost: 0,
+  sub: -6,
+  reese: -14,
+  stab: -16,
+  pad: -20,
+};
 
 // A pure sine has no harmonics, so small speakers would lose the bass pitch entirely.
-const BASS_DRIVE = 0.15;
+const SUB_DRIVE = 0.15;
+// Cut below the sub so that the two basses never stack up in the lowest octave.
+const REESE_HIGHPASS_HZ = 120;
+const STAB_LOWPASS_HZ = 3000;
+const PAD_LOWPASS_HZ = 1500;
+
+const REVERB = { decay: 2.5, preDelay: 0.02 } as const;
+const DRUM_BUS = { threshold: -12, ratio: 3, attack: 0.01, release: 0.1 } as const;
+const MASTER_BUS = { threshold: -10, ratio: 2, attack: 0.02, release: 0.2 } as const;
+const LIMITER_THRESHOLD_DB = -1;
+
+// Short enough to feel immediate, long enough not to click.
+const MIXER_RAMP_SECONDS = 0.05;
 
 // A mono synth may click or drop the next note when a release and an attack land on the same instant.
 const LEGATO_GAP_SECONDS = 0.005;
@@ -28,33 +46,43 @@ export interface Instruments {
   chord(part: 'stab' | 'pad', voicing: Voicing, time: number, seconds: number, velocity: Velocity): void;
   /** Lets scheduled notes through from the given time on. */
   open(time: number): void;
-  /** Cuts every note, including those already scheduled ahead of time. */
+  /** Cuts every note and the reverb tail, including notes already scheduled ahead of time. */
   silence(): void;
   setVolume(volume: UnitInterval): void;
+  setMixer(mixer: MixerSettings): void;
 }
 
 export function configureAudioContext(): void {
   Tone.setContext(new Tone.Context({ latencyHint: 'playback', lookAhead: LOOK_AHEAD_SECONDS }));
 }
 
-export async function loadInstruments(drumSamplesUrl: string): Promise<Instruments> {
-  const master = new Tone.Volume().toDestination();
+export async function loadInstruments(drumSamplesUrl: string, mixer: MixerSettings): Promise<Instruments> {
+  const listening = new Tone.Volume().toDestination();
   // Notes scheduled within the look-ahead window keep playing after Transport.stop, so stop needs a gate.
-  const gate = new Tone.Gain(0).connect(master);
+  // It sits last so that it also cuts the reverb tail.
+  const gate = new Tone.Gain(0).connect(listening);
+  const limiter = new Tone.Limiter(LIMITER_THRESHOLD_DB).connect(gate);
+  const mixBus = new Tone.Gain().chain(new Tone.Compressor(MASTER_BUS), limiter);
+  const drumBus = new Tone.Compressor(DRUM_BUS).connect(mixBus);
+  const reverbIn = new Tone.Gain();
+
+  const strips = createStrips(mixer, { drums: drumBus, mix: mixBus, reverb: reverbIn });
   const samplers = Object.fromEntries(
     PARTS.map((part) => [
       part,
       new Tone.Sampler({ urls: { [ROOT_NOTE]: `${part}.wav` }, baseUrl: drumSamplesUrl, release: 0.02 }).connect(
-        new Tone.Volume(PART_TRIM_DB[part]).connect(gate),
+        strips[part].input,
       ),
     ]),
   ) as Record<Part, Tone.Sampler>;
-  const subIn = new Tone.Distortion(BASS_DRIVE).chain(new Tone.Volume(SUB_TRIM_DB), gate);
-  // Cut below the sub so that the two basses never stack up in the lowest octave.
-  const reeseIn = new Tone.Filter(REESE_HIGHPASS_HZ, 'highpass').chain(new Tone.Volume(REESE_TRIM_DB), gate);
-  const stabIn = new Tone.Filter(STAB_LOWPASS_HZ, 'lowpass').chain(new Tone.Volume(STAB_TRIM_DB), gate);
-  const padIn = new Tone.Filter(PAD_LOWPASS_HZ, 'lowpass').chain(new Tone.Volume(PAD_TRIM_DB), gate);
-  let voices = createVoices({ sub: subIn, reese: reeseIn, stab: stabIn, pad: padIn });
+  const inputs: VoiceInputs = {
+    sub: new Tone.Distortion(SUB_DRIVE).connect(strips.sub.input),
+    reese: new Tone.Filter(REESE_HIGHPASS_HZ, 'highpass').connect(strips.reese.input),
+    stab: new Tone.Filter(STAB_LOWPASS_HZ, 'lowpass').connect(strips.stab.input),
+    pad: new Tone.Filter(PAD_LOWPASS_HZ, 'lowpass').connect(strips.pad.input),
+  };
+  let voices = createVoices(inputs);
+  let reverb = createReverb(reverbIn, strips.reverbReturn.input);
   await Tone.loaded();
 
   return {
@@ -74,7 +102,11 @@ export async function loadInstruments(drumSamplesUrl: string): Promise<Instrumen
       // Notes of the previous session stay scheduled on the synths' timelines, and the gate would let them
       // collide with the new ones on the mono voices or hold on to poly voices. Fresh synths drop them all at once.
       disposeVoices(voices);
-      voices = createVoices({ sub: subIn, reese: reeseIn, stab: stabIn, pad: padIn });
+      voices = createVoices(inputs);
+      // The reverb still rings with the previous session; a fresh one starts silent. It renders its impulse
+      // response asynchronously, which only leaves the first few tens of milliseconds dry.
+      reverb.dispose();
+      reverb = createReverb(reverbIn, strips.reverbReturn.input);
       gate.gain.cancelScheduledValues(time);
       gate.gain.setValueAtTime(1, time);
     },
@@ -89,14 +121,61 @@ export async function loadInstruments(drumSamplesUrl: string): Promise<Instrumen
       voices.pad.releaseAll(now);
     },
     setVolume(volume) {
-      master.volume.rampTo(Tone.gainToDb(volume), 0.05);
+      listening.volume.rampTo(Tone.gainToDb(volume), MIXER_RAMP_SECONDS);
+    },
+    setMixer(next) {
+      for (const id of CHANNEL_IDS) strips[id].apply(next[id]);
     },
   };
 }
 
-const REESE_HIGHPASS_HZ = 120;
-const STAB_LOWPASS_HZ = 3000;
-const PAD_LOWPASS_HZ = 1500;
+interface Strip {
+  /** Where the source connects, after its trim. */
+  readonly input: Tone.InputNode;
+  apply(settings: MixerSettings[ChannelId]): void;
+}
+
+interface Buses {
+  readonly drums: Tone.InputNode;
+  readonly mix: Tone.InputNode;
+  readonly reverb: Tone.InputNode;
+}
+
+const DRUM_CHANNELS: readonly ChannelId[] = PARTS;
+
+function createStrips(mixer: MixerSettings, buses: Buses): Record<ChannelId, Strip> {
+  return Object.fromEntries(
+    CHANNEL_IDS.map((id) => {
+      const settings = mixer[id];
+      const channel = new Tone.Channel({ volume: settings.level, mute: settings.muted, pan: 0 });
+      channel.connect(DRUM_CHANNELS.includes(id) ? buses.drums : buses.mix);
+      // Taken after the fader so that pulling a part down also pulls down its reverb.
+      const send = isSending(settings) ? new Tone.Gain(settings.send) : null;
+      if (send !== null) channel.chain(send, buses.reverb);
+      const input = id === 'reverbReturn' ? channel : new Tone.Volume(SOURCE_TRIM_DB[id]).connect(channel);
+      const strip: Strip = {
+        input,
+        apply(next) {
+          channel.volume.rampTo(next.level, MIXER_RAMP_SECONDS);
+          channel.mute = next.muted;
+          if (isSending(next)) {
+            channel.pan.rampTo(next.pan, MIXER_RAMP_SECONDS);
+            send?.gain.rampTo(next.send, MIXER_RAMP_SECONDS);
+          }
+        },
+      };
+      strip.apply(settings);
+      return [id, strip];
+    }),
+  ) as Record<ChannelId, Strip>;
+}
+
+function createReverb(from: Tone.ToneAudioNode, to: Tone.InputNode): Tone.Reverb {
+  const reverb = new Tone.Reverb({ ...REVERB, wet: 1 });
+  from.connect(reverb);
+  reverb.connect(to);
+  return reverb;
+}
 
 interface Voices {
   readonly sub: Tone.Synth;

@@ -233,6 +233,60 @@ button.play.playing {
   outline-offset: -1px;
 }
 
+.mixer {
+  display: grid;
+  gap: 16px;
+  padding: 16px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.mixer-table {
+  display: grid;
+  grid-template-columns: 7em repeat(3, minmax(0, 1fr)) auto;
+  gap: 6px 12px;
+  align-items: center;
+}
+
+.mixer-head {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.mixer-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.mixer .row output {
+  width: 4.5em;
+  font-size: 0.85rem;
+}
+
+button.mute {
+  width: 2.2em;
+  padding: 4px 0;
+  font-weight: 700;
+}
+
+button.mute.on {
+  background: var(--fill);
+  border-color: var(--fill);
+  color: #fff;
+}
+
+@media (max-width: 640px) {
+  .mixer-table {
+    grid-template-columns: 5.5em repeat(3, minmax(0, 1fr)) auto;
+    gap: 6px;
+  }
+
+  .mixer .row output {
+    display: none;
+  }
+}
+
 .status {
   margin: 0;
   color: var(--muted);
