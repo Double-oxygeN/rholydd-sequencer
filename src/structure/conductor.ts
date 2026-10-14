@@ -1,6 +1,13 @@
 import { REL, TAG, hash, type Seed } from '../random/rng.ts';
 import type { Brand, UnitInterval } from '../units.ts';
 import { sectionEnergy } from './energy.ts';
+import {
+  phraseProgressions,
+  type Chord,
+  type MainProgression,
+  type PhraseProgressions,
+  type TransitionProgression,
+} from './harmony.ts';
 import { DEFAULT_KEY, type Key } from './key.ts';
 import {
   BARS_PER_PAIR,
@@ -10,8 +17,12 @@ import {
   sectionRole,
   type PairIn8,
   type PairRole,
+  type ClosingSection,
+  type ReferenceSection,
   type SectionIn32,
   type SectionRole,
+  type TransitionSection,
+  type VariantSection,
 } from './form.ts';
 
 /** Bar count from the start of playback (0-based). */
@@ -50,12 +61,20 @@ export interface LiveParams extends SectionParams, PhraseParams {
   readonly energyDepth: UnitInterval;
 }
 
-export type Context = PairRole & {
+/** The kind of progression follows from the section's role, so B can never carry the main progression. */
+export type SectionHarmony =
+  | {
+      readonly sectionRole: ReferenceSection | VariantSection | ClosingSection;
+      readonly progression: MainProgression;
+    }
+  | { readonly sectionRole: TransitionSection; readonly progression: TransitionProgression };
+
+export type Context = PairRole &
+  SectionHarmony & {
   readonly bar: BarIndex;
   readonly pair: PairIndex;
   readonly section: SectionIndex;
   readonly phrase: PhraseIndex;
-  readonly sectionRole: SectionRole;
   /** Fixed for the whole 8-bar section so that its repeat units stay identical. */
   readonly energy: UnitInterval;
   /** Fixed for the session. Only transposes pitches and never feeds a seed, so changing it keeps the same piece. */
@@ -63,6 +82,17 @@ export type Context = PairRole & {
   readonly seeds: Seeds;
   readonly params: GenerationParams;
 };
+
+/** Chord of the 2 bars. Derived rather than stored so that it can never disagree with the progression. */
+export function chordOf(ctx: PairRole & SectionHarmony): Chord {
+  return ctx.progression[ctx.pairIn8];
+}
+
+function sectionHarmony(role: SectionRole, progressions: PhraseProgressions): SectionHarmony {
+  return role.relation === 'transition'
+    ? { sectionRole: role, progression: progressions.transition }
+    : { sectionRole: role, progression: progressions.main };
+}
 
 export interface Conductor {
   /** Context for the next 2 bars. */
@@ -74,6 +104,7 @@ export function createConductor(master: Seed, key: Key = DEFAULT_KEY): Conductor
   let sectionParams: SectionParams | undefined;
   let phraseParams: PhraseParams | undefined;
   let energy: UnitInterval | undefined;
+  let progressions: PhraseProgressions | undefined;
   return {
     next(live) {
       const section = Math.floor(pair / PAIRS_PER_SECTION);
@@ -84,10 +115,11 @@ export function createConductor(master: Seed, key: Key = DEFAULT_KEY): Conductor
         sectionParams = { m2: live.m2, m8: live.m8 };
         energy = sectionEnergy(inPhrase.sectionIn32, live.energyDepth);
       }
-      if ((role.isSectionStart && inPhrase.isPhraseStart) || phraseParams === undefined) {
-        phraseParams = { m32: live.m32 };
-      }
       const phraseSeed = hash(master, TAG.phrase, phrase);
+      if ((role.isSectionStart && inPhrase.isPhraseStart) || phraseParams === undefined || progressions === undefined) {
+        phraseParams = { m32: live.m32 };
+        progressions = phraseProgressions(progressions?.main, phraseSeed, phraseParams.m32);
+      }
       const sectionSeed = hash(phraseSeed, TAG.section, inPhrase.sectionIn32);
       const ctx: Context = {
         ...role,
@@ -95,7 +127,7 @@ export function createConductor(master: Seed, key: Key = DEFAULT_KEY): Conductor
         pair: pair as PairIndex,
         section: section as SectionIndex,
         phrase: phrase as PhraseIndex,
-        sectionRole: inPhrase,
+        ...sectionHarmony(inPhrase, progressions),
         energy,
         key,
         seeds: {

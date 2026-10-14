@@ -41,8 +41,12 @@ export function createSequencer(instruments: Instruments, readLive: () => LivePa
               case 'drums':
                 instruments.drum(event.part, at, event.velocity);
                 break;
-              case 'bass':
-                instruments.bass(event.pitch, at, event.length * stepSeconds, event.velocity);
+              case 'sub':
+                instruments.sub(event.pitch, at, event.length * stepSeconds, event.velocity);
+                break;
+              case 'reese':
+              case 'stab':
+              case 'pad':
                 break;
             }
           }

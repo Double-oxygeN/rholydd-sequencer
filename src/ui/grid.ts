@@ -1,10 +1,10 @@
 import { PARTS, STEPS_PER_BAR, STEPS_PER_PAIR, type NoteEvent, type Part, type Pitch, type Step } from '../generators/types.ts';
 import { KEY_NAMES } from '../structure/key.ts';
 
-type Row = Part | 'bass';
+type Row = Part | 'sub';
 
-const ROWS: readonly Row[] = [...PARTS, 'bass'];
-const ROW_LABEL: Readonly<Record<Row, string>> = { kick: 'Kick', snare: 'Snare', hat: 'Hat', ghost: 'Ghost', bass: 'Bass' };
+const ROWS: readonly Row[] = [...PARTS, 'sub'];
+const ROW_LABEL: Readonly<Record<Row, string>> = { kick: 'Kick', snare: 'Snare', hat: 'Hat', ghost: 'Ghost', sub: 'Sub' };
 
 export interface StepGrid {
   readonly element: HTMLElement;
@@ -56,12 +56,16 @@ export function createStepGrid(): StepGrid {
           case 'drums':
             paint(event.part, event.step, event.layer, event.velocity);
             break;
-          case 'bass': {
+          case 'sub': {
             const name = noteName(event.pitch);
-            paint('bass', event.step, 'bass', event.velocity, name);
-            for (let i = 1; i < event.length; i++) paint('bass', event.step + i, 'sustain', event.velocity, name);
+            paint('sub', event.step, 'note', event.velocity, name);
+            for (let i = 1; i < event.length; i++) paint('sub', event.step + i, 'sustain', event.velocity, name);
             break;
           }
+          case 'reese':
+          case 'stab':
+          case 'pad':
+            break;
         }
       }
     },

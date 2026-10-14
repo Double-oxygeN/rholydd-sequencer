@@ -35,8 +35,11 @@ export function velocityBetween(lo: Velocity, hi: Velocity, t: number): Velocity
   return (lo + (hi - lo) * Math.min(1, Math.max(0, t))) as Velocity;
 }
 
-/** MIDI note number of a bass note. */
+/** MIDI note number. Each part keeps its notes within its own range. */
 export type Pitch = Brand<number, 'Pitch'>;
+
+/** Notes sounding together, lowest first. Never empty. */
+export type Voicing = readonly [Pitch, ...Pitch[]];
 
 export type Layer = 'base' | 'ornament' | 'fill';
 
@@ -48,15 +51,40 @@ export interface DrumHit {
   readonly layer: Layer;
 }
 
-export interface BassNote {
-  readonly instrument: 'bass';
+export interface SubNote {
+  readonly instrument: 'sub';
   readonly step: Step;
   readonly length: StepLength;
   readonly pitch: Pitch;
   readonly velocity: Velocity;
 }
 
-export type NoteEvent = DrumHit | BassNote;
+export interface ReeseNote {
+  readonly instrument: 'reese';
+  readonly step: Step;
+  readonly length: StepLength;
+  readonly pitch: Pitch;
+  readonly velocity: Velocity;
+}
+
+export interface StabHit {
+  readonly instrument: 'stab';
+  readonly step: Step;
+  readonly length: StepLength;
+  readonly voicing: Voicing;
+  readonly velocity: Velocity;
+}
+
+export interface PadChord {
+  readonly instrument: 'pad';
+  readonly step: Step;
+  readonly length: StepLength;
+  readonly voicing: Voicing;
+  readonly velocity: Velocity;
+}
+
+export type PitchedEvent = SubNote | ReeseNote | StabHit | PadChord;
+export type NoteEvent = DrumHit | PitchedEvent;
 
 /** Steps taken over by a fill and the one part, if any, that keeps playing there. */
 export interface FillSpan {

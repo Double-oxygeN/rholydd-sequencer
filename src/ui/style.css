@@ -163,9 +163,19 @@ button.play.playing {
 }
 
 .position-total {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
   font-size: 0.9rem;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
+}
+
+.position-chord {
+  min-width: 5em;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--fg);
 }
 
 .grid {
@@ -210,7 +220,7 @@ button.play.playing {
   background: color-mix(in srgb, var(--fill) calc(var(--velocity) * 100%), var(--cell));
 }
 
-.grid-cell[data-layer='bass'] {
+.grid-cell[data-layer='note'] {
   background: var(--bass);
 }
 

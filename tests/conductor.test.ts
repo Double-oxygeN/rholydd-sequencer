@@ -90,9 +90,10 @@ function derivedSeeds(ctx: Context): number[] {
     fill,
     hash(phrase, TAG.base),
     hash(phrase, TAG.transition),
-    hash(phrase, TAG.bassStyle),
+    hash(phrase, TAG.subStyle),
+    hash(phrase, TAG.progression),
     ...[phrase, section].flatMap((seed) =>
-      [REL.repeat, REL.variant].flatMap((rel) => [hash(seed, TAG.bassRhythm, rel), hash(seed, TAG.bassPitch, rel)]),
+      [REL.repeat, REL.variant].flatMap((rel) => [hash(seed, TAG.subRhythm, rel), hash(seed, TAG.subPitch, rel)]),
     ),
     ...Array.from({ length: 11 }, (_, attempt) => hash(phrase, TAG.transition, attempt)),
     ...PARTS.flatMap((part) => [

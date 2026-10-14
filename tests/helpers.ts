@@ -1,11 +1,12 @@
-import type { BassLine } from '../src/generators/bass/index.ts';
 import type { PairLayers } from '../src/generators/drums/index.ts';
 import { createEnsemble } from '../src/generators/ensemble.ts';
-import type { ContextWithDrums, DrumHit } from '../src/generators/types.ts';
+import type { SubLine } from '../src/generators/sub/index.ts';
+import type { ContextWithDrums, DrumHit, PitchedEvent } from '../src/generators/types.ts';
 import { DEFAULT_LIVE_PARAMS } from '../src/params/store.ts';
 import { toSeed } from '../src/random/rng.ts';
-import type { LiveParams } from '../src/structure/conductor.ts';
-import { DEFAULT_KEY, type Key } from '../src/structure/key.ts';
+import { chordOf, type LiveParams } from '../src/structure/conductor.ts';
+import { rootDegree } from '../src/structure/harmony.ts';
+import { DEFAULT_KEY, degreeOf, type Key } from '../src/structure/key.ts';
 import { clampUnit } from '../src/units.ts';
 
 export function liveParams(
@@ -31,7 +32,7 @@ export interface GeneratedPair {
   readonly layers: PairLayers;
   /** Drum hits only: most tests look at one part at a time. */
   readonly events: readonly DrumHit[];
-  readonly bass: BassLine;
+  readonly sub: SubLine;
 }
 
 /** Generates the given number of bars (rounded up to whole 2-bar units) from a fresh ensemble. */
@@ -43,8 +44,8 @@ export function run(
 ): GeneratedPair[] {
   const ensemble = createEnsemble({ seed: toSeed(seed), key });
   return Array.from({ length: Math.ceil(bars / 2) }, (_, i) => {
-    const { ctx, drumLayers, bass } = ensemble.next(live(i));
-    return { ctx, layers: drumLayers, events: ctx.drums.hits, bass };
+    const { ctx, drumLayers, sub } = ensemble.next(live(i));
+    return { ctx, layers: drumLayers, events: ctx.drums.hits, sub };
   });
 }
 
@@ -60,3 +61,14 @@ export const PARAM_SETS: readonly LiveParams[] = [
   liveParams(1, 1, 1, 1, 1),
   liveParams(1, 0.5, 1, 0.5, 0.5),
 ];
+
+/** Position, length and scale steps above the chord root of each note: what repeat units must share. */
+export function relativeShape(ctx: ContextWithDrums, events: readonly PitchedEvent[]): unknown[] {
+  const root = rootDegree(chordOf(ctx));
+  const steps = (pitch: number) => (((degreeOf(ctx.key, pitch) ?? NaN) - root) % 7 + 7) % 7;
+  return events.map((e) => [
+    e.step,
+    e.length,
+    'pitch' in e ? steps(e.pitch) : e.voicing.map(steps),
+  ]);
+}

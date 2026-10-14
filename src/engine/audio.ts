@@ -20,7 +20,7 @@ const LOOK_AHEAD_SECONDS = 0.25;
 
 export interface Instruments {
   drum(part: Part, time: number, velocity: Velocity): void;
-  bass(pitch: Pitch, time: number, seconds: number, velocity: Velocity): void;
+  sub(pitch: Pitch, time: number, seconds: number, velocity: Velocity): void;
   /** Lets scheduled notes through from the given time on. */
   open(time: number): void;
   /** Cuts every note, including those already scheduled ahead of time. */
@@ -57,7 +57,7 @@ export async function loadInstruments(drumSamplesUrl: string): Promise<Instrumen
     drum(part, time, velocity) {
       samplers[part].triggerAttack(ROOT_NOTE, time, velocity);
     },
-    bass(pitch, time, seconds, velocity) {
+    sub(pitch, time, seconds, velocity) {
       const frequency = Tone.Frequency(pitch, 'midi').toFrequency();
       bass.triggerAttackRelease(frequency, Math.max(LEGATO_GAP_SECONDS, seconds - LEGATO_GAP_SECONDS), time, velocity);
     },
