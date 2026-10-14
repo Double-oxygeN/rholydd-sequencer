@@ -3,6 +3,7 @@ import { createConductor, type LiveParams } from '../structure/conductor.ts';
 import type { Key } from '../structure/key.ts';
 import { arrange } from './arrange.ts';
 import { createDrumGenerator, drumOutcome, type PairLayers } from './drums/index.ts';
+import { fxEvents, type FxEvent } from './fx/index.ts';
 import { createPadGenerator } from './pad/index.ts';
 import { createReeseGenerator, type ReeseLine } from './reese/index.ts';
 import { createStabGenerator, type StabLine } from './stab/index.ts';
@@ -24,6 +25,7 @@ export interface EnsemblePair {
   readonly pad: PadChord;
   /** What is heard: the parts the scene plays, with the silent beat before a drop left empty. */
   readonly events: readonly NoteEvent[];
+  readonly fx: readonly FxEvent[];
 }
 
 export interface Ensemble {
@@ -55,12 +57,8 @@ export function createEnsemble({ seed, key }: SessionSettings): Ensemble {
         stab: stab.generate(ctx),
         pad: pad.generate(ctx),
       };
-      return {
-        ctx,
-        drumLayers,
-        ...pair,
-        events: arrange(ctx, { sub: pair.sub.notes, reese: pair.reese.notes, stab: pair.stab.hits, pad: pair.pad }),
-      };
+      const events = arrange(ctx, { sub: pair.sub.notes, reese: pair.reese.notes, stab: pair.stab.hits, pad: pair.pad });
+      return { ctx, drumLayers, ...pair, events, fx: fxEvents(ctx, events) };
     },
   };
 }
