@@ -1,4 +1,4 @@
-import { GAP_START, changesScene, leadsIntoDrop, plays } from '../structure/arrangement.ts';
+import { GAP_START, changesScene, leadsIntoDrop, plays, playsHit } from '../structure/arrangement.ts';
 import type { PadChord, ContextWithDrums, DrumHit, NoteEvent, PitchedEvent, StepLength } from './types.ts';
 
 /** Every pitched part as generated for the 2 bars, before the scene decides what is heard. */
@@ -18,7 +18,7 @@ export function arrange(ctx: ContextWithDrums, parts: PitchedParts): readonly No
   // The breakdown's last fill brings the snare back early to announce the drums.
   const announcesDrums = role.scene === 'breakdown' && changesScene(ctx);
   const drums = ctx.drums.hits.filter(
-    (hit) => plays(role, hit.part) || (announcesDrums && hit.part === 'snare' && hit.layer === 'fill'),
+    (hit) => playsHit(role, hit) || (announcesDrums && hit.part === 'snare' && hit.layer === 'fill'),
   );
   const pitched = [...parts.sub, ...parts.reese, ...parts.stab, parts.pad].filter((event) => plays(role, event.instrument));
   if (!leadsIntoDrop(ctx)) return [...drums, ...pitched];

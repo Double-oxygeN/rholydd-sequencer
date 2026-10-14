@@ -18,6 +18,7 @@ import {
   BARS_PER_SECTION,
   cycleSections,
   plays,
+  playsHit,
   refreshesReference,
   type CycleLayout,
   type Scene,
@@ -235,9 +236,9 @@ export function simulate({ bars, seed, live, key = DEFAULT_KEY }: SimulationOpti
     for (const event of events) {
       if (event.instrument === 'drums') sceneDrums[scene]++;
       else sceneNotes[scene][event.instrument]++;
-      const voice = event.instrument === 'drums' ? event.part : event.instrument;
+      const allowed = event.instrument === 'drums' ? playsHit(ctx.sceneRole, event) : plays(ctx.sceneRole, event.instrument);
       const announcesDrums = event.instrument === 'drums' && event.part === 'snare' && event.layer === 'fill';
-      if (!plays(ctx.sceneRole, voice) && !(scene === 'breakdown' && announcesDrums)) misplaced++;
+      if (!allowed && !(scene === 'breakdown' && announcesDrums)) misplaced++;
     }
     for (const event of fx) fxCounts[event.fx]++;
     if (ctx.isSectionStart && (ctx.sectionRole.isPhraseStart || ctx.sectionRole.relation === 'transition')) {

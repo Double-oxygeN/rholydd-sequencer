@@ -25,12 +25,9 @@ export type LeadPosition = { readonly sections: 2; readonly index: 0 | 1 } | { r
 export type BuildPosition = { readonly sections: 1; readonly index: 0 } | { readonly sections: 2; readonly index: 0 | 1 };
 export type DropPosition = { readonly phrases: 1; readonly phrase: 0 } | { readonly phrases: 2; readonly phrase: 0 | 1 };
 
-/** The intro after a drop keeps the drums and the sub going, unlike the one that starts playback. */
-export type IntroEntry = 'start' | 'return';
-
 /** Positions pair with lengths so that no position can lie past the end of its scene. */
 export type SceneRole =
-  | ({ readonly scene: 'intro'; readonly entry: IntroEntry } & LeadPosition)
+  | ({ readonly scene: 'intro' } & LeadPosition)
   /** Always followed by a drop. */
   | ({ readonly scene: 'build' } & BuildPosition)
   | ({ readonly scene: 'drop'; readonly drop: 'first' | 'second' } & DropPosition)
@@ -62,9 +59,9 @@ export function drawLayout(cycleSeed: Seed): CycleLayout {
 }
 
 /** One role per 8-bar section of the cycle. */
-export function cycleScenes(layout: CycleLayout, entry: IntroEntry): readonly SceneRole[] {
+export function cycleScenes(layout: CycleLayout): readonly SceneRole[] {
   return [
-    ...lead(layout.intro).map((position): SceneRole => ({ scene: 'intro', entry, ...position })),
+    ...lead(layout.intro).map((position): SceneRole => ({ scene: 'intro', ...position })),
     ...build(layout.intro),
     ...drop('first', layout.firstDrop),
     ...lead(layout.breakdown).map((position): SceneRole => ({ scene: 'breakdown', ...position })),
@@ -108,8 +105,6 @@ function drop(which: 'first' | 'second', phrases: DropPhrases): readonly SceneRo
   );
 }
 
-const INTRO_RETURN_CURVE = [0.75, 0.6, 0.5] as const;
-
 /**
  * Energy of an 8-bar section. Builds only rise, topping out at the drop's A so that the drop never starts thinner
  * than the build before it; the tension of a build comes from the riser and the high-pass instead. Drops keep the
@@ -123,8 +118,7 @@ export function sceneEnergy(role: SceneRole, sectionIn32: SectionIn32, depth: Un
 function sceneCurve(role: SceneRole, sectionIn32: SectionIn32): number {
   switch (role.scene) {
     case 'intro':
-      // Steps down from the drop's A, so that leaving a drop for the next cycle never falls off a cliff.
-      return role.entry === 'start' ? 0.5 : INTRO_RETURN_CURVE[role.index];
+      return 0.5;
     case 'build':
       return role.index === role.sections - 1 ? 0.75 : 0.6;
     case 'drop':
@@ -144,10 +138,26 @@ const PLAYS: Readonly<Record<Scene, ReadonlySet<Voice>>> = {
   breakdown: new Set(['hat', 'stab', 'pad']),
 };
 
+/**
+ * The first 8 bars of every intro, after a drop as much as at the start of playback, so that each cycle starts
+ * over like a new track. Thinning by energy barely changed the hit count, so parts and positions are left out.
+ */
+function opensIntro(role: SceneRole): boolean {
+  return role.scene === 'intro' && role.index === 0;
+}
+
+const LEFT_OUT_OF_INTRO_OPENING: ReadonlySet<Voice> = new Set(['ghost', 'sub']);
+
 /** Whether a part sounds in the scene. Every part is still generated; this only decides what is heard. */
 export function plays(role: SceneRole, voice: Voice): boolean {
-  if (role.scene === 'intro' && role.entry === 'start' && role.index === 0 && voice === 'sub') return false;
+  if (opensIntro(role) && LEFT_OUT_OF_INTRO_OPENING.has(voice)) return false;
   return PLAYS[role.scene].has(voice);
+}
+
+/** Whether a drum hit sounds: the opening of the intro also keeps the hat to the 8ths. */
+export function playsHit(role: SceneRole, hit: { readonly part: Voice; readonly step: number }): boolean {
+  if (opensIntro(role) && hit.part === 'hat' && hit.step % 2 === 1) return false;
+  return plays(role, hit.part);
 }
 
 /** Where the silent beat before a drop starts: the last beat of the build. */

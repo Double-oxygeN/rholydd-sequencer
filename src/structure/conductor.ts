@@ -196,7 +196,7 @@ function nextCycle(master: Seed, previous: CycleState | undefined, firstSection:
     index,
     seed,
     layout,
-    scenes: cycleScenes(layout, previous === undefined ? 'start' : 'return'),
+    scenes: cycleScenes(layout),
     firstSection,
     main: cycleMainProgression(previous?.main, seed, m32),
   };

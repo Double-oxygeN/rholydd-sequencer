@@ -48,8 +48,7 @@ export function createPositionView(): PositionView {
       const inPhrase = sectionIn32 * BARS_PER_SECTION + inSection;
       meters[0]!.set(inSection);
       meters[1]!.set(inPhrase);
-      // Only the order of the scenes matters here, which the intro's entry never changes.
-      const scenes = cycleScenes(ctx.layout, 'return');
+      const scenes = cycleScenes(ctx.layout);
       cycle.show(scenes.map((role) => role.scene), ctx.sectionInCycle);
       chord.textContent = chordName(ctx.key, chordOf(ctx));
       scene.textContent = `${sceneName(ctx.sceneRole)}（次のシーンまで ${barsToNextScene(scenes, ctx.sectionInCycle, inSection)} 小節）`;

@@ -5,6 +5,8 @@ import {
   cycleScenes,
   cycleSections,
   drawLayout,
+  plays,
+  playsHit,
   sceneEnergy,
   type CycleLayout,
   type SceneRole,
@@ -16,7 +18,7 @@ const LAYOUT: CycleLayout = { intro: 3, breakdown: 2, firstDrop: 2, secondDrop: 
 
 describe('cycle layout', () => {
   it('lays out intro, build, first drop, breakdown, build and second drop in 8-bar sections', () => {
-    const scenes = cycleScenes(LAYOUT, 'start').map((role) => role.scene);
+    const scenes = cycleScenes(LAYOUT).map((role) => role.scene);
     expect(scenes).toEqual([
       ...['intro', 'intro', 'intro', 'build'],
       ...Array<string>(8).fill('drop'),
@@ -27,8 +29,8 @@ describe('cycle layout', () => {
   });
 
   it('numbers the sections within each scene and the phrases within each drop', () => {
-    const scenes = cycleScenes(LAYOUT, 'return');
-    expect(scenes[0]).toEqual({ scene: 'intro', entry: 'return', sections: 3, index: 0 });
+    const scenes = cycleScenes(LAYOUT);
+    expect(scenes[0]).toEqual({ scene: 'intro', sections: 3, index: 0 });
     expect(scenes[3]).toEqual({ scene: 'build', sections: 1, index: 0 });
     expect(scenes[4]).toEqual({ scene: 'drop', drop: 'first', phrases: 2, phrase: 0 });
     expect(scenes[8]).toEqual({ scene: 'drop', drop: 'first', phrases: 2, phrase: 1 });
@@ -56,12 +58,28 @@ describe('cycle layout', () => {
   });
 
   it('counts the bars to the next scene, treating an extended drop as one scene', () => {
-    const scenes = cycleScenes(LAYOUT, 'start');
+    const scenes = cycleScenes(LAYOUT);
     const at = (section: number, bar: number) => barsToNextScene(scenes, section as SectionInCycle, bar);
     expect(at(0, 0)).toBe(24);
     expect(at(2, 5)).toBe(3);
     expect(at(4, 0)).toBe(64);
     expect(at(19, 7)).toBe(1);
+  });
+});
+
+describe('parts per scene', () => {
+  it('opens every intro on kick, snare and hats on the 8ths alone, with the sub coming in after 8 bars', () => {
+    const [opening, next] = cycleScenes(LAYOUT);
+    const hits = (role: SceneRole, part: 'kick' | 'snare' | 'hat' | 'ghost') =>
+      Array.from({ length: 32 }, (_, step) => step).filter((step) => playsHit(role, { part, step }));
+    expect(hits(opening!, 'kick')).toHaveLength(32);
+    expect(hits(opening!, 'snare')).toHaveLength(32);
+    expect(hits(opening!, 'hat')).toEqual(Array.from({ length: 16 }, (_, i) => i * 2));
+    expect(hits(opening!, 'ghost')).toEqual([]);
+    expect(plays(opening!, 'sub')).toBe(false);
+    expect(hits(next!, 'hat')).toHaveLength(32);
+    expect(hits(next!, 'ghost')).toHaveLength(32);
+    expect(plays(next!, 'sub')).toBe(true);
   });
 });
 
@@ -76,13 +94,11 @@ describe('scene energy', () => {
     expect(energy({ scene: 'drop', drop: 'first', phrases: 1, phrase: 0 }, 0)).toBe(0.75);
   });
 
-  it('steps a returning intro down from the drop\'s A, and keeps the opening intro low', () => {
-    const intro = (index: 0 | 1 | 2) => energy({ scene: 'intro', entry: 'return', sections: 3, index });
-    expect([intro(0), intro(1), intro(2)]).toEqual([0.75, 0.6, 0.5]);
-    expect(energy({ scene: 'intro', entry: 'start', sections: 3, index: 0 })).toBe(0.5);
+  it('keeps every intro low', () => {
+    for (const index of [0, 1, 2] as const) expect(energy({ scene: 'intro', sections: 3, index })).toBe(0.5);
   });
 
   it('keeps every scene at full energy when the depth is 0', () => {
-    for (const role of cycleScenes(LAYOUT, 'return')) expect(sceneEnergy(role, 2, clampUnit(0))).toBe(1);
+    for (const role of cycleScenes(LAYOUT)) expect(sceneEnergy(role, 2, clampUnit(0))).toBe(1);
   });
 });

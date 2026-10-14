@@ -62,15 +62,22 @@ describe('phase 3 acceptance: parts per scene', () => {
     }
   });
 
-  it('leaves out the sub only for the first 8 bars of the intro that starts playback', () => {
+  it('opens every intro without the sub and ghosts and with the hat on the 8ths, for 8 bars only', () => {
+    let openings = 0;
     for (const { pairs } of runs) {
       for (const { ctx, heard, sub } of pairs) {
-        const heardSub = heard.some((event) => event.instrument === 'sub');
-        if (ctx.sceneRole.scene !== 'intro' || sub.notes.length === 0) continue;
-        const opening = ctx.sceneRole.entry === 'start' && ctx.sceneRole.index === 0;
-        expect(heardSub).toBe(!opening);
+        if (ctx.sceneRole.scene !== 'intro') continue;
+        const opening = ctx.sceneRole.index === 0;
+        if (opening) openings++;
+        if (sub.notes.length > 0) expect(heard.some((event) => event.instrument === 'sub')).toBe(!opening);
+        const drums = heard.filter((event) => event.instrument === 'drums');
+        if (!opening) continue;
+        expect(drums.filter((hit) => hit.part === 'ghost')).toEqual([]);
+        expect(drums.filter((hit) => hit.part === 'hat' && hit.step % 2 === 1)).toEqual([]);
       }
     }
+    // Every cycle opens this way, not just the first.
+    expect(openings).toBeGreaterThan(runs.length * 4 * 2);
   });
 
   it('empties the last beat before every drop, whatever the fill intensity', () => {
@@ -238,7 +245,7 @@ describe('phase 3 acceptance: cycles and scenes', () => {
       const cycles = cyclesOf(pairs);
       cycles.forEach((cycle, n) => {
         const { layout } = cycle[0]!.ctx;
-        const expected = cycleScenes(layout, n === 0 ? 'start' : 'return');
+        const expected = cycleScenes(layout);
         const sections = cycle.filter(({ ctx }) => ctx.isSectionStart);
         expect(sections.map(({ ctx }) => ctx.sceneRole)).toEqual(expected.slice(0, sections.length));
         expect([128, 160, 192]).toContain(cycleSections(layout) * 8);
@@ -277,7 +284,7 @@ describe('phase 3 acceptance: cycles and scenes', () => {
 });
 
 describe('phase 3 acceptance: energy by scene', () => {
-  it('raises builds up to the drop\'s A, steps returning intros down, and flattens everything at depth 0', () => {
+  it('raises builds up to the drop\'s A, keeps intros low, and flattens everything at depth 0', () => {
     for (const seed of SEEDS) {
       for (const depth of [0, 0.5, 1]) {
         const pairs = run(seed, BARS, () => liveParams(0.3, 0.35, 0.3, 0.6, depth));
@@ -285,12 +292,10 @@ describe('phase 3 acceptance: energy by scene', () => {
         for (let i = 1; i < pairs.length; i++) {
           const [before, now] = [pairs[i - 1]!.ctx, pairs[i]!.ctx];
           if (depth === 0) expect(now.energy).toBe(1);
+          if (now.sceneRole.scene === 'intro') expect(now.energy).toBe(1 - depth * 0.5);
           if (now.sceneRole.scene === 'build') expect(now.energy).toBeLessThanOrEqual(dropA);
           if (!now.isSectionStart || before.sceneRole.scene !== now.sceneRole.scene) continue;
           if (now.sceneRole.scene === 'build') expect(now.energy).toBeGreaterThanOrEqual(before.energy);
-          if (now.sceneRole.scene === 'intro' && now.sceneRole.entry === 'return') {
-            expect(now.energy).toBeLessThanOrEqual(before.energy);
-          }
         }
       }
     }
