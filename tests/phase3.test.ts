@@ -2,8 +2,21 @@ import { describe, expect, it } from 'vitest';
 import { DROP_LEAD_FILL_KINDS } from '../src/generators/drums/fill.ts';
 import type { FxEvent } from '../src/generators/fx/index.ts';
 import type { NoteEvent } from '../src/generators/types.ts';
-import { GAP_START, changesScene, leadsIntoDrop, plays } from '../src/structure/arrangement.ts';
-import { PARAM_SETS, SEEDS, liveParams, run, type GeneratedPair } from './helpers.ts';
+import { patternsEqual } from '../src/generators/drums/pattern.ts';
+import { createEnsemble } from '../src/generators/ensemble.ts';
+import { toSeed } from '../src/random/rng.ts';
+import {
+  GAP_START,
+  changesScene,
+  cycleScenes,
+  cycleSections,
+  leadsIntoDrop,
+  plays,
+  sceneEnergy,
+} from '../src/structure/arrangement.ts';
+import { DEFAULT_KEY } from '../src/structure/key.ts';
+import { clampUnit } from '../src/units.ts';
+import { DEFAULT_LIVE, PARAM_SETS, SEEDS, liveParams, run, type GeneratedPair } from './helpers.ts';
 
 // Automated acceptance criteria from docs/specs/phase3/requirements.md.
 
@@ -185,5 +198,161 @@ describe('phase 3 acceptance: effects', () => {
     for (const seed of [42, 0xdeadbeef]) {
       expect(run(seed, 4096).map((pair) => pair.fx)).toEqual(run(seed, 4096).map((pair) => pair.fx));
     }
+  });
+});
+
+/** The 2-bar units of each cycle, in order. */
+function cyclesOf(pairs: readonly GeneratedPair[]): GeneratedPair[][] {
+  const cycles: GeneratedPair[][] = [];
+  for (const pair of pairs) {
+    if (pair.ctx.sectionInCycle === 0 && pair.ctx.isSectionStart) cycles.push([]);
+    cycles.at(-1)!.push(pair);
+  }
+  return cycles;
+}
+
+describe('phase 3 acceptance: cycles and scenes', () => {
+  it('runs every cycle for 128, 160 or 192 bars through the scenes its layout lays out', () => {
+    for (const { pairs } of runs) {
+      const cycles = cyclesOf(pairs);
+      cycles.forEach((cycle, n) => {
+        const { layout } = cycle[0]!.ctx;
+        const expected = cycleScenes(layout, n === 0 ? 'start' : 'return');
+        const sections = cycle.filter(({ ctx }) => ctx.isSectionStart);
+        expect(sections.map(({ ctx }) => ctx.sceneRole)).toEqual(expected.slice(0, sections.length));
+        expect([128, 160, 192]).toContain(cycleSections(layout) * 8);
+        if (n < cycles.length - 1) expect(cycle.length * 2).toBe(cycleSections(layout) * 8);
+        expect(cycle[0]!.ctx.sectionRole.isPhraseStart).toBe(true);
+      });
+    }
+  });
+
+  it('starts every drop on a 32-bar boundary right after a build', () => {
+    for (const { pairs } of runs) {
+      for (let i = 1; i < pairs.length; i++) {
+        const [before, now] = [pairs[i - 1]!.ctx, pairs[i]!.ctx];
+        if (now.sceneRole.scene === 'drop' && before.sceneRole.scene !== 'drop') {
+          expect(now.sectionRole.isPhraseStart && now.isSectionStart).toBe(true);
+          expect(before.sceneRole.scene).toBe('build');
+        }
+        if (before.sceneRole.scene === 'build' && now.sceneRole.scene !== 'build') expect(now.sceneRole.scene).toBe('drop');
+      }
+    }
+  });
+
+  it('draws every intro and breakdown length and every drop extension over long runs', () => {
+    const seen = new Set<string>();
+    for (const seed of SEEDS) {
+      for (const { ctx } of run(seed, 8192)) {
+        const { intro, breakdown, firstDrop, secondDrop } = ctx.layout;
+        seen.add(`lead ${intro}/${breakdown}`);
+        seen.add(`drop ${firstDrop}/${secondDrop}`);
+      }
+    }
+    expect([...seen].sort()).toEqual(
+      ['lead 2/2', 'lead 2/3', 'lead 3/2', 'lead 3/3', 'drop 1/1', 'drop 1/2', 'drop 2/1', 'drop 2/2'].sort(),
+    );
+  });
+});
+
+describe('phase 3 acceptance: energy by scene', () => {
+  it('raises builds up to the drop\'s A, steps returning intros down, and flattens everything at depth 0', () => {
+    for (const seed of SEEDS) {
+      for (const depth of [0, 0.5, 1]) {
+        const pairs = run(seed, BARS, () => liveParams(0.3, 0.35, 0.3, 0.6, depth));
+        const dropA = sceneEnergy({ scene: 'drop', drop: 'first', phrases: 1, phrase: 0 }, 0, clampUnit(depth));
+        for (let i = 1; i < pairs.length; i++) {
+          const [before, now] = [pairs[i - 1]!.ctx, pairs[i]!.ctx];
+          if (depth === 0) expect(now.energy).toBe(1);
+          if (now.sceneRole.scene === 'build') expect(now.energy).toBeLessThanOrEqual(dropA);
+          if (!now.isSectionStart || before.sceneRole.scene !== now.sceneRole.scene) continue;
+          if (now.sceneRole.scene === 'build') expect(now.energy).toBeGreaterThanOrEqual(before.energy);
+          if (now.sceneRole.scene === 'intro' && now.sceneRole.entry === 'return') {
+            expect(now.energy).toBeLessThanOrEqual(before.energy);
+          }
+        }
+      }
+    }
+  });
+});
+
+describe('phase 3 acceptance: a theme per cycle', () => {
+  it('changes the main progression only at the start of a cycle, and never when m32 is 0', () => {
+    for (const { params, pairs } of runs) {
+      const mains = pairs.filter(({ ctx }) => ctx.sectionRole.relation !== 'transition');
+      let changes = 0;
+      for (let i = 1; i < mains.length; i++) {
+        if (mains[i]!.ctx.progression === mains[i - 1]!.ctx.progression) continue;
+        changes++;
+        expect(mains[i]!.ctx.sectionInCycle === 0 && mains[i]!.ctx.isSectionStart).toBe(true);
+      }
+      if (params.m32 === 0) expect(changes).toBe(0);
+    }
+  });
+
+  it('brings back the same progression, reese, stabs and pad in A, A\' and A\'\' of every drop of a cycle', () => {
+    let compared = 0;
+    for (const { pairs } of runs) {
+      for (const cycle of cyclesOf(pairs)) {
+        const drops = cycle.filter(({ ctx }) => ctx.sceneRole.scene === 'drop');
+        const byPlace = new Map<string, GeneratedPair[]>();
+        for (const pair of drops) {
+          const { ctx } = pair;
+          // B changes with every phrase, and the big fill's length cuts the parts at a different step each time.
+          if (ctx.sectionRole.relation === 'transition' || (ctx.isSectionEnd && ctx.sectionRole.isPhraseEnd)) continue;
+          const place = `${ctx.sectionRole.sectionIn32}:${ctx.pairIn8}`;
+          byPlace.set(place, [...(byPlace.get(place) ?? []), pair]);
+        }
+        for (const same of byPlace.values()) {
+          for (const pair of same.slice(1)) {
+            compared++;
+            expect(pair.ctx.progression).toBe(same[0]!.ctx.progression);
+            expect(pair.reese).toEqual(same[0]!.reese);
+            expect(pair.stab).toEqual(same[0]!.stab);
+            expect(pair.pad).toEqual(same[0]!.pad);
+          }
+        }
+      }
+    }
+    expect(compared).toBeGreaterThan(1000);
+  });
+
+  it('gives section B pitched styles that differ from the cycle\'s A', () => {
+    for (const { pairs } of runs) {
+      for (const cycle of cyclesOf(pairs)) {
+        const a = cycle[0]!;
+        for (const b of cycle.filter(({ ctx }) => ctx.sectionRole.relation === 'transition')) {
+          expect(b.sub.style).not.toBe(a.sub.style);
+          expect(b.reese.style).not.toBe(a.reese.style);
+          expect(b.stab.style).not.toBe(a.stab.style);
+        }
+      }
+    }
+  });
+
+  it('gives the drums a new groove only at the start of a cycle and of every drop phrase but the first', () => {
+    for (const { params, pairs } of runs) {
+      let changes = 0;
+      for (let i = 1; i < pairs.length; i++) {
+        if (patternsEqual(pairs[i - 1]!.layers.reference, pairs[i]!.layers.reference)) continue;
+        changes++;
+        const { ctx } = pairs[i]!;
+        expect(ctx.isSectionStart && ctx.sectionRole.isPhraseStart).toBe(true);
+        const role = ctx.sceneRole;
+        expect(role.scene === 'intro' || (role.scene === 'drop' && !(role.drop === 'first' && role.phrase === 0))).toBe(true);
+      }
+      if (params.m32 === 0) expect(changes).toBe(0);
+      if (params.m32 >= 0.5) expect(changes).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe('phase 3 acceptance: performance', () => {
+  it('generates 2 bars, arrangement and effects included, in 5 ms or less on average', () => {
+    const ensemble = createEnsemble({ seed: toSeed(42), key: DEFAULT_KEY });
+    const pairs = 4096;
+    const start = performance.now();
+    for (let i = 0; i < pairs; i++) ensemble.next(DEFAULT_LIVE);
+    expect((performance.now() - start) / pairs).toBeLessThan(5);
   });
 });
