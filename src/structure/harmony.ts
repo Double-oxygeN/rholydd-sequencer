@@ -18,8 +18,11 @@ export type OffTonicChord = Chord & { readonly root: Exclude<ChordRoot, 0> };
 
 /** One chord per 2 bars of an 8-bar section. Sections A, A' and A'' play it. */
 export type MainProgression = readonly [TonicChord, Chord, Chord, Chord];
-/** Section B plays it. Starting away from i moves the centre the way B moved the bass in phase 1. */
-export type TransitionProgression = readonly [OffTonicChord, Chord, Chord, Chord];
+/**
+ * Section B plays it. Starting away from i moves the centre the way B moved the bass in phase 1. Ending away
+ * from i keeps the return to i in A'' fresh: ending on i ran into it and held i for up to 8 bars.
+ */
+export type TransitionProgression = readonly [OffTonicChord, Chord, Chord, OffTonicChord];
 export type Progression = MainProgression | TransitionProgression;
 
 const i = { root: 0 } as const;
@@ -39,7 +42,7 @@ export const MAIN_PROGRESSIONS: readonly MainProgression[] = [
 ];
 
 export const TRANSITION_PROGRESSIONS: readonly TransitionProgression[] = [
-  [VI, VII, i, i],
+  [VI, VII, i, VII],
   [iv, v, VI, VII],
   [VI, III, VII, VII],
   [iv, VI, VII, VII],

@@ -35,9 +35,12 @@ describe('harmony', () => {
     expect(chordName(parseKey('B')!, { root: 4 })).toBe('F♯m7');
   });
 
-  it('starts every main progression on i and no transition progression on i', () => {
+  it('starts every main progression on i, and no transition progression on i nor ends one on i', () => {
     for (const p of MAIN_PROGRESSIONS) expect(p[0].root).toBe(0);
-    for (const p of TRANSITION_PROGRESSIONS) expect(p[0].root).not.toBe(0);
+    for (const p of TRANSITION_PROGRESSIONS) {
+      expect(p[0].root).not.toBe(0);
+      expect(p[3].root).not.toBe(0);
+    }
   });
 
   it('picks every progression, and changes the main one always at m32 = 1 and never at m32 = 0', () => {
@@ -87,6 +90,17 @@ describe('phase 2 acceptance: chord progression', () => {
         }
         if (params.m32 === 0) expect(changes).toBe(0);
         if (params.m32 >= 0.5) expect(changes).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  // Section B ending on i ran into the i of A'' (and into i – i of some main progressions), holding i for 8 bars.
+  it('never holds one chord for more than 4 bars, across section boundaries too', () => {
+    for (const pairs of runs) {
+      let run = 1;
+      for (let i = 1; i < pairs.length; i++) {
+        run = chordOf(pairs[i]!.ctx).root === chordOf(pairs[i - 1]!.ctx).root ? run + 1 : 1;
+        expect(run).toBeLessThanOrEqual(2);
       }
     }
   });

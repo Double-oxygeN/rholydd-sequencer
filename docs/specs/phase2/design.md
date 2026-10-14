@@ -42,7 +42,7 @@ tools/simulate ──▶ generators/ensemble          （Tone.js に依存しな
 | `ChordRoot` | `0 \| 2 \| 3 \| 4 \| 5 \| 6` | ii（1）を除く音階上の位置 |
 | `Chord` | `{ root: ChordRoot }` | 構成音はルートから音階上で 0, 2, 4, 6 番目 |
 | `MainProgression` | `readonly [Chord & { root: 0 }, Chord, Chord, Chord]` | i で始まる |
-| `TransitionProgression` | `readonly [Chord & { root: Exclude<ChordRoot, 0> }, Chord, Chord, Chord]` | i で始まらない |
+| `TransitionProgression` | `readonly [Chord & { root: Exclude<ChordRoot, 0> }, Chord, Chord, Chord & { root: Exclude<ChordRoot, 0> }]` | i で始まらず、i で終わらない |
 | `Pitch` | number | MIDI ノート番号の整数。音域はパートごとに `PitchRange` で決める |
 | `Voicing` | `readonly Pitch[]` | 低い順。空でない |
 | `Decibels` | number | −40〜+6 の整数（ミキサーの音量） |
@@ -204,6 +204,7 @@ PolySynth は、予約した音のボイスを lookAhead（0.25秒）だけ早�
 | リバーブ | 長さ 2.5 秒、プリディレイ 20 ms |
 | ダッキングのパートの比 | サブベース 1.0、リースベース 0.7、パッド 0.5 |
 | ダッキングのアタック | 3 ms |
+| ダッキングの戻り時間の既定値 | 200 ms |
 
 ### ミキサーの既定値
 
@@ -251,6 +252,7 @@ PolySynth は、予約した音のボイスを lookAhead（0.25秒）だけ早�
 | --- | --- |
 | MVP・フェーズ1の基準 | 既存のテストを維持し、反復の一致だけをフェーズ2の形に書き換える |
 | 進行の表と A 系の一致 | 8bar ごとの `progression` を表と比較し、32bar 内の A・A'・A'' を比較 |
+| 同じコードが4bar を超えない | 連続する2bar のコードのルートが3回以上続かないことを確認 |
 | 主進行が32bar 境界でだけ替わる | 連続する2bar の主進行を比較。`m32 = 0` で全32bar の主進行が一致 |
 | コードトーンと音域 | 全パートのノートの音度をコードの構成音と比較 |
 | キーの移調 | 2つのキーで、ドラムと進行の一致、各パートの音高差が12で割った余りで一定 |
