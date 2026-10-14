@@ -7,8 +7,9 @@ import {
   MAIN_PROGRESSIONS,
   TRANSITION_PROGRESSIONS,
   chordName,
+  cycleMainProgression,
   isChordTone,
-  phraseProgressions,
+  phraseTransitionProgression,
   type Progression,
 } from '../src/structure/harmony.ts';
 import { ALL_KEYS, DEFAULT_KEY, degreeOf, parseKey } from '../src/structure/key.ts';
@@ -47,11 +48,11 @@ describe('harmony', () => {
     const mains = new Set<Progression>();
     const transitions = new Set<Progression>();
     for (let n = 0; n < 500; n++) {
-      const first = phraseProgressions(undefined, hash(n), clampUnit(0));
-      mains.add(first.main);
-      transitions.add(first.transition);
-      expect(phraseProgressions(first.main, hash(n, 1), clampUnit(0)).main).toBe(first.main);
-      expect(phraseProgressions(first.main, hash(n, 1), clampUnit(1)).main).not.toBe(first.main);
+      const first = cycleMainProgression(undefined, hash(n), clampUnit(0));
+      mains.add(first);
+      transitions.add(phraseTransitionProgression(hash(n)));
+      expect(cycleMainProgression(first, hash(n, 1), clampUnit(0))).toBe(first);
+      expect(cycleMainProgression(first, hash(n, 1), clampUnit(1))).not.toBe(first);
     }
     expect(mains.size).toBe(MAIN_PROGRESSIONS.length);
     expect(transitions.size).toBe(TRANSITION_PROGRESSIONS.length);

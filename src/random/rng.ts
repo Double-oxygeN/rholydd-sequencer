@@ -45,6 +45,8 @@ export const TAG = {
   reesePitch: 16,
   stabStyle: 17,
   stabRhythm: 18,
+  cycle: 19,
+  layout: 20,
 } as const;
 export const REL = { repeat: 1, variant: 2 } as const;
 

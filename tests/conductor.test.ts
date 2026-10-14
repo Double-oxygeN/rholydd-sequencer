@@ -38,6 +38,7 @@ describe('conductor', () => {
       const phrase = hash(master, TAG.phrase, Math.floor(pair / 16));
       const section = hash(phrase, TAG.section, Math.floor(pair / 4) % 4);
       expect(ctx.seeds).toEqual({
+        cycle: hash(master, TAG.cycle, ctx.cycle),
         phrase,
         section,
         ornament: hash(section, TAG.ornament, REL[ctx.relation]),
@@ -82,8 +83,11 @@ describe('conductor', () => {
 
 /** Every seed the generators derive from one context, listed per use. */
 function derivedSeeds(ctx: Context): number[] {
-  const { phrase, section, ornament, fill } = ctx.seeds;
+  const { cycle, phrase, section, ornament, fill } = ctx.seeds;
   return [
+    cycle,
+    hash(cycle, TAG.layout),
+    hash(cycle, TAG.progression),
     phrase,
     section,
     ornament,

@@ -71,35 +71,36 @@ export function chordName(key: Key, chord: Chord): string {
   return `${noteNameIn(key, pitchClassOf(key, rootDegree(chord)))}${SUFFIX[chord.root]}`;
 }
 
-export interface PhraseProgressions {
-  readonly main: MainProgression;
-  readonly transition: TransitionProgression;
-}
+const pick = <T>(list: readonly T[], roll: number): T => list[Math.floor(roll * list.length)] ?? list[0]!;
 
 /**
- * Progressions of a 32-bar phrase. The main one carries over from the previous phrase unless a draw under m32
- * replaces it, so that one knob sets how much each phrase changes, as it does for the drum reference.
+ * Main progression of a cycle. It carries over from the previous cycle unless a draw under m32 replaces it, so
+ * that one knob sets how much each cycle changes, as it does for the drum reference.
  */
-export function phraseProgressions(
+export function cycleMainProgression(
   previousMain: MainProgression | undefined,
-  phraseSeed: Seed,
+  cycleSeed: Seed,
   m32: UnitInterval,
-): PhraseProgressions {
-  const rng = createRng(hash(phraseSeed, TAG.progression));
+): MainProgression {
+  const rng = createRng(hash(cycleSeed, TAG.progression));
   const changeRoll = rng.float();
   const mainRoll = rng.float();
-  const transitionRoll = rng.float();
-  const pick = <T>(list: readonly T[], roll: number): T => list[Math.floor(roll * list.length)] ?? list[0]!;
-  const main =
-    previousMain === undefined
-      ? pick(MAIN_PROGRESSIONS, mainRoll)
-      : changeRoll < m32
-        ? pick(
-            MAIN_PROGRESSIONS.filter((p) => p !== previousMain),
-            mainRoll,
-          )
-        : previousMain;
-  return { main, transition: pick(TRANSITION_PROGRESSIONS, transitionRoll) };
+  if (previousMain === undefined) return pick(MAIN_PROGRESSIONS, mainRoll);
+  return changeRoll < m32
+    ? pick(
+        MAIN_PROGRESSIONS.filter((p) => p !== previousMain),
+        mainRoll,
+      )
+    : previousMain;
+}
+
+/** Transition progression of a 32-bar phrase, chosen afresh for every B. */
+export function phraseTransitionProgression(phraseSeed: Seed): TransitionProgression {
+  const rng = createRng(hash(phraseSeed, TAG.progression));
+  // The main progression used to come from the first two draws; skipping them keeps the transitions of phase 2.
+  rng.float();
+  rng.float();
+  return pick(TRANSITION_PROGRESSIONS, rng.float());
 }
 
 const ROMAN: Readonly<Record<ChordRoot, string>> = { 0: 'i', 2: 'III', 3: 'iv', 4: 'v', 5: 'VI', 6: 'VII' };

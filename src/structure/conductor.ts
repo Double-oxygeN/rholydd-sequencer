@@ -1,11 +1,21 @@
 import { REL, TAG, hash, type Seed } from '../random/rng.ts';
 import type { Brand, UnitInterval } from '../units.ts';
-import { sectionEnergy } from './energy.ts';
 import {
-  phraseProgressions,
+  cycleScenes,
+  cycleSections,
+  drawLayout,
+  sceneEnergy,
+  type CycleIndex,
+  type CycleLayout,
+  type Scene,
+  type SceneRole,
+  type SectionInCycle,
+} from './arrangement.ts';
+import {
+  cycleMainProgression,
+  phraseTransitionProgression,
   type Chord,
   type MainProgression,
-  type PhraseProgressions,
   type TransitionProgression,
 } from './harmony.ts';
 import { DEFAULT_KEY, type Key } from './key.ts';
@@ -35,6 +45,8 @@ export type SectionIndex = Brand<number, 'SectionIndex'>;
 export type PhraseIndex = Brand<number, 'PhraseIndex'>;
 
 export interface Seeds {
+  /** Shared by every 32 bars of a cycle: the theme that the drops bring back. */
+  readonly cycle: Seed;
   readonly phrase: Seed;
   readonly section: Seed;
   readonly ornament: Seed;
@@ -79,6 +91,13 @@ export type Context = PairRole &
   readonly energy: UnitInterval;
   /** Fixed for the session. Only transposes pitches and never feeds a seed, so changing it keeps the same piece. */
   readonly key: Key;
+  readonly cycle: CycleIndex;
+  readonly layout: CycleLayout;
+  readonly sectionInCycle: SectionInCycle;
+  readonly sceneRole: SceneRole;
+  // Contexts are made one at a time, so what comes after this section has to travel with it.
+  /** Scene of the next 8 bars. The last section of a cycle is followed by the next cycle's intro. */
+  readonly nextScene: Scene;
   readonly seeds: Seeds;
   readonly params: GenerationParams;
 };
@@ -88,10 +107,21 @@ export function chordOf(ctx: PairRole & SectionHarmony): Chord {
   return ctx.progression[ctx.pairIn8];
 }
 
-function sectionHarmony(role: SectionRole, progressions: PhraseProgressions): SectionHarmony {
+function sectionHarmony(role: SectionRole, main: MainProgression, transition: TransitionProgression): SectionHarmony {
   return role.relation === 'transition'
-    ? { sectionRole: role, progression: progressions.transition }
-    : { sectionRole: role, progression: progressions.main };
+    ? { sectionRole: role, progression: transition }
+    : { sectionRole: role, progression: main };
+}
+
+/** Where the conductor is within the current cycle. Replaced as a whole at every cycle boundary. */
+interface CycleState {
+  readonly index: CycleIndex;
+  readonly seed: Seed;
+  readonly layout: CycleLayout;
+  readonly scenes: readonly SceneRole[];
+  /** Section count from the start of playback at which the cycle starts. */
+  readonly firstSection: number;
+  readonly main: MainProgression;
 }
 
 export interface Conductor {
@@ -104,21 +134,29 @@ export function createConductor(master: Seed, key: Key = DEFAULT_KEY): Conductor
   let sectionParams: SectionParams | undefined;
   let phraseParams: PhraseParams | undefined;
   let energy: UnitInterval | undefined;
-  let progressions: PhraseProgressions | undefined;
+  let cycle: CycleState | undefined;
+  let transition: TransitionProgression | undefined;
   return {
     next(live) {
       const section = Math.floor(pair / PAIRS_PER_SECTION);
       const phrase = Math.floor(section / SECTIONS_PER_PHRASE);
       const role = pairRole((pair % PAIRS_PER_SECTION) as PairIn8, live.fillIntensity);
       const inPhrase = sectionRole((section % SECTIONS_PER_PHRASE) as SectionIn32);
+      const phraseSeed = hash(master, TAG.phrase, phrase);
+      const phraseStarts = role.isSectionStart && inPhrase.isPhraseStart;
+      if (phraseStarts || phraseParams === undefined || transition === undefined) {
+        phraseParams = { m32: live.m32 };
+        transition = phraseTransitionProgression(phraseSeed);
+      }
+      // Cycles always start on a 32-bar boundary, after m32 has been latched for the phrase.
+      if (cycle === undefined || section === cycle.firstSection + cycleSections(cycle.layout)) {
+        cycle = nextCycle(master, cycle, section, phraseParams.m32);
+      }
+      const sectionInCycle = (section - cycle.firstSection) as SectionInCycle;
+      const sceneRole = cycle.scenes[sectionInCycle]!;
       if (role.isSectionStart || sectionParams === undefined || energy === undefined) {
         sectionParams = { m2: live.m2, m8: live.m8 };
-        energy = sectionEnergy(inPhrase.sectionIn32, live.energyDepth);
-      }
-      const phraseSeed = hash(master, TAG.phrase, phrase);
-      if ((role.isSectionStart && inPhrase.isPhraseStart) || phraseParams === undefined || progressions === undefined) {
-        phraseParams = { m32: live.m32 };
-        progressions = phraseProgressions(progressions?.main, phraseSeed, phraseParams.m32);
+        energy = sceneEnergy(sceneRole, inPhrase.sectionIn32, live.energyDepth);
       }
       const sectionSeed = hash(phraseSeed, TAG.section, inPhrase.sectionIn32);
       const ctx: Context = {
@@ -127,10 +165,16 @@ export function createConductor(master: Seed, key: Key = DEFAULT_KEY): Conductor
         pair: pair as PairIndex,
         section: section as SectionIndex,
         phrase: phrase as PhraseIndex,
-        ...sectionHarmony(inPhrase, progressions),
+        ...sectionHarmony(inPhrase, cycle.main, transition),
         energy,
         key,
+        cycle: cycle.index,
+        layout: cycle.layout,
+        sectionInCycle,
+        sceneRole,
+        nextScene: cycle.scenes[sectionInCycle + 1]?.scene ?? 'intro',
         seeds: {
+          cycle: cycle.seed,
           phrase: phraseSeed,
           section: sectionSeed,
           ornament: hash(sectionSeed, TAG.ornament, REL[role.relation]),
@@ -141,5 +185,19 @@ export function createConductor(master: Seed, key: Key = DEFAULT_KEY): Conductor
       pair++;
       return ctx;
     },
+  };
+}
+
+function nextCycle(master: Seed, previous: CycleState | undefined, firstSection: number, m32: UnitInterval): CycleState {
+  const index = (previous === undefined ? 0 : previous.index + 1) as CycleIndex;
+  const seed = hash(master, TAG.cycle, index);
+  const layout = drawLayout(seed);
+  return {
+    index,
+    seed,
+    layout,
+    scenes: cycleScenes(layout, previous === undefined ? 'start' : 'return'),
+    firstSection,
+    main: cycleMainProgression(previous?.main, seed, m32),
   };
 }

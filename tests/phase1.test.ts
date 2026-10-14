@@ -4,9 +4,9 @@ import { mutate } from '../src/generators/drums/mutate.ts';
 import { motifCell, motifsEqual, patternsEqual } from '../src/generators/drums/pattern.ts';
 import { slotOf, slotsOf } from '../src/generators/drums/weights.ts';
 import { PARTS, type Step } from '../src/generators/types.ts';
-import { toSeed } from '../src/random/rng.ts';
+import { sectionEnergy } from '../src/structure/energy.ts';
 import { ALL_KEYS, DEFAULT_KEY, degreeOf } from '../src/structure/key.ts';
-import { simulate } from '../tools/simulate.ts';
+import { clampUnit } from '../src/units.ts';
 import { DEFAULT_LIVE, PARAM_SETS, SEEDS, liveParams, relativeShape, run, type GeneratedPair } from './helpers.ts';
 
 // Automated acceptance criteria from docs/specs/phase1/requirements.md.
@@ -118,13 +118,15 @@ describe('phase 1 acceptance: energy curve', () => {
     }
   });
 
-  it('makes B the sparsest and A\'\' the densest section at full depth', () => {
-    for (const seed of [42, 7]) {
-      const { densityBySection } = simulate({ bars: 4096, seed: toSeed(seed), live: liveParams(0.3, 0.35, 0.7, 0.6, 1) });
-      const total = (s: 0 | 1 | 2 | 3) => PARTS.reduce((sum, part) => sum + densityBySection[s][part], 0);
-      const totals = [total(0), total(1), total(2), total(3)];
-      expect(Math.min(...totals)).toBe(total(2));
-      expect(Math.max(...totals)).toBe(total(3));
+  // Phase 3 gives every scene its own energy; drops keep the phase 1 curve so their 32 bars still rise and fall.
+  it('follows the phase 1 curve within every drop', () => {
+    for (const seed of SEEDS) {
+      for (const depth of [0, 0.5, 1]) {
+        for (const { ctx } of run(seed, BARS, () => liveParams(0.3, 0.35, 0.7, 0.6, depth))) {
+          if (ctx.sceneRole.scene !== 'drop') continue;
+          expect(ctx.energy).toBe(sectionEnergy(ctx.sectionRole.sectionIn32, clampUnit(depth)));
+        }
+      }
     }
   });
 });
