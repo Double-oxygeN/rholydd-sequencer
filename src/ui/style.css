@@ -264,6 +264,14 @@ button.play.playing {
   font-size: 0.85rem;
 }
 
+.mixer-ducking {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
 button.mute {
   width: 2.2em;
   padding: 4px 0;

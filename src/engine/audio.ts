@@ -1,7 +1,8 @@
 import * as Tone from 'tone';
 import { PARTS, type Part, type Pitch, type Velocity, type Voicing } from '../generators/types.ts';
-import { CHANNEL_IDS, isSending, type ChannelId, type MixerSettings } from '../params/mixer.ts';
-import type { UnitInterval } from '../units.ts';
+import { CHANNEL_IDS, isSending, type ChannelId, type DuckingSettings, type MixerSettings } from '../params/mixer.ts';
+import { clampUnit, type UnitInterval } from '../units.ts';
+import { duckPoints, type Dip, type Seconds } from './ducking.ts';
 
 /** Every sample is mapped to one note and played back at its original pitch. */
 const ROOT_NOTE = 'C3';
@@ -24,6 +25,11 @@ const SUB_DRIVE = 0.15;
 const REESE_HIGHPASS_HZ = 120;
 const STAB_LOWPASS_HZ = 3000;
 const PAD_LOWPASS_HZ = 1500;
+
+/** How deep each ducked part dips relative to the ducking depth. The sub clears the most room for the kick. */
+const DUCK_RATIO: Readonly<Record<DuckedPart, number>> = { sub: 1, reese: 0.7, pad: 0.5 };
+type DuckedPart = 'sub' | 'reese' | 'pad';
+const DUCKED_PARTS: readonly DuckedPart[] = ['sub', 'reese', 'pad'];
 
 const REVERB = { decay: 2.5, preDelay: 0.02 } as const;
 const DRUM_BUS = { threshold: -12, ratio: 3, attack: 0.01, release: 0.1 } as const;
@@ -50,6 +56,8 @@ export interface Instruments {
   silence(): void;
   setVolume(volume: UnitInterval): void;
   setMixer(mixer: MixerSettings): void;
+  /** Dips the sub, the reese and the pad on the given kicks, continuing the dips of the previous call. */
+  duck(kicks: readonly Seconds[], ducking: DuckingSettings): void;
 }
 
 export function configureAudioContext(): void {
@@ -75,11 +83,18 @@ export async function loadInstruments(drumSamplesUrl: string, mixer: MixerSettin
       ),
     ]),
   ) as Record<Part, Tone.Sampler>;
+  // Tone.Compressor has no sidechain input, so the kick's dips are scheduled on plain gains instead.
+  const ducks: Record<DuckedPart, Tone.Gain> = {
+    sub: new Tone.Gain(1).connect(strips.sub.input),
+    reese: new Tone.Gain(1).connect(strips.reese.input),
+    pad: new Tone.Gain(1).connect(strips.pad.input),
+  };
+  let carried: Record<DuckedPart, Dip | null> = { sub: null, reese: null, pad: null };
   const inputs: VoiceInputs = {
-    sub: new Tone.Distortion(SUB_DRIVE).connect(strips.sub.input),
-    reese: new Tone.Filter(REESE_HIGHPASS_HZ, 'highpass').connect(strips.reese.input),
+    sub: new Tone.Distortion(SUB_DRIVE).connect(ducks.sub),
+    reese: new Tone.Filter(REESE_HIGHPASS_HZ, 'highpass').connect(ducks.reese),
     stab: new Tone.Filter(STAB_LOWPASS_HZ, 'lowpass').connect(strips.stab.input),
-    pad: new Tone.Filter(PAD_LOWPASS_HZ, 'lowpass').connect(strips.pad.input),
+    pad: new Tone.Filter(PAD_LOWPASS_HZ, 'lowpass').connect(ducks.pad),
   };
   let voices = createVoices(inputs);
   let reverb = createReverb(reverbIn, strips.reverbReturn.input);
@@ -115,6 +130,12 @@ export async function loadInstruments(drumSamplesUrl: string, mixer: MixerSettin
       gate.gain.cancelScheduledValues(now);
       gate.gain.rampTo(0, 0.01, now);
       for (const sampler of Object.values(samplers)) sampler.releaseAll(now);
+      // Dips scheduled ahead for the stopped session must not reach the next one.
+      for (const part of DUCKED_PARTS) {
+        ducks[part].gain.cancelScheduledValues(now);
+        ducks[part].gain.setValueAtTime(1, now);
+      }
+      carried = { sub: null, reese: null, pad: null };
       voices.sub.triggerRelease(now);
       voices.reese.triggerRelease(now);
       voices.stab.releaseAll(now);
@@ -125,6 +146,18 @@ export async function loadInstruments(drumSamplesUrl: string, mixer: MixerSettin
     },
     setMixer(next) {
       for (const id of CHANNEL_IDS) strips[id].apply(next[id]);
+    },
+    duck(kicks, { depth, release }) {
+      for (const part of DUCKED_PARTS) {
+        const shape = { floor: clampUnit(1 - depth * DUCK_RATIO[part]), release: (release / 1000) as Seconds };
+        const plan = duckPoints(kicks, carried[part], shape);
+        const gain = ducks[part].gain;
+        const first = plan.points[0];
+        // Replaces only what the previous call scheduled after this one's first dip starts.
+        if (first !== undefined) gain.cancelScheduledValues(first.time);
+        for (const point of plan.points) gain.linearRampToValueAtTime(point.gain, point.time);
+        carried[part] = plan.last;
+      }
     },
   };
 }

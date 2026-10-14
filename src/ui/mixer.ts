@@ -1,11 +1,14 @@
 import {
   CHANNEL_IDS,
   LEVEL_RANGE,
+  RELEASE_RANGE,
   clampLevel,
+  clampRelease,
   clampPan,
   isSending,
   type ChannelId,
   type Decibels,
+  type DuckingSettings,
   type MixerSettings,
   type Pan,
 } from '../params/mixer.ts';
@@ -35,14 +38,52 @@ export function createMixerView(store: ParamStore): MixerView {
   table.className = 'mixer-table';
   table.append(...['', '音量', 'パン', 'センド', ''].map((text) => cell('mixer-head', text)));
   const renders = CHANNEL_IDS.map((id) => channelRow(store, id, table));
-  element.append(table);
+  const ducking = duckingControls(store);
+  element.append(table, ducking.element);
 
   const render = (mixer: MixerSettings) => {
     for (const r of renders) r(mixer);
   };
-  store.subscribe((params) => render(params.mixer));
+  store.subscribe((params) => {
+    render(params.mixer);
+    ducking.render(params.ducking);
+  });
   render(store.get().mixer);
+  ducking.render(store.get().ducking);
   return { element };
+}
+
+function duckingControls(store: ParamStore) {
+  const update = (patch: Partial<DuckingSettings>) => store.update({ ducking: { ...store.get().ducking, ...patch } });
+  const depth = range(0, 1, 0.01);
+  depth.addEventListener('input', () => update({ depth: clampUnit(Number(depth.value)) }));
+  const depthOut = document.createElement('output');
+  const release = range(RELEASE_RANGE.min, RELEASE_RANGE.max, 5);
+  release.addEventListener('input', () => update({ release: clampRelease(Number(release.value)) }));
+  const releaseOut = document.createElement('output');
+
+  const element = document.createElement('div');
+  element.className = 'mixer-ducking';
+  element.append(field('ダッキング量', row(depth, depthOut)), field('ダッキングの戻り時間', row(release, releaseOut)));
+  return {
+    element,
+    render(settings: DuckingSettings) {
+      depth.value = String(settings.depth);
+      depthOut.textContent = `${Math.round(settings.depth * 100)}%`;
+      release.value = String(settings.release);
+      releaseOut.textContent = `${settings.release} ms`;
+    },
+  };
+}
+
+function field(label: string, control: HTMLElement): HTMLElement {
+  const wrapper = document.createElement('label');
+  wrapper.className = 'field';
+  const title = document.createElement('span');
+  title.className = 'field-label';
+  title.textContent = label;
+  wrapper.append(title, control);
+  return wrapper;
 }
 
 /** Appends one row of controls and returns how to show new settings in it. */
