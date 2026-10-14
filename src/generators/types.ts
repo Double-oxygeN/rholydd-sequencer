@@ -69,6 +69,8 @@ export interface DrumOutcome {
   readonly hits: readonly DrumHit[];
   // Kept apart from the hits because a dropout or a solo leaves no fill hit to locate it by.
   readonly fill: FillSpan | null;
+  /** Kicks of the pattern as if no fill took over, for parts that keep their groove through fills. */
+  readonly kicksWithoutFill: readonly Step[];
 }
 
 /** Context after the drums of the same 2 bars are decided. Only parts that follow the drums take it. */

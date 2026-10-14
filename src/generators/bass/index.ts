@@ -41,9 +41,11 @@ export function bassLine(ctx: ContextWithDrums): BassLine {
   const attackRolls = ALL_STEPS.map(() => rhythm.float());
   const pitchRolls = ALL_STEPS.map(() => ({ degree: pitch.float(), octave: pitch.float() }));
 
-  const { fill } = ctx.drums;
-  const end = fill !== null && fill.kept !== 'kick' ? fill.from : STEPS_PER_PAIR;
-  const kicks = new Set(ctx.drums.hits.filter((hit) => hit.part === 'kick').map((hit) => hit.step));
+  // Only the big fill silences the bass, to mark the phrase boundary. Through 8-bar fills the bass keeps
+  // the groove of the kicks the fill replaced, even when the fill itself drops the kick.
+  const bigFill = ctx.isSectionEnd && ctx.sectionRole.isPhraseEnd ? ctx.drums.fill : null;
+  const end = bigFill?.from ?? STEPS_PER_PAIR;
+  const kicks = new Set(ctx.drums.kicksWithoutFill);
   const starts = ALL_STEPS.filter(
     (step) => step < end && (attackRolls[step] ?? 1) < attackChance(style, step, kicks.has(step)),
   );

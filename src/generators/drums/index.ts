@@ -1,12 +1,12 @@
 import { TAG, hash } from '../../random/rng.ts';
 import type { Context } from '../../structure/conductor.ts';
-import type { DrumHit, DrumOutcome, Generator } from '../types.ts';
+import { ALL_STEPS, type DrumHit, type DrumOutcome, type Generator } from '../types.ts';
 import { initialPattern } from './base.ts';
 import { compose } from './compose.ts';
 import { fill, phraseFill, type Fill } from './fill.ts';
 import { mutate } from './mutate.ts';
 import { ornament } from './ornament.ts';
-import type { Pattern } from './pattern.ts';
+import { cellAt, type Pattern } from './pattern.ts';
 import { thin } from './thin.ts';
 import { transitionPattern } from './transition.ts';
 
@@ -30,6 +30,8 @@ export function drumOutcome(layers: PairLayers): DrumOutcome {
   return {
     hits: compose(layers.base, layers.ornaments, fill),
     fill: fill === null ? null : { from: fill.start, kept: fill.kept },
+    // Ornaments never add kicks, so the base pattern holds every kick that would sound without the fill.
+    kicksWithoutFill: ALL_STEPS.filter((step) => cellAt(layers.base, 'kick', step) !== null),
   };
 }
 

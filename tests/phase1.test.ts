@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { satisfiesConstraints } from '../src/generators/drums/constraints.ts';
 import { mutate } from '../src/generators/drums/mutate.ts';
 import { motifCell, motifsEqual, patternsEqual } from '../src/generators/drums/pattern.ts';
-import { slotsOf } from '../src/generators/drums/weights.ts';
-import { PARTS } from '../src/generators/types.ts';
+import { slotOf, slotsOf } from '../src/generators/drums/weights.ts';
+import { PARTS, type Step } from '../src/generators/types.ts';
 import { toSeed } from '../src/random/rng.ts';
 import { ALL_KEYS, DEFAULT_KEY, degreeOf } from '../src/structure/key.ts';
 import { simulate } from '../tools/simulate.ts';
@@ -132,7 +132,7 @@ describe('phase 1 acceptance: energy curve', () => {
 describe('phase 1 acceptance: bass', () => {
   const runs = SEEDS.flatMap((seed) => PARAM_SETS.map((params) => run(seed, BARS, () => params)));
   const cutFrom = ({ ctx }: GeneratedPair) =>
-    ctx.drums.fill !== null && ctx.drums.fill.kept !== 'kick' ? ctx.drums.fill.from : 32;
+    ctx.isSectionEnd && ctx.sectionRole.isPhraseEnd ? (ctx.drums.fill?.from ?? 32) : 32;
 
   it('keeps every note in the natural minor of the key between F1 and E3, starting each 2 bars between F1 and E2', () => {
     for (const key of ALL_KEYS) {
@@ -147,7 +147,7 @@ describe('phase 1 acceptance: bass', () => {
     }
   });
 
-  it('keeps notes inside the 2 bars and out of fills other than the kick solo', () => {
+  it('keeps notes inside the 2 bars and out of the big fill at the end of 32 bars', () => {
     for (const pairs of runs) {
       for (const pair of pairs) {
         for (const note of pair.bass.notes) {
@@ -158,7 +158,7 @@ describe('phase 1 acceptance: bass', () => {
     }
   });
 
-  it('strikes step 0 unless a fill cuts it, and follows the kick exactly in the kick-follow style', () => {
+  it('strikes step 0 unless the big fill cuts it, and follows the kicks without fills in the kick-follow style', () => {
     let kickFollowPairs = 0;
     for (const pairs of runs) {
       for (const pair of pairs) {
@@ -167,11 +167,27 @@ describe('phase 1 acceptance: bass', () => {
         else expect(pair.bass.notes).toEqual([]);
         if (pair.bass.style !== 'kickFollow') continue;
         kickFollowPairs++;
-        const kicks = pair.events.filter((e) => e.part === 'kick' && e.step < cut).map((e) => e.step);
+        const kicks = layersKicks(pair).filter((step) => step < cut);
         expect(pair.bass.notes.map((n) => n.step)).toEqual(kicks);
       }
     }
     expect(kickFollowPairs).toBeGreaterThan(0);
+  });
+
+  it('plays the same bass whether or not an 8-bar fill plays, and keeps playing through it', () => {
+    let notesInFills = 0;
+    for (const seed of SEEDS) {
+      const withFills = run(seed, BARS, () => liveParams(0.3, 0.35, 1));
+      const without = run(seed, BARS, () => liveParams(0.3, 0.35, 0));
+      for (let i = 0; i < withFills.length; i++) {
+        const pair = withFills[i]!;
+        if (pair.ctx.isSectionEnd && pair.ctx.sectionRole.isPhraseEnd) continue;
+        expect(pair.bass).toEqual(without[i]!.bass);
+        const from = pair.ctx.drums.fill?.from ?? 32;
+        notesInFills += pair.bass.notes.filter((n) => n.step + n.length > from).length;
+      }
+    }
+    expect(notesInFills).toBeGreaterThan(0);
   });
 
   it('uses a different style in section B than in A of the same 32 bars', () => {
@@ -210,3 +226,10 @@ describe('phase 1 acceptance: bass', () => {
     }
   });
 });
+
+/** Kick steps of the played base pattern, before any fill takes over. */
+function layersKicks(pair: GeneratedPair): number[] {
+  return Array.from({ length: 32 }, (_, step) => step).filter(
+    (step) => motifCell(pair.layers.base, 'kick', slotOf('kick', step as Step)) !== null,
+  );
+}
