@@ -8,6 +8,18 @@ import { PARAM_SETS, SEEDS, run } from './helpers.ts';
 const BARS = 1024;
 
 describe('phase 1 acceptance: 32-bar form', () => {
+  it('ends every 32 bars with a 16- or 32-step fill unless the fill intensity is 0', () => {
+    for (const seed of SEEDS) {
+      for (const params of PARAM_SETS) {
+        for (const { ctx, layers } of run(seed, BARS, () => params)) {
+          if (!(ctx.isSectionEnd && ctx.sectionRole.isPhraseEnd)) continue;
+          if (params.fillIntensity === 0) expect(layers.fill).toBeNull();
+          else expect([16, 32]).toContain(layers.fill?.length);
+        }
+      }
+    }
+  });
+
   it('changes the reference pattern only at 32-bar boundaries', () => {
     for (const seed of SEEDS) {
       for (const params of PARAM_SETS) {

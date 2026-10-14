@@ -3,7 +3,7 @@ import type { Context } from '../../structure/conductor.ts';
 import type { Generator, NoteEvent } from '../types.ts';
 import { initialPattern } from './base.ts';
 import { compose } from './compose.ts';
-import { fill, type Fill } from './fill.ts';
+import { fill, phraseFill, type Fill } from './fill.ts';
 import { mutate } from './mutate.ts';
 import { ornament } from './ornament.ts';
 import type { Pattern } from './pattern.ts';
@@ -36,7 +36,9 @@ export function createDrumGenerator(): DrumGenerator {
       reference,
       base,
       ornaments: ornament(base, ctx.seeds.ornament, ctx.params.m2),
-      fill: ctx.isSectionEnd ? fill(ctx.seeds.fill, ctx.fillIntensity) : null,
+      fill: ctx.isSectionEnd
+        ? (ctx.sectionRole.isPhraseEnd ? phraseFill : fill)(ctx.seeds.fill, ctx.fillIntensity)
+        : null,
     };
   }
 

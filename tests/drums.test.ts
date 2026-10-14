@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { canonicalPattern, initialPattern } from '../src/generators/drums/base.ts';
 import { satisfiesConstraints } from '../src/generators/drums/constraints.ts';
 import { compose } from '../src/generators/drums/compose.ts';
-import { FILL_KINDS, fill, type FillKind } from '../src/generators/drums/fill.ts';
+import { FILL_KINDS, PHRASE_FILL_KINDS, fill, phraseFill, type FillKind } from '../src/generators/drums/fill.ts';
 import { mutate, mutationCount } from '../src/generators/drums/mutate.ts';
 import { ORNAMENT_PARTS, ornament } from '../src/generators/drums/ornament.ts';
 import { cellAt, motifCell, patternsEqual } from '../src/generators/drums/pattern.ts';
@@ -140,6 +140,54 @@ describe('fill', () => {
     expect([...lengths.keys()].sort((a, b) => a - b)).toEqual([4, 8, 16, 32]);
     expect(lengths.get(16)!).toBeLessThan(lengths.get(8)!);
     expect(lengths.get(32)!).toBeLessThan(lengths.get(16)!);
+  });
+});
+
+describe('phraseFill', () => {
+  it('always plays unless the intensity is 0', () => {
+    for (let i = 0; i < 50; i++) {
+      expect(phraseFill(hash(i), clampUnit(0))).toBeNull();
+      expect(phraseFill(hash(i), clampUnit(0.01))).not.toBeNull();
+    }
+  });
+
+  it('covers the whole 32nd bar or bars 31 and 32, preferring the shorter one', () => {
+    const kinds = new Set<string>();
+    const lengths = new Map<number, number>();
+    for (let i = 0; i < 2000; i++) {
+      const result = phraseFill(hash(i), clampUnit(1))!;
+      kinds.add(result.kind);
+      lengths.set(result.length, (lengths.get(result.length) ?? 0) + 1);
+      expect(result.steps).toEqual(ALL_STEPS.slice(32 - result.length));
+    }
+    expect([...kinds].sort()).toEqual([...PHRASE_FILL_KINDS].sort());
+    expect([...lengths.keys()].sort((a, b) => a - b)).toEqual([16, 32]);
+    expect(lengths.get(32)!).toBeLessThan(lengths.get(16)!);
+  });
+
+  const ofKind = (kind: FillKind) =>
+    Array.from({ length: 400 }, (_, i) => phraseFill(hash(i), clampUnit(1))!).filter((f) => f.kind === kind);
+
+  it('accelerates a snare roll from 8ths to 16ths', () => {
+    for (const result of ofKind('accelRoll')) {
+      const half = result.length / 2;
+      const start = 32 - result.length;
+      expect(result.events.map((e) => e.step - start)).toEqual([
+        ...Array.from({ length: half / 2 }, (_, i) => i * 2),
+        ...Array.from({ length: half }, (_, i) => half + i),
+      ]);
+      expect(result.events.every((e) => e.part === 'snare')).toBe(true);
+    }
+  });
+
+  it('drops out for the first half and rolls the snare for the second', () => {
+    for (const result of ofKind('dropRoll')) {
+      const half = result.length / 2;
+      expect(result.events.map((e) => e.step)).toEqual(ALL_STEPS.slice(32 - half));
+      const velocities = result.events.map((e) => e.velocity);
+      for (let i = 1; i < velocities.length; i++) expect(velocities[i]).toBeGreaterThan(velocities[i - 1]!);
+      expect(velocities.at(-1)).toBeCloseTo(1);
+    }
   });
 });
 
