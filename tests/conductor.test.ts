@@ -88,6 +88,9 @@ function derivedSeeds(ctx: Context): number[] {
     cycle,
     hash(cycle, TAG.layout),
     hash(cycle, TAG.progression),
+    hash(cycle, TAG.subStyle),
+    hash(cycle, TAG.reeseStyle),
+    hash(cycle, TAG.stabStyle),
     phrase,
     section,
     ornament,
@@ -98,7 +101,7 @@ function derivedSeeds(ctx: Context): number[] {
     hash(phrase, TAG.progression),
     hash(phrase, TAG.reeseStyle),
     hash(phrase, TAG.stabStyle),
-    ...[phrase, section].flatMap((seed) =>
+    ...[cycle, section].flatMap((seed) =>
       [REL.repeat, REL.variant].flatMap((rel) =>
         [TAG.subRhythm, TAG.subPitch, TAG.reeseRhythm, TAG.reesePitch, TAG.stabRhythm].map((tag) => hash(seed, tag, rel)),
       ),

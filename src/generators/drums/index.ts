@@ -1,4 +1,5 @@
 import { TAG, hash } from '../../random/rng.ts';
+import { refreshesReference } from '../../structure/arrangement.ts';
 import type { Context } from '../../structure/conductor.ts';
 import { ALL_STEPS, type DrumHit, type DrumOutcome, type Generator } from '../types.ts';
 import { initialPattern } from './base.ts';
@@ -66,7 +67,9 @@ export function createDrumGenerator(): DrumGenerator {
 
 function nextReference(previous: Pattern | undefined, ctx: Context): Pattern {
   if (previous === undefined) return initialPattern(hash(ctx.seeds.phrase, TAG.base));
-  return ctx.sectionRole.isPhraseStart ? mutate(previous, ctx.seeds.phrase, ctx.params.m32, 'strong') : previous;
+  return ctx.sectionRole.isPhraseStart && refreshesReference(ctx.sceneRole)
+    ? mutate(previous, ctx.seeds.phrase, ctx.params.m32, 'strong')
+    : previous;
 }
 
 // Variants and transitions start from the reference every time instead of accumulating,

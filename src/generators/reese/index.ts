@@ -1,4 +1,4 @@
-import { TAG, createRng, hash } from '../../random/rng.ts';
+import { TAG, createRng } from '../../random/rng.ts';
 import { pitchClassOf } from '../../structure/key.ts';
 import { chordRoot, chordTone, legato, motifSeed, playableEnd, styleOf, stylePlan, type ChordToneWeights } from '../line.ts';
 import { foldPitch } from '../pitch.ts';
@@ -25,7 +25,7 @@ export function createReeseGenerator(): ReeseGenerator {
 }
 
 export function reeseLine(ctx: ContextWithDrums): ReeseLine {
-  const style = styleOf(ctx, stylePlan(hash(ctx.seeds.phrase, TAG.reeseStyle), REESE_STYLES));
+  const style = styleOf(ctx, stylePlan(ctx.seeds, TAG.reeseStyle, REESE_STYLES));
   const rhythm = createRng(motifSeed(ctx, TAG.reeseRhythm));
   const pitch = createRng(motifSeed(ctx, TAG.reesePitch));
   const attackRolls = ALL_STEPS.map(() => rhythm.float());
