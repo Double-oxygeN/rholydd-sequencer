@@ -3,7 +3,7 @@ import { createEnsemble } from '../src/generators/ensemble.ts';
 import type { ReeseLine } from '../src/generators/reese/index.ts';
 import type { StabLine } from '../src/generators/stab/index.ts';
 import type { SubLine } from '../src/generators/sub/index.ts';
-import type { ContextWithDrums, DrumHit, PadChord, PitchedEvent } from '../src/generators/types.ts';
+import type { ContextWithDrums, DrumHit, NoteEvent, PadChord, PitchedEvent } from '../src/generators/types.ts';
 import { DEFAULT_LIVE_PARAMS } from '../src/params/store.ts';
 import { toSeed } from '../src/random/rng.ts';
 import { chordOf, type LiveParams } from '../src/structure/conductor.ts';
@@ -38,8 +38,10 @@ export interface GeneratedPair {
   readonly reese: ReeseLine;
   readonly stab: StabLine;
   readonly pad: PadChord;
-  /** Every pitched event: sub, reese, stab and pad. */
+  /** Every pitched event as generated: sub, reese, stab and pad. */
   readonly pitched: readonly PitchedEvent[];
+  /** What is heard after the scene picks its parts. */
+  readonly heard: readonly NoteEvent[];
 }
 
 /** Generates the given number of bars (rounded up to whole 2-bar units) from a fresh ensemble. */
@@ -51,9 +53,9 @@ export function run(
 ): GeneratedPair[] {
   const ensemble = createEnsemble({ seed: toSeed(seed), key });
   return Array.from({ length: Math.ceil(bars / 2) }, (_, i) => {
-    const { ctx, drumLayers, sub, reese, stab, pad } = ensemble.next(live(i));
+    const { ctx, drumLayers, sub, reese, stab, pad, events } = ensemble.next(live(i));
     const pitched = [...sub.notes, ...reese.notes, ...stab.hits, pad];
-    return { ctx, layers: drumLayers, events: ctx.drums.hits, sub, reese, stab, pad, pitched };
+    return { ctx, layers: drumLayers, events: ctx.drums.hits, sub, reese, stab, pad, pitched, heard: events };
   });
 }
 

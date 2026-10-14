@@ -1,4 +1,5 @@
 import * as Tone from 'tone';
+import { heardDrums } from '../generators/arrange.ts';
 import { createEnsemble, type SessionSettings } from '../generators/ensemble.ts';
 import { STEPS_PER_BAR, type NoteEvent, type Step } from '../generators/types.ts';
 import type { Bpm } from '../params/store.ts';
@@ -65,8 +66,10 @@ export function createSequencer(
                 break;
             }
           }
-          // The kicks that actually sound, not the ones a fill replaced: a dropped kick needs no room.
-          const kicks = ctx.drums.hits.filter((hit) => hit.part === 'kick').map((hit) => (time + hit.step * stepSeconds) as Seconds);
+          // The kicks that actually sound, not the ones a fill replaced or the scene left out: a silent kick needs no room.
+          const kicks = heardDrums(events)
+            .filter((hit) => hit.part === 'kick')
+            .map((hit) => (time + hit.step * stepSeconds) as Seconds);
           instruments.duck(kicks, ducking);
           draw.schedule(() => listener.pairStarted(ctx, events), time);
           for (let step = 0; step < STEPS_PER_BAR * 2; step++) {

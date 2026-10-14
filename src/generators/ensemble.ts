@@ -1,6 +1,7 @@
 import type { Seed } from '../random/rng.ts';
 import { createConductor, type LiveParams } from '../structure/conductor.ts';
 import type { Key } from '../structure/key.ts';
+import { arrange } from './arrange.ts';
 import { createDrumGenerator, drumOutcome, type PairLayers } from './drums/index.ts';
 import { createPadGenerator } from './pad/index.ts';
 import { createReeseGenerator, type ReeseLine } from './reese/index.ts';
@@ -21,6 +22,7 @@ export interface EnsemblePair {
   readonly reese: ReeseLine;
   readonly stab: StabLine;
   readonly pad: PadChord;
+  /** What is heard: the parts the scene plays, with the silent beat before a drop left empty. */
   readonly events: readonly NoteEvent[];
 }
 
@@ -30,7 +32,8 @@ export interface Ensemble {
 }
 
 /**
- * The one place that orders the parts, shared by playback and the simulation so they cannot drift apart.
+ * The one place that orders the parts, generating every part whatever the scene before the arrangement picks what
+ * is heard, shared by playback and the simulation so they cannot drift apart.
  * The pitched parts never read each other: they agree by playing chord tones of the same chord, so adding or
  * removing one never changes the others.
  */
@@ -56,7 +59,7 @@ export function createEnsemble({ seed, key }: SessionSettings): Ensemble {
         ctx,
         drumLayers,
         ...pair,
-        events: [...ctx.drums.hits, ...pair.sub.notes, ...pair.reese.notes, ...pair.stab.hits, pair.pad],
+        events: arrange(ctx, { sub: pair.sub.notes, reese: pair.reese.notes, stab: pair.stab.hits, pad: pair.pad }),
       };
     },
   };

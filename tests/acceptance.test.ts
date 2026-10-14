@@ -15,6 +15,14 @@ function generateBars(seed: number, bars: number): (readonly NoteEvent[])[] {
 
 const BARS = 1024;
 
+/** The same note, whether or not the silent beat before a drop shortened it. */
+function sameOnset(a: NoteEvent, b: NoteEvent): boolean {
+  if (a.instrument === 'drums' || b.instrument === 'drums') {
+    return a.instrument === 'drums' && b.instrument === 'drums' && a.part === b.part && a.step === b.step;
+  }
+  return a.instrument === b.instrument && a.step === b.step;
+}
+
 describe('MVP acceptance', () => {
   it('generates identical events for 4096 bars from the same seed', () => {
     for (const seed of [42, 0xdeadbeef]) {
@@ -36,9 +44,15 @@ describe('MVP acceptance', () => {
     }
   });
 
-  it('plays the composed drum layers followed by the pitched parts', () => {
-    const viaLayers = run(42, 256).map((pair) => [...pair.events, ...pair.pitched]);
-    expect(generateBars(42, 256)).toEqual(viaLayers);
+  // Phase 3 leaves out the parts a scene does not play and empties the beat before a drop.
+  it('plays the composed drum layers followed by the pitched parts, as far as the scene lets them sound', () => {
+    expect(generateBars(42, 256)).toEqual(run(42, 256).map((pair) => pair.heard));
+    for (const pair of run(42, 1024)) {
+      const generated = [...pair.events, ...pair.pitched];
+      const sources = pair.heard.map((event) => generated.find((g) => sameOnset(g, event)));
+      expect(sources).not.toContain(undefined);
+      expect(sources).toEqual(generated.filter((event) => sources.includes(event)));
+    }
   });
 
   it('plays the snare only on beats 2 and 4 outside fills, without ever mutating it', () => {
