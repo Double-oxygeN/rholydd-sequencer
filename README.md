@@ -31,33 +31,41 @@ GenDnB は、パラメーターを設定するだけでドラムンベースの�
 
 ```
 gendnb/
-├── public/samples/drums/    # kick, snare, hat, ghost の WAV
+├── public/samples/drums/    # kick, snare, hat, ghost の WAV（tools/make-samples.ts で合成した仮素材）
 ├── src/
+│   ├── units.ts             # brand 型の基盤、0〜1 の値
 │   ├── engine/
 │   │   ├── transport.ts     # Tone.Transport の設定、2bar ごとの生成要求
 │   │   └── audio.ts         # Tone.js の音源、サンプル読込、再生
 │   ├── structure/
-│   │   ├── conductor.ts     # 小節位置 → コンテキスト
+│   │   ├── conductor.ts     # 小節位置 → コンテキスト、パラメーターのラッチ
 │   │   └── form.ts          # 区間の関係（反復/変奏/転換）
 │   ├── generators/
 │   │   ├── types.ts         # Generator インターフェース、イベント型
 │   │   └── drums/
-│   │       ├── weights.ts   # ステップ重み表
+│   │       ├── weights.ts   # ステップ重み表、パート別設定
+│   │       ├── pattern.ts   # 2bar パターンの型と操作
+│   │       ├── constraints.ts # 基本パターンの制約
+│   │       ├── base.ts      # 基本パターンの初期生成
 │   │       ├── mutate.ts    # 変異
 │   │       ├── ornament.ts  # 装飾
-│   │       └── fill.ts      # フィル
+│   │       ├── fill.ts      # フィル
+│   │       ├── compose.ts   # 層の合成
+│   │       └── index.ts     # ドラム生成器
 │   ├── random/rng.ts        # シード付き PRNG、シード派生
 │   ├── params/store.ts      # パラメーター管理
-│   ├── ui/                  # 操作パネル
+│   ├── ui/                  # 操作パネル、小節位置、ステップグリッド
 │   └── main.ts
-├── tools/simulate.ts        # オフライン長時間生成と統計出力
+├── tools/
+│   ├── simulate.ts          # オフライン長時間生成と統計出力
+│   └── make-samples.ts      # 仮ドラムサンプルの合成
 ├── tests/
-└── docs/                    # 要件定義書、ロードマップ
+└── docs/                    # 要件定義書、設計書、ロードマップ
 ```
 
 ## セットアップ
 
-必要環境は Node.js 24 以上と、Web Audio API に対応したモダンブラウザ（Chrome / Firefox / Safari / Edge の最新版）です。
+必要環境は Node.js 24.2 以上（`tools/simulate.ts` が `import.meta.main` を使うため）と、Web Audio API に対応したモダンブラウザ（Chrome / Firefox / Safari / Edge の最新版）です。
 
 ```bash
 git clone <repository-url> gendnb
@@ -75,7 +83,9 @@ npm run dev
 | `npm run dev` | 開発サーバーを起動 |
 | `npm run build` | 本番用ビルド |
 | `npm test` | 単体テストを実行 |
-| `npm run simulate -- --bars 4096 --seed 42` | 音声なしで長時間生成し、密度・反復率などの統計を出力 |
+| `npm run simulate -- --bars 4096 --seed 42` | 音声なしで長時間生成し、密度・反復率などの統計を出力（`--m2` `--m8` `--fill` `--json` も指定可） |
+| `npm run samples` | 仮のドラムサンプルを `public/samples/drums/` に合成し直す |
+| `npm run typecheck` | 型検査 |
 
 ## ライセンス
 
