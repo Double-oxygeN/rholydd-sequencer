@@ -51,7 +51,7 @@ type BuildPosition = { sections: 1; index: 0 } | { sections: 2; index: 0 | 1 };
 type DropPosition  = { phrases: 1; phrase: 0 } | { phrases: 2; phrase: 0 | 1 };
 
 type SceneRole =
-  | ({ scene: 'intro'; entry: 'start' | 'return' } & LeadPosition)
+  | ({ scene: 'intro' } & LeadPosition)
   | ({ scene: 'build' } & BuildPosition)
   | ({ scene: 'drop'; drop: 'first' | 'second' } & DropPosition)
   | ({ scene: 'breakdown' } & LeadPosition);
@@ -86,7 +86,7 @@ type Context = PairRole & SectionHarmony & {
 | 2つ目 | 0.5 未満ならブレイクダウン 3、それ以外は 2 |
 | 3つ目 | ドロップの延長。`[1/3, 1/6, 1/6, 1/3]` の重みで、なし・ドロップ1・ドロップ2・両方 |
 
-`cycleScenes(layout, entry)` は、サイクルの8bar ごとの `SceneRole` を並べた配列を返します。コンダクターはサイクルの頭でこれを作って保持し、`sectionInCycle` 番目を `Context` に入れます。
+`cycleScenes(layout)` は、サイクルの8bar ごとの `SceneRole` を並べた配列を返します。コンダクターはサイクルの頭でこれを作って保持し、`sectionInCycle` 番目を `Context` に入れます。
 
 ### エネルギー
 
@@ -94,8 +94,7 @@ type Context = PairRole & SectionHarmony & {
 
 | シーン | カーブの値 |
 | --- | --- |
-| イントロ（`start`） | 0.5 |
-| イントロ（`return`） | `index` 0, 1, 2 の順に 0.75, 0.6, 0.5 |
+| イントロ | 0.5 |
 | ビルド | 最後の8bar は 0.75、16bar のビルドの1つ目は 0.6 |
 | ドロップ | フェーズ1の `ENERGY_CURVE[sectionIn32]` |
 | ブレイクダウン | 0.4 |
@@ -104,7 +103,9 @@ type Context = PairRole & SectionHarmony & {
 
 ### 鳴らすパート
 
-`Voice = Part | 'sub' | 'reese' | 'stab' | 'pad'` として、`plays(role, voice)` が要件の表を返します。イントロの `entry: 'start'` かつ `index: 0` のときだけ、サブベースを鳴らしません。
+`Voice = Part | 'sub' | 'reese' | 'stab' | 'pad'` として、`plays(role, voice)` が要件の表を返します。イントロの `index: 0` では、サブベースとゴーストを鳴らしません。
+
+ドラムの打音は `playsHit(role, hit)` で判定します。`plays` に加えて、イントロの `index: 0` では奇数ステップ（16分の裏）のハイハットを鳴らしません。
 
 ### 境界の判定
 
@@ -169,7 +170,7 @@ function phraseFill(seed, intensity, cue: PhraseFillCue): Fill | null;
 
 生成した2bar から、実際に鳴るイベントを作ります。生成側の結果（`ctx.drums`、各パートのライン）は書き換えません。シミュレーションで「生成されたもの」と「鳴ったもの」を両方数えられるようにし、フェーズ2までのテストが見ている生成側の性質をそのまま保つためです。
 
-1. `plays(sceneRole, voice)` が偽のパートのイベントを取り除く。ただしブレイクダウンの最後の2bar（`changesScene` が真）では、フィルの層のスネアを残す
+1. ドラムは `playsHit(sceneRole, hit)`、音程のあるパートは `plays(sceneRole, voice)` が偽のイベントを取り除く。ただしブレイクダウンの最後の2bar（`changesScene` が真）では、フィルの層のスネアを残す
 2. `leadsIntoDrop(ctx)` なら、ステップ28以降に始まるドラムの打音を取り除き、音程のあるパートのノートを `step + length ≤ 28` に切り詰める。切り詰めて長さが0になるノートは取り除く
 
 溜めをフィルに含めないのは、フィル強度が0でも溜めを残す（要件のパラメーター仕様）ためです。溜めを「4ステップのドロップアウト」として作ると、強度0で「大きなフィルが入らない」ことと食い違います。
@@ -318,7 +319,7 @@ snare のトリム ─▶ [スロー用 Gain] ─▶ リバーブ
 | シーンの並び | 8bar ごとの `sceneRole` を、`layout` から期待される並びと比べる。サイクルの長さ、ドロップの開始が32bar の頭、ビルドの次がドロップ |
 | レイアウトの網羅 | 8192bar・複数シードで、イントロとブレイクダウンの長さ4通り、延長4通りが現れる |
 | 鳴らさないパート | 鳴る側のイベントを `plays` の表と照合する。ブレイクダウンの最後のフィルのスネアだけを除く |
-| イントロのサブベース | 再生開始時のイントロの最初の8bar にだけサブベースがない |
+| イントロの最初の8bar | すべてのイントロの `index: 0` で、サブベース・ゴースト・奇数ステップのハイハットが鳴る側にない。`index` が1以上ではサブベースが鳴る |
 | エネルギー | ビルドで単調増加かつドロップの A 以下、ドロップはフェーズ1のカーブ、2周目以降のイントロは単調減少、`energyDepth = 0` で全て1 |
 | 主進行 | サイクルの頭以外で主進行が替わらない。`m32 = 0` で替わらない |
 | ドロップ間の主題 | 同じサイクルのドロップの32bar の A 系で、進行と、大きなフィル区間より前のリース・スタブ・パッドのイベント列が一致 |
