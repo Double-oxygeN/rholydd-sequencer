@@ -1,39 +1,54 @@
-import { compose } from '../src/generators/drums/compose.ts';
-import { createDrumGenerator, type PairLayers } from '../src/generators/drums/index.ts';
-import type { NoteEvent } from '../src/generators/types.ts';
+import type { BassLine } from '../src/generators/bass/index.ts';
+import type { PairLayers } from '../src/generators/drums/index.ts';
+import { createEnsemble } from '../src/generators/ensemble.ts';
+import type { ContextWithDrums, DrumHit } from '../src/generators/types.ts';
 import { DEFAULT_LIVE_PARAMS } from '../src/params/store.ts';
 import { toSeed } from '../src/random/rng.ts';
-import { createConductor, type Context, type LiveParams } from '../src/structure/conductor.ts';
+import type { LiveParams } from '../src/structure/conductor.ts';
+import { DEFAULT_KEY, type Key } from '../src/structure/key.ts';
 import { clampUnit } from '../src/units.ts';
 
-export function liveParams(m2: number, m8: number, fillIntensity: number): LiveParams {
-  return { m2: clampUnit(m2), m8: clampUnit(m8), fillIntensity: clampUnit(fillIntensity) };
+export function liveParams(
+  m2: number,
+  m8: number,
+  fillIntensity: number,
+  m32: number = DEFAULT_LIVE_PARAMS.m32,
+  energyDepth: number = DEFAULT_LIVE_PARAMS.energyDepth,
+): LiveParams {
+  return {
+    m2: clampUnit(m2),
+    m8: clampUnit(m8),
+    m32: clampUnit(m32),
+    fillIntensity: clampUnit(fillIntensity),
+    energyDepth: clampUnit(energyDepth),
+  };
 }
 
 export const DEFAULT_LIVE = DEFAULT_LIVE_PARAMS;
 
 export interface GeneratedPair {
-  readonly ctx: Context;
+  readonly ctx: ContextWithDrums;
   readonly layers: PairLayers;
-  readonly events: readonly NoteEvent[];
+  /** Drum hits only: most tests look at one part at a time. */
+  readonly events: readonly DrumHit[];
+  readonly bass: BassLine;
 }
 
-/** Generates the given number of bars (rounded up to whole 2-bar units) from a fresh conductor and generator. */
+/** Generates the given number of bars (rounded up to whole 2-bar units) from a fresh ensemble. */
 export function run(
   seed: number,
   bars: number,
   live: (pairIndex: number) => LiveParams = () => DEFAULT_LIVE,
+  key: Key = DEFAULT_KEY,
 ): GeneratedPair[] {
-  const conductor = createConductor(toSeed(seed));
-  const generator = createDrumGenerator();
+  const ensemble = createEnsemble({ seed: toSeed(seed), key });
   return Array.from({ length: Math.ceil(bars / 2) }, (_, i) => {
-    const ctx = conductor.next(live(i));
-    const layers = generator.generateLayers(ctx);
-    return { ctx, layers, events: compose(layers.base, layers.ornaments, layers.fill) };
+    const { ctx, drumLayers, bass } = ensemble.next(live(i));
+    return { ctx, layers: drumLayers, events: ctx.drums.hits, bass };
   });
 }
 
-export function eventsAt(events: readonly NoteEvent[], part: NoteEvent['part'], step: number): NoteEvent[] {
+export function eventsAt(events: readonly DrumHit[], part: DrumHit['part'], step: number): DrumHit[] {
   return events.filter((e) => e.part === part && e.step === step);
 }
 
@@ -41,7 +56,7 @@ export function eventsAt(events: readonly NoteEvent[], part: NoteEvent['part'], 
 export const SEEDS = [0, 1, 42, 123456789, 0xffffffff];
 export const PARAM_SETS: readonly LiveParams[] = [
   DEFAULT_LIVE,
-  liveParams(0, 0, 0),
-  liveParams(1, 1, 1),
-  liveParams(1, 0.5, 1),
+  liveParams(0, 0, 0, 0, 0),
+  liveParams(1, 1, 1, 1, 1),
+  liveParams(1, 0.5, 1, 0.5, 0.5),
 ];

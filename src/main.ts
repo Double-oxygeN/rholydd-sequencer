@@ -1,5 +1,5 @@
 import * as Tone from 'tone';
-import { configureAudioContext, loadDrumKit } from './engine/audio.ts';
+import { configureAudioContext, loadInstruments } from './engine/audio.ts';
 import { createSequencer } from './engine/transport.ts';
 import { createParamStore, defaultParams } from './params/store.ts';
 import { createStepGrid } from './ui/grid.ts';
@@ -23,12 +23,12 @@ async function boot(root: HTMLElement) {
   status.textContent = 'サンプルを読み込み中…';
   root.append(title, panel.element, position.element, grid.element, status);
 
-  const kit = await loadDrumKit(SAMPLE_BASE_URL);
+  const instruments = await loadInstruments(SAMPLE_BASE_URL);
   status.textContent = '';
-  kit.setVolume(store.get().volume);
-  store.subscribe((params) => kit.setVolume(params.volume));
+  instruments.setVolume(store.get().volume);
+  store.subscribe((params) => instruments.setVolume(params.volume));
 
-  const sequencer = createSequencer(kit, store.get, {
+  const sequencer = createSequencer(instruments, store.get, {
     pairStarted: (_, events) => grid.show(events),
     stepStarted: (ctx, step) => {
       grid.highlight(step);
@@ -46,8 +46,8 @@ async function boot(root: HTMLElement) {
     } else {
       // Browsers only allow the AudioContext to start from a user gesture.
       await Tone.start();
-      const { bpm, seed } = store.get();
-      sequencer.start({ bpm, seed });
+      const { bpm, seed, key } = store.get();
+      sequencer.start({ bpm, seed, key });
     }
     playing = !playing;
     panel.setPlaying(playing);

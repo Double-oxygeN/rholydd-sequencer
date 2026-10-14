@@ -11,8 +11,10 @@ export interface PartProfile {
   readonly period: Period;
   /** How likely each slot of the motif is to sound. 1 = anchor, 0 = forbidden. */
   readonly weights: readonly UnitInterval[];
-  /** Scales the number of mutations at 8-bar boundaries. */
+  /** Scales the number of mutations that turn the reference into a variant section. */
   readonly mutability: UnitInterval;
+  /** Scales the number of mutations that rewrite the reference at 32-bar boundaries. */
+  readonly strongMutability: UnitInterval;
   /** Bounds on the number of onsets within one motif. */
   readonly minOnsets: number;
   readonly maxOnsets: number;
@@ -38,6 +40,7 @@ export const PROFILES: Readonly<Record<Part, PartProfile>> = {
       [0.6, 0.0, 0.1, 0.2, 0.0, 0.0, 0.1, 0.3, 0.1, 0.0, 0.6, 0.3, 0.0, 0.0, 0.2, 0.1],
     ),
     mutability: clampUnit(0.4),
+    strongMutability: clampUnit(1.0),
     minOnsets: 2,
     maxOnsets: 7,
     velocity: [v(0.85), v(1.0)],
@@ -51,6 +54,7 @@ export const PROFILES: Readonly<Record<Part, PartProfile>> = {
       [0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0],
     ),
     mutability: clampUnit(0),
+    strongMutability: clampUnit(0),
     minOnsets: 4,
     maxOnsets: 4,
     velocity: [v(0.6), v(1.0)],
@@ -60,6 +64,7 @@ export const PROFILES: Readonly<Record<Part, PartProfile>> = {
     period: 4,
     weights: motifWeights(4, [0.5, 0.1, 0.8, 0.2]),
     mutability: clampUnit(0.8),
+    strongMutability: clampUnit(1.0),
     minOnsets: 1,
     maxOnsets: 4,
     velocity: [v(0.35), v(0.8)],
@@ -72,6 +77,7 @@ export const PROFILES: Readonly<Record<Part, PartProfile>> = {
       [0.0, 0.1, 0.0, 0.1, 0.0, 0.1, 0.2, 0.5, 0.0, 0.6, 0.0, 0.1, 0.0, 0.1, 0.2, 0.5],
     ),
     mutability: clampUnit(1.0),
+    strongMutability: clampUnit(1.0),
     // At 0 onsets the mutation count round(m8 × mutability × onsets) is 0 forever, so ghosts could never return.
     minOnsets: 2,
     maxOnsets: 8,

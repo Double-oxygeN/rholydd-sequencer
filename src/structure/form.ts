@@ -1,6 +1,9 @@
 import type { UnitInterval } from '../units.ts';
 
-export type Relation = 'repeat' | 'variant';
+/** How a 2-bar unit relates to the first 2 bars of its 8-bar section. */
+export type PairRelation = 'repeat' | 'variant';
+/** How an 8-bar section relates to the first 8 bars of its 32-bar phrase. */
+export type SectionRelation = 'repeat' | 'variant' | 'transition';
 
 export const PAIRS_PER_SECTION = 4;
 export const SECTIONS_PER_PHRASE = 4;
@@ -45,5 +48,51 @@ export function pairRole(pairIn8: PairIn8, fillIntensity: UnitInterval): PairRol
       return { pairIn8, isSectionStart: false, isSectionEnd: false, relation: 'repeat' };
     case 3:
       return { pairIn8, isSectionStart: false, isSectionEnd: true, relation: 'variant', fillIntensity };
+  }
+}
+
+/** First 8 bars of a 32-bar phrase: the reference that the other sections relate to. */
+export interface ReferenceSection {
+  readonly sectionIn32: 0;
+  readonly relation: 'repeat';
+  readonly isPhraseStart: true;
+  readonly isPhraseEnd: false;
+}
+
+export interface VariantSection {
+  readonly sectionIn32: 1;
+  readonly relation: 'variant';
+  readonly isPhraseStart: false;
+  readonly isPhraseEnd: false;
+}
+
+export interface TransitionSection {
+  readonly sectionIn32: 2;
+  readonly relation: 'transition';
+  readonly isPhraseStart: false;
+  readonly isPhraseEnd: false;
+}
+
+/** Last 8 bars of a 32-bar phrase: its closing 2 bars carry the big fill. */
+export interface ClosingSection {
+  readonly sectionIn32: 3;
+  readonly relation: 'variant';
+  readonly isPhraseStart: false;
+  readonly isPhraseEnd: true;
+}
+
+export type SectionRole = ReferenceSection | VariantSection | TransitionSection | ClosingSection;
+
+/** 32bar = 8bar × 4 as repeat, variant, transition, variant (A A' B A''). */
+export function sectionRole(sectionIn32: SectionIn32): SectionRole {
+  switch (sectionIn32) {
+    case 0:
+      return { sectionIn32, relation: 'repeat', isPhraseStart: true, isPhraseEnd: false };
+    case 1:
+      return { sectionIn32, relation: 'variant', isPhraseStart: false, isPhraseEnd: false };
+    case 2:
+      return { sectionIn32, relation: 'transition', isPhraseStart: false, isPhraseEnd: false };
+    case 3:
+      return { sectionIn32, relation: 'variant', isPhraseStart: false, isPhraseEnd: true };
   }
 }

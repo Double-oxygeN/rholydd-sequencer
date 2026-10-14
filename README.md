@@ -36,22 +36,32 @@ gendnb/
 │   ├── units.ts             # brand 型の基盤、0〜1 の値
 │   ├── engine/
 │   │   ├── transport.ts     # Tone.Transport の設定、2bar ごとの生成要求
-│   │   └── audio.ts         # Tone.js の音源、サンプル読込、再生
+│   │   └── audio.ts         # ドラムのサンプラーとサブベースのシンセ、再生
 │   ├── structure/
 │   │   ├── conductor.ts     # 小節位置 → コンテキスト、パラメーターのラッチ
-│   │   └── form.ts          # 区間の関係（反復/変奏/転換）
+│   │   ├── form.ts          # 区間の関係（反復/変奏/転換）
+│   │   ├── energy.ts        # 32bar のエネルギーカーブ
+│   │   └── key.ts           # キーとナチュラルマイナーの音階
 │   ├── generators/
-│   │   ├── types.ts         # Generator インターフェース、イベント型
-│   │   └── drums/
-│   │       ├── weights.ts   # ステップ重み表、パート別設定
-│   │       ├── pattern.ts   # 2bar パターンの型と操作
-│   │       ├── constraints.ts # 基本パターンの制約
-│   │       ├── base.ts      # 基本パターンの初期生成
-│   │       ├── mutate.ts    # 変異
-│   │       ├── ornament.ts  # 装飾
-│   │       ├── fill.ts      # フィル
-│   │       ├── compose.ts   # 層の合成
-│   │       └── index.ts     # ドラム生成器
+│   │   ├── types.ts         # Generator インターフェース、イベント型、ドラムの確定結果を含むコンテキスト
+│   │   ├── ensemble.ts      # コンダクター → ドラム → ベースの順に2bar を生成
+│   │   ├── drums/
+│   │   │   ├── weights.ts   # ステップ重み表、パート別設定
+│   │   │   ├── pattern.ts   # 2bar パターンの型と操作
+│   │   │   ├── constraints.ts # 基本パターンの制約
+│   │   │   ├── base.ts      # 基本パターンの初期生成
+│   │   │   ├── mutate.ts    # 変異（8bar の変奏、32bar の強い変異）
+│   │   │   ├── transition.ts # 転換（B）のパターン
+│   │   │   ├── thin.ts      # エネルギーによる間引き
+│   │   │   ├── ornament.ts  # 装飾
+│   │   │   ├── fill.ts      # フィル（8bar 末と32bar 末の大きなフィル）
+│   │   │   ├── compose.ts   # 層の合成
+│   │   │   └── index.ts     # ドラム生成器
+│   │   └── bass/
+│   │       ├── styles.ts    # リズムの型
+│   │       ├── pitch.ts     # 音域、音度の重み、オクターブ跳躍
+│   │       ├── plan.ts      # 32bar ごとの型と中心音の選択
+│   │       └── index.ts     # ベース生成器
 │   ├── random/rng.ts        # シード付き PRNG、シード派生
 │   ├── params/store.ts      # パラメーター管理
 │   ├── ui/                  # 操作パネル、小節位置、ステップグリッド
@@ -83,7 +93,7 @@ npm run dev
 | `npm run dev` | 開発サーバーを起動 |
 | `npm run build` | 本番用ビルド |
 | `npm test` | 単体テストを実行 |
-| `npm run simulate -- --bars 4096 --seed 42` | 音声なしで長時間生成し、密度・反復率などの統計を出力（`--m2` `--m8` `--fill` `--json` も指定可） |
+| `npm run simulate -- --bars 4096 --seed 42` | 音声なしで長時間生成し、密度・反復率・32bar の役割ごとの密度・ベースの統計を出力（`--m2` `--m8` `--m32` `--energy` `--fill` `--key` `--json` も指定可） |
 | `npm run samples` | 仮のドラムサンプルを `public/samples/drums/` に合成し直す |
 | `npm run typecheck` | 型検査 |
 

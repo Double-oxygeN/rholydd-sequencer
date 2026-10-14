@@ -25,7 +25,21 @@ function mix32(x: number): number {
 }
 
 // Tags are integers rather than strings so that hashing needs only 32-bit arithmetic.
-export const TAG = { section: 1, fill: 2, base: 3, mutate: 4 } as const;
+// Every value is distinct: two uses sharing a tag would share a random stream.
+export const TAG = {
+  section: 1,
+  fill: 2,
+  base: 3,
+  mutate: 4,
+  phrase: 5,
+  mutate32: 6,
+  transition: 7,
+  ornament: 8,
+  thin: 9,
+  bassStyle: 10,
+  bassRhythm: 11,
+  bassPitch: 12,
+} as const;
 export const REL = { repeat: 1, variant: 2 } as const;
 
 export function hash(...xs: readonly number[]): Seed {
@@ -76,7 +90,11 @@ export function createRng(seed: Seed): Rng {
  * Always consumes exactly one draw so that the stream does not depend on the weights.
  */
 export function pickWeighted(rng: Rng, weights: readonly number[]): number | undefined {
-  const r = rng.float();
+  return weightedIndex(rng.float(), weights);
+}
+
+/** Picks an index from a roll in [0, 1) drawn beforehand, for streams that must draw before knowing the weights. */
+export function weightedIndex(r: number, weights: readonly number[]): number | undefined {
   const total = weights.reduce((sum, w) => sum + w, 0);
   if (total <= 0) return undefined;
   let acc = 0;

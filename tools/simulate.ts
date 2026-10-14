@@ -1,29 +1,48 @@
 import { parseArgs } from 'node:util';
-import { compose } from '../src/generators/drums/compose.ts';
-import { FILL_KINDS, FILL_LENGTHS, type FillKind, type FillLength } from '../src/generators/drums/fill.ts';
-import { createDrumGenerator } from '../src/generators/drums/index.ts';
+import { LOWEST_PITCH } from '../src/generators/bass/pitch.ts';
+import { BASS_STYLES, type BassStyle } from '../src/generators/bass/styles.ts';
+import { ALL_FILL_KINDS, FILL_LENGTHS, type FillKind, type FillLength } from '../src/generators/drums/fill.ts';
 import { motifCell, patternsEqual, type Pattern } from '../src/generators/drums/pattern.ts';
 import { slotsOf } from '../src/generators/drums/weights.ts';
-import { ALL_STEPS, PARTS, type Layer, type NoteEvent, type Part } from '../src/generators/types.ts';
+import { createEnsemble } from '../src/generators/ensemble.ts';
+import { PARTS, type Layer, type NoteEvent, type Part } from '../src/generators/types.ts';
 import { DEFAULT_LIVE_PARAMS } from '../src/params/store.ts';
 import { parseSeed, type Seed } from '../src/random/rng.ts';
-import { createConductor, type LiveParams } from '../src/structure/conductor.ts';
+import type { LiveParams } from '../src/structure/conductor.ts';
+import type { SectionIn32 } from '../src/structure/form.ts';
+import { DEFAULT_KEY, KEY_NAMES, degreeOf, parseKey, type Key } from '../src/structure/key.ts';
 import { clampUnit } from '../src/units.ts';
 
 export interface SimulationOptions {
   readonly bars: number;
   readonly seed: Seed;
   readonly live: LiveParams;
+  readonly key?: Key;
 }
 
+const DEGREE_NAMES = ['1', '2', '♭3', '4', '5', '♭6', '♭7'] as const;
+
 type PerPart<T> = Record<Part, T>;
+type PerSection<T> = Record<SectionIn32, T>;
+
+const SECTION_LABEL: PerSection<string> = { 0: 'A', 1: "A'", 2: 'B', 3: "A''" };
+const SECTIONS_IN_32: readonly SectionIn32[] = [0, 1, 2, 3];
 
 export interface SimulationReport {
   readonly bars: number;
   readonly seed: Seed;
+  readonly key: Key;
   readonly live: LiveParams;
   /** Average hits per bar for each part, split by layer. */
   readonly density: PerPart<Record<Layer | 'total', number>>;
+  /** Average hits per bar for each part within each section of the 32-bar phrase. */
+  readonly densityBySection: PerSection<PerPart<number>>;
+  readonly phrase: {
+    /** Number of 32-bar boundaries after the first phrase. */
+    readonly boundaries: number;
+    /** Number of those boundaries where the strong mutation changed the reference pattern. */
+    readonly referenceChanges: number;
+  };
   readonly mutation: {
     /** Number of 8-bar boundaries where the part's base pattern changed. */
     readonly changedSections: PerPart<number>;
@@ -38,6 +57,16 @@ export interface SimulationReport {
     readonly section: number;
     readonly distinctBasePatterns: number;
   };
+  readonly bass: {
+    /** Number of phrases using each style for A, A' and A'', and for B. */
+    readonly styles: Record<BassStyle, { readonly main: number; readonly transition: number }>;
+    /** Share of notes on each scale degree counted from the key's tonic. */
+    readonly degrees: Record<(typeof DEGREE_NAMES)[number], number>;
+    readonly octaveJumps: number;
+    readonly notesPerPair: number;
+    /** Mean note length in 16th notes. */
+    readonly meanLength: number;
+  };
   readonly fills: Record<FillKind | 'none', number>;
   readonly fillLengths: Record<FillLength, number>;
   readonly generationMs: { readonly mean: number; readonly max: number };
@@ -46,15 +75,28 @@ export interface SimulationReport {
 const perPart = <T>(make: () => T): PerPart<T> =>
   Object.fromEntries(PARTS.map((part) => [part, make()])) as PerPart<T>;
 
-export function simulate({ bars, seed, live }: SimulationOptions): SimulationReport {
-  const conductor = createConductor(seed);
-  const generator = createDrumGenerator();
+export function simulate({ bars, seed, live, key = DEFAULT_KEY }: SimulationOptions): SimulationReport {
+  const ensemble = createEnsemble({ seed, key });
   const pairs = Math.ceil(bars / 2);
 
+  const styles = Object.fromEntries(BASS_STYLES.map((s) => [s, { main: 0, transition: 0 }])) as Record<
+    BassStyle,
+    { main: number; transition: number }
+  >;
+  const degrees = Object.fromEntries(DEGREE_NAMES.map((d) => [d, 0])) as Record<(typeof DEGREE_NAMES)[number], number>;
+  let bassNotes = 0;
+  let octaveJumps = 0;
+  let bassSteps = 0;
+
   const hits = perPart(() => ({ base: 0, ornament: 0, fill: 0, total: 0 }));
+  const sectionHits = Object.fromEntries(SECTIONS_IN_32.map((s) => [s, perPart(() => 0)])) as PerSection<PerPart<number>>;
+  const sectionBars = Object.fromEntries(SECTIONS_IN_32.map((s) => [s, 0])) as PerSection<number>;
+  let phraseBoundaries = 0;
+  let referenceChanges = 0;
+  let previousReference: Pattern | undefined;
   const changedSections = perPart(() => 0);
   const changedCells = perPart(() => 0);
-  const fills = Object.fromEntries([...FILL_KINDS, 'none'].map((kind) => [kind, 0])) as Record<FillKind | 'none', number>;
+  const fills = Object.fromEntries([...ALL_FILL_KINDS, 'none'].map((kind) => [kind, 0])) as Record<FillKind | 'none', number>;
   const fillLengths = Object.fromEntries(FILL_LENGTHS.map((length) => [length, 0])) as Record<FillLength, number>;
   const distinctBases = new Set<string>();
   let repeatedPairs = 0;
@@ -66,17 +108,35 @@ export function simulate({ bars, seed, live }: SimulationOptions): SimulationRep
   let previousBase: Pattern | undefined;
 
   for (let i = 0; i < pairs; i++) {
-    const ctx = conductor.next(live);
     const start = performance.now();
-    const layers = generator.generateLayers(ctx);
-    const events = compose(layers.base, layers.ornaments, layers.fill);
+    const { ctx, drumLayers: layers, bass, events } = ensemble.next(live);
     const elapsed = performance.now() - start;
     totalMs += elapsed;
     maxMs = Math.max(maxMs, elapsed);
 
-    for (const event of events) {
+    const { sectionIn32 } = ctx.sectionRole;
+    sectionBars[sectionIn32] += 2;
+    if (ctx.isSectionStart && (ctx.sectionRole.isPhraseStart || ctx.sectionRole.relation === 'transition')) {
+      styles[bass.style][ctx.sectionRole.relation === 'transition' ? 'transition' : 'main']++;
+    }
+    for (const note of bass.notes) {
+      const degree = degreeOf(key, note.pitch);
+      if (degree !== undefined) degrees[DEGREE_NAMES[degree]!]++;
+      bassNotes++;
+      bassSteps += note.length;
+      if (note.pitch >= LOWEST_PITCH + 12) octaveJumps++;
+    }
+    for (const event of ctx.drums.hits) {
       hits[event.part][event.layer]++;
       hits[event.part].total++;
+      sectionHits[sectionIn32][event.part]++;
+    }
+    if (ctx.isSectionStart && ctx.sectionRole.isPhraseStart) {
+      if (previousReference !== undefined) {
+        phraseBoundaries++;
+        if (!patternsEqual(previousReference, layers.reference)) referenceChanges++;
+      }
+      previousReference = layers.reference;
     }
     if (previousEvents !== undefined && sameEvents(previousEvents, events)) repeatedPairs++;
     previousEvents = events;
@@ -106,6 +166,7 @@ export function simulate({ bars, seed, live }: SimulationOptions): SimulationRep
   return {
     bars: barCount,
     seed,
+    key,
     live,
     density: Object.fromEntries(
       PARTS.map((part) => {
@@ -113,11 +174,28 @@ export function simulate({ bars, seed, live }: SimulationOptions): SimulationRep
         return [part, { base: perBar(base), ornament: perBar(ornament), fill: perBar(fill), total: perBar(total) }];
       }),
     ) as SimulationReport['density'],
+    densityBySection: Object.fromEntries(
+      SECTIONS_IN_32.map((s) => [
+        s,
+        Object.fromEntries(PARTS.map((part) => [part, sectionHits[s][part] / Math.max(1, sectionBars[s])])),
+      ]),
+    ) as PerSection<PerPart<number>>,
+    phrase: { boundaries: phraseBoundaries, referenceChanges },
     mutation: { changedSections, changedCells, boundaries },
     repetition: {
       pair: pairs > 1 ? repeatedPairs / (pairs - 1) : 0,
       section: boundaries > 0 ? repeatedSections / boundaries : 0,
       distinctBasePatterns: distinctBases.size,
+    },
+    bass: {
+      styles,
+      degrees: Object.fromEntries(DEGREE_NAMES.map((d) => [d, degrees[d] / Math.max(1, bassNotes)])) as Record<
+        (typeof DEGREE_NAMES)[number],
+        number
+      >,
+      octaveJumps: octaveJumps / Math.max(1, bassNotes),
+      notesPerPair: bassNotes / pairs,
+      meanLength: bassSteps / Math.max(1, bassNotes),
     },
     fills,
     fillLengths,
@@ -126,10 +204,10 @@ export function simulate({ bars, seed, live }: SimulationOptions): SimulationRep
 }
 
 function sameEvents(a: readonly NoteEvent[], b: readonly NoteEvent[]): boolean {
-  return (
-    a.length === b.length &&
-    a.every((e, i) => e.step === b[i]?.step && e.part === b[i]?.part && e.velocity === b[i]?.velocity)
-  );
+  // Layers do not change what is heard, so they are left out of the comparison.
+  const heard = (e: NoteEvent) =>
+    e.instrument === 'drums' ? `d${e.step}:${e.part}:${e.velocity}` : `b${e.step}:${e.length}:${e.pitch}`;
+  return a.length === b.length && a.every((e, i) => b[i] !== undefined && heard(e) === heard(b[i]));
 }
 
 function formatReport(report: SimulationReport): string {
@@ -137,7 +215,7 @@ function formatReport(report: SimulationReport): string {
   const num = (x: number) => x.toFixed(2).padStart(6);
   const { live, mutation } = report;
   const lines = [
-    `bars: ${report.bars}  seed: ${report.seed}  m2: ${live.m2}  m8: ${live.m8}  fillIntensity: ${live.fillIntensity}`,
+    `bars: ${report.bars}  seed: ${report.seed}  key: ${KEY_NAMES[report.key]}m  m2: ${live.m2}  m8: ${live.m8}  m32: ${live.m32}  energyDepth: ${live.energyDepth}  fillIntensity: ${live.fillIntensity}`,
     '',
     'Density (hits per bar)',
     '  part     total   base ornament   fill',
@@ -146,7 +224,15 @@ function formatReport(report: SimulationReport): string {
       return `  ${part.padEnd(6)} ${num(d.total)} ${num(d.base)}   ${num(d.ornament)} ${num(d.fill)}`;
     }),
     '',
-    `Mutation (${mutation.boundaries} boundaries)`,
+    'Density by section of the 32-bar phrase (hits per bar)',
+    `  section ${PARTS.map((part) => part.padStart(6)).join(' ')}`,
+    ...SECTIONS_IN_32.map(
+      (s) => `  ${SECTION_LABEL[s].padEnd(7)} ${PARTS.map((part) => num(report.densityBySection[s][part])).join(' ')}`,
+    ),
+    '',
+    `Reference changed at ${report.phrase.referenceChanges} of ${report.phrase.boundaries} 32-bar boundaries`,
+    '',
+    `Mutation at 8-bar boundaries (${mutation.boundaries} boundaries)`,
     '  part    changed sections   changed cells',
     ...PARTS.map(
       (part) =>
@@ -157,6 +243,15 @@ function formatReport(report: SimulationReport): string {
     `  2 bars identical to previous 2 bars:  ${pct(report.repetition.pair)}`,
     `  8-bar base identical to previous:     ${pct(report.repetition.section)}`,
     `  distinct base patterns:               ${report.repetition.distinctBasePatterns}`,
+    '',
+    'Bass',
+    `  notes per 2 bars: ${report.bass.notesPerPair.toFixed(2)}  mean length: ${report.bass.meanLength.toFixed(2)} steps  octave jumps: ${pct(report.bass.octaveJumps)}`,
+    '  style          A/A\'/A\'\'      B',
+    ...BASS_STYLES.map(
+      (style) =>
+        `  ${style.padEnd(12)} ${String(report.bass.styles[style].main).padStart(8)} ${String(report.bass.styles[style].transition).padStart(6)}`,
+    ),
+    `  degrees: ${DEGREE_NAMES.map((d) => `${d} ${pct(report.bass.degrees[d])}`).join('  ')}`,
     '',
     'Fills (per 8 bars)',
     ...Object.entries(report.fills).map(([kind, count]) => `  ${kind.padEnd(10)} ${String(count).padStart(6)}`),
@@ -176,6 +271,9 @@ function main() {
       seed: { type: 'string', default: '42' },
       m2: { type: 'string', default: String(DEFAULT_LIVE_PARAMS.m2) },
       m8: { type: 'string', default: String(DEFAULT_LIVE_PARAMS.m8) },
+      m32: { type: 'string', default: String(DEFAULT_LIVE_PARAMS.m32) },
+      energy: { type: 'string', default: String(DEFAULT_LIVE_PARAMS.energyDepth) },
+      key: { type: 'string', default: KEY_NAMES[DEFAULT_KEY] },
       fill: { type: 'string', default: String(DEFAULT_LIVE_PARAMS.fillIntensity) },
       json: { type: 'boolean', default: false },
     },
@@ -187,9 +285,13 @@ function main() {
   const live: LiveParams = {
     m2: clampUnit(Number(values.m2)),
     m8: clampUnit(Number(values.m8)),
+    m32: clampUnit(Number(values.m32)),
+    energyDepth: clampUnit(Number(values.energy)),
     fillIntensity: clampUnit(Number(values.fill)),
   };
-  const report = simulate({ bars, seed, live });
+  const key = parseKey(values.key ?? '');
+  if (key === undefined) throw new Error(`--key must be a note name such as F, F# or Bb: ${values.key}`);
+  const report = simulate({ bars, seed, live, key });
   console.log(values.json ? JSON.stringify(report, null, 2) : formatReport(report));
 }
 

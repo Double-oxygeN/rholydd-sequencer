@@ -1,5 +1,6 @@
 import { toSeed, type Seed } from '../random/rng.ts';
 import type { LiveParams } from '../structure/conductor.ts';
+import { DEFAULT_KEY, type Key } from '../structure/key.ts';
 import { clampUnit, type Brand, type UnitInterval } from '../units.ts';
 
 /** Tempo in [160, 180] BPM. */
@@ -18,6 +19,7 @@ export interface Params extends LiveParams {
   readonly bpm: Bpm;
   readonly volume: UnitInterval;
   readonly seed: Seed;
+  readonly key: Key;
 }
 
 export function randomSeed(): Seed {
@@ -29,7 +31,9 @@ export const DEFAULT_LIVE_PARAMS: LiveParams = {
   m2: clampUnit(0.3),
   // Raised from the 0.25 in the requirements so that kick and hat changes are audible with default settings.
   m8: clampUnit(0.35),
+  m32: clampUnit(0.6),
   fillIntensity: clampUnit(0.7),
+  energyDepth: clampUnit(0.5),
 };
 
 export function defaultParams(): Params {
@@ -38,6 +42,7 @@ export function defaultParams(): Params {
     bpm: DEFAULT_BPM,
     volume: clampUnit(0.8),
     seed: randomSeed(),
+    key: DEFAULT_KEY,
   };
 }
 
