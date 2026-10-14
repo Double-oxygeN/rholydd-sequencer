@@ -1,6 +1,6 @@
 import { parseArgs } from 'node:util';
 import { compose } from '../src/generators/drums/compose.ts';
-import type { FillKind } from '../src/generators/drums/fill.ts';
+import { FILL_KINDS, type FillKind } from '../src/generators/drums/fill.ts';
 import { createDrumGenerator } from '../src/generators/drums/index.ts';
 import { motifCell, patternsEqual, type Pattern } from '../src/generators/drums/pattern.ts';
 import { slotsOf } from '../src/generators/drums/weights.ts';
@@ -53,7 +53,7 @@ export function simulate({ bars, seed, live }: SimulationOptions): SimulationRep
   const hits = perPart(() => ({ base: 0, ornament: 0, fill: 0, total: 0 }));
   const changedSections = perPart(() => 0);
   const changedCells = perPart(() => 0);
-  const fills: Record<FillKind | 'none', number> = { snareRoll: 0, kickSnare: 0, dropout: 0, ghostRush: 0, none: 0 };
+  const fills = Object.fromEntries([...FILL_KINDS, 'none'].map((kind) => [kind, 0])) as Record<FillKind | 'none', number>;
   const distinctBases = new Set<string>();
   let repeatedPairs = 0;
   let repeatedSections = 0;

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createDrumGenerator } from '../src/generators/drums/index.ts';
 import { cellAt, patternsEqual } from '../src/generators/drums/pattern.ts';
-import { ALL_STEPS, type NoteEvent } from '../src/generators/types.ts';
+import { ALL_STEPS, type NoteEvent, type Step } from '../src/generators/types.ts';
 import { toSeed } from '../src/random/rng.ts';
 import { createConductor } from '../src/structure/conductor.ts';
 import { DEFAULT_LIVE, PARAM_SETS, SEEDS, eventsAt, liveParams, run } from './helpers.ts';
@@ -23,11 +23,15 @@ describe('MVP acceptance', () => {
     }
   });
 
-  it('plays the snare on beats 2 and 4 of every bar', () => {
+  // Fills may silence the backbeat on purpose (dropout and solos), so they are excluded.
+  it('plays the snare on beats 2 and 4 of every bar outside fills', () => {
     for (const seed of SEEDS) {
       for (const params of PARAM_SETS) {
-        for (const { events } of run(seed, BARS, () => params)) {
-          for (const step of [4, 12, 20, 28]) expect(eventsAt(events, 'snare', step)).toHaveLength(1);
+        for (const { events, layers } of run(seed, BARS, () => params)) {
+          for (const step of [4, 12, 20, 28]) {
+            if (layers.fill?.steps.includes(step as Step)) continue;
+            expect(eventsAt(events, 'snare', step)).toHaveLength(1);
+          }
         }
       }
     }
@@ -41,9 +45,10 @@ describe('MVP acceptance', () => {
   it('plays the snare only on beats 2 and 4 outside fills, without ever mutating it', () => {
     for (const seed of SEEDS) {
       for (const params of PARAM_SETS) {
-        for (const { events } of run(seed, BARS, () => params)) {
-          const snares = events.filter((e) => e.part === 'snare' && e.layer !== 'fill').map((e) => e.step);
-          expect(snares).toEqual([4, 12, 20, 28]);
+        for (const { events, layers } of run(seed, BARS, () => params)) {
+          const outsideFill = (step: number) => !layers.fill?.steps.includes(step as Step);
+          const snares = events.filter((e) => e.part === 'snare' && outsideFill(e.step)).map((e) => e.step);
+          expect(snares).toEqual([4, 12, 20, 28].filter(outsideFill));
         }
       }
     }
@@ -53,15 +58,15 @@ describe('MVP acceptance', () => {
     for (const seed of SEEDS) {
       for (const params of PARAM_SETS) {
         for (const { events, layers } of run(seed, BARS, () => params)) {
-          const fillSteps = new Set<number>([...(layers.fill?.steps ?? []), ...(layers.fill?.backbeats ?? [])]);
-          const hats = events.filter((e) => e.part === 'hat' && e.layer === 'base');
-          const beat = hats.filter((e) => e.step < 4).map((e) => [e.step, e.velocity]);
-          for (let offset = 4; offset < 32; offset += 4) {
-            const expected = beat.filter(([step]) => !fillSteps.has(step! + offset));
-            const actual = hats
-              .filter((e) => e.step >= offset && e.step < offset + 4)
-              .map((e) => [e.step - offset, e.velocity]);
-            expect(actual).toEqual(expected);
+          const fillSteps = new Set<number>(layers.fill?.steps ?? []);
+          const hats = events.filter((e) => e.part === 'hat' && e.layer === 'base' && !fillSteps.has(e.step));
+          const beatOf = (offset: number) =>
+            hats.filter((e) => e.step >= offset && e.step < offset + 4).map((e) => [e.step - offset, e.velocity]);
+          const reference = [0, 4, 8, 12, 16, 20, 24, 28].find((offset) => !fillSteps.has(offset + 3));
+          if (reference === undefined) continue;
+          for (let offset = 0; offset < 32; offset += 4) {
+            if ([0, 1, 2, 3].some((i) => fillSteps.has(offset + i))) continue;
+            expect(beatOf(offset)).toEqual(beatOf(reference));
           }
         }
       }

@@ -3,7 +3,7 @@ import type { UnitInterval } from '../../units.ts';
 import { STEPS_PER_PAIR, stepRange, type NoteEvent, type Part, type Step, type Velocity } from '../types.ts';
 import { isAnchorStep } from './weights.ts';
 
-export const FILL_KINDS = ['snareRoll', 'kickSnare', 'dropout', 'ghostRush'] as const;
+export const FILL_KINDS = ['snareRoll', 'ghostRush', 'dropout', 'kickSolo', 'snareSolo', 'hatSolo'] as const;
 export type FillKind = (typeof FILL_KINDS)[number];
 
 /** The last 1 or 2 beats of the 8th bar. */
@@ -13,24 +13,33 @@ export type FillLength = (typeof FILL_LENGTHS)[number];
 export interface Fill {
   readonly kind: FillKind;
   readonly length: FillLength;
-  /** Steps whose base and ornament hits are replaced by the fill. */
+  /** Steps taken over by the fill. */
   readonly steps: readonly Step[];
-  /** Backbeats inside the fill: only the snare keeps sounding there. */
-  readonly backbeats: readonly Step[];
+  /** Part that keeps its regular hits inside the fill. Every other part is silenced there. */
+  readonly kept: Part | null;
+  /** Hits the fill adds on top of the kept part. */
   readonly events: readonly NoteEvent[];
 }
 
 type Hit = readonly [Part, number];
 
-/** Template for one step. progress grows from just above 0 to 1 over the fill. */
-type Template = (step: Step, progress: number) => readonly Hit[];
+interface Template {
+  readonly kept: Part | null;
+  /** Hits for one step. progress grows from just above 0 to 1 over the fill. */
+  hits(step: Step, progress: number): readonly Hit[];
+}
 
 const TEMPLATES: Readonly<Record<FillKind, Template>> = {
-  snareRoll: (_, progress) => [['snare', 0.4 + 0.6 * progress]],
-  // Even steps carry the snare so that the backbeat at step 28 lines up with the alternation.
-  kickSnare: (step) => (step % 2 === 0 ? [['snare', 0.9]] : [['kick', 0.95]]),
-  dropout: () => [],
-  ghostRush: (_, progress) => [['ghost', 0.25 + 0.35 * progress]],
+  snareRoll: { kept: null, hits: (_, progress) => [['snare', 0.4 + 0.6 * progress]] },
+  // A ghost roll alone sounds like a dropout with noise; keeping the backbeat makes it read as a fill.
+  ghostRush: {
+    kept: 'snare',
+    hits: (step, progress) => (isAnchorStep('snare', step) ? [] : [['ghost', 0.25 + 0.35 * progress]]),
+  },
+  dropout: { kept: null, hits: () => [] },
+  kickSolo: { kept: 'kick', hits: () => [] },
+  snareSolo: { kept: 'snare', hits: () => [] },
+  hatSolo: { kept: 'hat', hits: () => [] },
 };
 
 export function fill(seed: Seed, intensity: UnitInterval): Fill | null {
@@ -41,14 +50,12 @@ export function fill(seed: Seed, intensity: UnitInterval): Fill | null {
   const length = FILL_LENGTHS[rng.int(FILL_LENGTHS.length)] ?? 4;
   if (!fires) return null;
   const start = STEPS_PER_PAIR - length;
-  const region = stepRange(start, STEPS_PER_PAIR);
-  // Fills never replace the backbeat: F-06 takes priority over a complete dropout.
-  const steps = region.filter((step) => !isAnchorStep('snare', step));
-  const backbeats = region.filter((step) => isAnchorStep('snare', step));
+  const steps = stepRange(start, STEPS_PER_PAIR);
+  const template = TEMPLATES[kind];
   const events = steps.flatMap((step) =>
-    TEMPLATES[kind](step, (step - start + 1) / length).map(
-      ([part, velocity]): NoteEvent => ({ step, part, velocity: velocity as Velocity, layer: 'fill' }),
-    ),
+    template
+      .hits(step, (step - start + 1) / length)
+      .map(([part, velocity]): NoteEvent => ({ step, part, velocity: velocity as Velocity, layer: 'fill' })),
   );
-  return { kind, length, steps, backbeats, events };
+  return { kind, length, steps, kept: template.kept, events };
 }

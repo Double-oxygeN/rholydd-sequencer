@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { canonicalPattern, initialPattern } from '../src/generators/drums/base.ts';
 import { satisfiesConstraints } from '../src/generators/drums/constraints.ts';
-import { FILL_KINDS, fill } from '../src/generators/drums/fill.ts';
+import { compose } from '../src/generators/drums/compose.ts';
+import { FILL_KINDS, fill, type FillKind } from '../src/generators/drums/fill.ts';
 import { mutate, mutationCount } from '../src/generators/drums/mutate.ts';
 import { ORNAMENT_PARTS, ornament } from '../src/generators/drums/ornament.ts';
 import { cellAt, motifCell, patternsEqual } from '../src/generators/drums/pattern.ts';
@@ -9,7 +10,7 @@ import { PROFILES, isAnchorStep, slotsOf, stepWeight } from '../src/generators/d
 import { ALL_STEPS, PARTS } from '../src/generators/types.ts';
 import { createRng, hash, toSeed } from '../src/random/rng.ts';
 import { clampUnit } from '../src/units.ts';
-import { liveParams, run } from './helpers.ts';
+import { SEEDS, liveParams, run, type GeneratedPair } from './helpers.ts';
 
 const inCategory = (w: number) => w === 0 || w === 1 || (w >= 0.1 && w <= 0.3) || (w >= 0.5 && w <= 0.8);
 
@@ -125,13 +126,12 @@ describe('fill', () => {
     }
   });
 
-  it('covers the last 1 or 2 beats without replacing the backbeat', () => {
+  it('covers the last 1 or 2 beats with every template', () => {
     const kinds = new Set<string>();
-    for (let i = 0; i < 200; i++) {
+    for (let i = 0; i < 400; i++) {
       const result = fill(hash(i), clampUnit(1))!;
       kinds.add(result.kind);
-      const lastBeats = ALL_STEPS.slice(32 - result.length).filter((s) => s !== 28);
-      expect(result.steps).toEqual(lastBeats);
+      expect(result.steps).toEqual(ALL_STEPS.slice(32 - result.length));
       for (const event of result.events) expect(result.steps).toContain(event.step);
     }
     expect([...kinds].sort()).toEqual([...FILL_KINDS].sort());
@@ -139,12 +139,48 @@ describe('fill', () => {
 });
 
 describe('compose with a fill', () => {
-  it('keeps only the snare on a backbeat inside the fill', () => {
-    const pairs = run(42, 512, () => liveParams(1, 0.5, 1));
-    const closing = pairs.filter((p) => p.layers.fill !== null);
-    expect(closing.length).toBeGreaterThan(0);
-    for (const { events } of closing) {
-      expect(events.filter((e) => e.step === 28).map((e) => e.part)).toEqual(['snare']);
+  const closing = SEEDS.flatMap((seed) => run(seed, 2048, () => liveParams(0.5, 0.5, 1))).filter(
+    (pair) => pair.layers.fill !== null,
+  );
+  const inFill = (pair: GeneratedPair, events = pair.events) =>
+    events.filter((e) => pair.layers.fill!.steps.includes(e.step));
+  const withoutFill = (pair: GeneratedPair) => compose(pair.layers.base, pair.layers.ornaments, null);
+  const ofKind = (kind: FillKind) => {
+    const pairs = closing.filter((pair) => pair.layers.fill!.kind === kind);
+    expect(pairs.length).toBeGreaterThan(0);
+    return pairs;
+  };
+
+  it('silences every part, including the backbeat, during a dropout', () => {
+    for (const pair of ofKind('dropout')) expect(inFill(pair)).toEqual([]);
+  });
+
+  it('plays only the soloed part, exactly as it would sound without the fill', () => {
+    for (const [kind, part] of [
+      ['kickSolo', 'kick'],
+      ['snareSolo', 'snare'],
+      ['hatSolo', 'hat'],
+    ] as const) {
+      for (const pair of ofKind(kind)) {
+        expect(inFill(pair)).toEqual(inFill(pair, withoutFill(pair)).filter((e) => e.part === part));
+      }
+    }
+  });
+
+  it('rolls the snare on every step with rising velocity', () => {
+    for (const pair of ofKind('snareRoll')) {
+      const hits = inFill(pair);
+      expect(hits.map((e) => e.step)).toEqual(pair.layers.fill!.steps);
+      expect(hits.every((e) => e.part === 'snare')).toBe(true);
+      for (let i = 1; i < hits.length; i++) expect(hits[i]!.velocity).toBeGreaterThan(hits[i - 1]!.velocity);
+    }
+  });
+
+  it('rushes ghosts around the backbeat snare', () => {
+    for (const pair of ofKind('ghostRush')) {
+      for (const event of inFill(pair)) {
+        expect(event.part).toBe(isAnchorStep('snare', event.step) ? 'snare' : 'ghost');
+      }
     }
   });
 });
