@@ -9,6 +9,7 @@
   --base: #2f6fdf;
   --ornament: #1a9e74;
   --fill: #e08a1e;
+  --bass: #7a4fd6;
   color-scheme: light;
 }
 
@@ -24,6 +25,7 @@
     --base: #6b9cff;
     --ornament: #45cf9f;
     --fill: #ffb24d;
+    --bass: #b18cff;
     color-scheme: dark;
   }
 }
@@ -92,7 +94,8 @@ h1 {
 }
 
 input[type='number'],
-input[type='text'] {
+input[type='text'],
+select {
   width: 100%;
   min-width: 0;
   padding: 6px 8px;
@@ -205,6 +208,14 @@ button.play.playing {
 
 .grid-cell[data-layer='fill'] {
   background: color-mix(in srgb, var(--fill) calc(var(--velocity) * 100%), var(--cell));
+}
+
+.grid-cell[data-layer='bass'] {
+  background: var(--bass);
+}
+
+.grid-cell[data-layer='sustain'] {
+  background: color-mix(in srgb, var(--bass) 40%, var(--cell));
 }
 
 .grid-cell.now {

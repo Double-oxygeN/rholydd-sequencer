@@ -1,5 +1,6 @@
 import { BPM_RANGE, clampBpm, randomSeed, type ParamStore, type Params } from '../params/store.ts';
 import { parseSeed } from '../random/rng.ts';
+import { KEY_NAMES, toKey } from '../structure/key.ts';
 import { clampUnit, type UnitInterval } from '../units.ts';
 
 type UnitKey = 'm2' | 'm8' | 'm32' | 'fillIntensity' | 'energyDepth' | 'volume';
@@ -33,6 +34,14 @@ export function createPanel(store: ParamStore): Panel {
     store.update({ bpm: value });
   });
 
+  const key = document.createElement('select');
+  key.append(...KEY_NAMES.map((name, i) => new Option(`${name} マイナー`, String(i))));
+  key.value = String(store.get().key);
+  key.addEventListener('change', () => {
+    const value = toKey(Number(key.value));
+    if (value !== undefined) store.update({ key: value });
+  });
+
   const seed = input({ type: 'text', inputMode: 'numeric', spellcheck: false });
   seed.value = String(store.get().seed);
   seed.addEventListener('input', () => {
@@ -52,6 +61,7 @@ export function createPanel(store: ParamStore): Panel {
   element.append(
     play,
     field('BPM', bpm),
+    field('キー', key),
     ...UNIT_CONTROLS.map(({ key, label }) => field(label, slider(store, key))),
     field('シード', row(seed, dice)),
   );
@@ -62,6 +72,7 @@ export function createPanel(store: ParamStore): Panel {
       play.textContent = playing ? '停止' : '再生';
       play.classList.toggle('playing', playing);
       bpm.disabled = playing;
+      key.disabled = playing;
     },
     onToggle(handler) {
       play.addEventListener('click', handler);

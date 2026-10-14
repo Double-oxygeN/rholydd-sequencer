@@ -3,7 +3,7 @@ import { createEnsemble, type SessionSettings } from '../generators/ensemble.ts'
 import { STEPS_PER_BAR, type NoteEvent, type Step } from '../generators/types.ts';
 import type { Bpm } from '../params/store.ts';
 import type { Context, LiveParams } from '../structure/conductor.ts';
-import type { DrumKit } from './audio.ts';
+import type { Instruments } from './audio.ts';
 
 /** Fixed for the whole session: BPM, seed and key only change between stop and play. */
 export interface PlaybackSettings extends SessionSettings {
@@ -22,7 +22,7 @@ export interface Sequencer {
   stop(): void;
 }
 
-export function createSequencer(kit: DrumKit, readLive: () => LiveParams, listener: PlaybackListener): Sequencer {
+export function createSequencer(instruments: Instruments, readLive: () => LiveParams, listener: PlaybackListener): Sequencer {
   const transport = Tone.getTransport();
   const draw = Tone.getDraw();
 
@@ -36,7 +36,15 @@ export function createSequencer(kit: DrumKit, readLive: () => LiveParams, listen
         (time) => {
           const { ctx, events } = ensemble.next(readLive());
           for (const event of events) {
-            if (event.instrument === 'drums') kit.trigger(event.part, time + event.step * stepSeconds, event.velocity);
+            const at = time + event.step * stepSeconds;
+            switch (event.instrument) {
+              case 'drums':
+                instruments.drum(event.part, at, event.velocity);
+                break;
+              case 'bass':
+                instruments.bass(event.pitch, at, event.length * stepSeconds, event.velocity);
+                break;
+            }
           }
           draw.schedule(() => listener.pairStarted(ctx, events), time);
           for (let step = 0; step < STEPS_PER_BAR * 2; step++) {
@@ -47,14 +55,14 @@ export function createSequencer(kit: DrumKit, readLive: () => LiveParams, listen
         0,
       );
       const startTime = Tone.now();
-      kit.open(startTime);
+      instruments.open(startTime);
       transport.start(startTime);
     },
     stop() {
       transport.stop();
       transport.cancel(0);
       draw.cancel(0);
-      kit.silence();
+      instruments.silence();
     },
   };
 }
