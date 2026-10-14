@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { bassPlan } from '../src/generators/bass/plan.ts';
-import { HIGHEST_PITCH, LOWEST_PITCH, bassPitch } from '../src/generators/bass/pitch.ts';
-import { BASS_STYLES, attackChance } from '../src/generators/bass/styles.ts';
+import { stylePlan } from '../src/generators/line.ts';
+import { HIGHEST_PITCH, LOWEST_PITCH, subPitch } from '../src/generators/sub/pitch.ts';
+import { SUB_STYLES, attackChance } from '../src/generators/sub/styles.ts';
 import { ALL_STEPS, type Step } from '../src/generators/types.ts';
 import { hash } from '../src/random/rng.ts';
 import { ALL_KEYS, KEY_NAMES, TONIC, degreeOf, parseKey, shiftDegree } from '../src/structure/key.ts';
@@ -24,23 +24,23 @@ describe('key', () => {
   });
 });
 
-describe('bassPitch', () => {
+describe('subPitch', () => {
   it('folds the tonic of every key into F1 to E2 and jumps an octave up on request', () => {
     for (const key of ALL_KEYS) {
-      const low = bassPitch(key, TONIC, false);
+      const low = subPitch(key, TONIC, false);
       expect(low).toBeGreaterThanOrEqual(LOWEST_PITCH);
       expect(low).toBeLessThan(LOWEST_PITCH + 12);
-      expect(bassPitch(key, TONIC, true)).toBe(low + 12);
-      expect(bassPitch(key, TONIC, true)).toBeLessThanOrEqual(HIGHEST_PITCH);
+      expect(subPitch(key, TONIC, true)).toBe(low + 12);
+      expect(subPitch(key, TONIC, true)).toBeLessThanOrEqual(HIGHEST_PITCH);
       expect(degreeOf(key, low)).toBe(TONIC);
     }
-    expect(bassPitch(parseKey('F')!, TONIC, false)).toBe(29);
+    expect(subPitch(parseKey('F')!, TONIC, false)).toBe(29);
   });
 });
 
-describe('bass styles', () => {
+describe('sub styles', () => {
   it('always strikes step 0 and never re-strikes a tied step', () => {
-    for (const style of BASS_STYLES) {
+    for (const style of SUB_STYLES) {
       expect(attackChance(style, 0 as Step, false)).toBe(1);
     }
     expect(attackChance('push', 16 as Step, true)).toBe(0);
@@ -58,10 +58,10 @@ describe('bass styles', () => {
   it('picks every style for A and a different one for B', () => {
     const mains = new Set<string>();
     for (let i = 0; i < 500; i++) {
-      const plan = bassPlan(hash(i));
+      const plan = stylePlan(hash(i), SUB_STYLES);
       mains.add(plan.main);
       expect(plan.transition).not.toBe(plan.main);
     }
-    expect([...mains].sort()).toEqual([...BASS_STYLES].sort());
+    expect([...mains].sort()).toEqual([...SUB_STYLES].sort());
   });
 });

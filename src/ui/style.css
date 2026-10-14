@@ -163,9 +163,19 @@ button.play.playing {
 }
 
 .position-total {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
   font-size: 0.9rem;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
+}
+
+.position-chord {
+  min-width: 5em;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--fg);
 }
 
 .grid {
@@ -210,7 +220,7 @@ button.play.playing {
   background: color-mix(in srgb, var(--fill) calc(var(--velocity) * 100%), var(--cell));
 }
 
-.grid-cell[data-layer='bass'] {
+.grid-cell[data-layer='note'] {
   background: var(--bass);
 }
 
@@ -221,6 +231,97 @@ button.play.playing {
 .grid-cell.now {
   outline: 2px solid var(--fg);
   outline-offset: -1px;
+}
+
+.mixer {
+  display: grid;
+  gap: 16px;
+  padding: 16px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.mixer-table {
+  display: grid;
+  grid-template-columns: 7em repeat(3, minmax(0, 1fr)) auto;
+  gap: 6px 12px;
+  align-items: center;
+}
+
+.mixer-head {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.mixer-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.mixer .row output {
+  width: 4.5em;
+  font-size: 0.85rem;
+}
+
+.mixer-ducking {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.level {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 16px;
+  align-items: end;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.level-bar {
+  height: 10px;
+  border-radius: 2px;
+  background: var(--cell);
+  overflow: hidden;
+}
+
+.level-fill {
+  height: 100%;
+  width: 0;
+  background: var(--ornament);
+}
+
+.level-clips.on {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+button.mute {
+  width: 2.2em;
+  padding: 4px 0;
+  font-weight: 700;
+}
+
+button.mute.on {
+  background: var(--fill);
+  border-color: var(--fill);
+  color: #fff;
+}
+
+@media (max-width: 640px) {
+  .mixer-table {
+    grid-template-columns: 5.5em repeat(3, minmax(0, 1fr)) auto;
+    gap: 6px;
+  }
+
+  .mixer .row output {
+    display: none;
+  }
 }
 
 .status {

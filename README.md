@@ -35,16 +35,22 @@ gendnb/
 ├── src/
 │   ├── units.ts             # brand 型の基盤、0〜1 の値
 │   ├── engine/
-│   │   ├── transport.ts     # Tone.Transport の設定、2bar ごとの生成要求
-│   │   └── audio.ts         # ドラムのサンプラーとサブベースのシンセ、再生
+│   │   ├── transport.ts     # Tone.Transport の設定、2bar ごとの生成要求とダッキングの予約
+│   │   ├── audio.ts         # 音源、ミキサー、バス、リバーブ、コンプレッサー、リミッター
+│   │   ├── ducking.ts       # キックの時刻からダッキングのエンベロープを求める
+│   │   ├── clip.ts          # ピークとクリップの計数
+│   │   └── clip-worklet.ts  # クリップ検出の AudioWorklet
 │   ├── structure/
-│   │   ├── conductor.ts     # 小節位置 → コンテキスト、パラメーターのラッチ
+│   │   ├── conductor.ts     # 小節位置 → コンテキスト、パラメーターのラッチ、進行の保持
 │   │   ├── form.ts          # 区間の関係（反復/変奏/転換）
 │   │   ├── energy.ts        # 32bar のエネルギーカーブ
+│   │   ├── harmony.ts       # ダイアトニックコード、主進行と転換進行
 │   │   └── key.ts           # キーとナチュラルマイナーの音階
 │   ├── generators/
 │   │   ├── types.ts         # Generator インターフェース、イベント型、ドラムの確定結果を含むコンテキスト
-│   │   ├── ensemble.ts      # コンダクター → ドラム → ベースの順に2bar を生成
+│   │   ├── ensemble.ts      # コンダクター → ドラム → 音程のある4パートの順に2bar を生成
+│   │   ├── line.ts          # 音程のあるパートに共通の規則（型の選択、シード、コードトーン）
+│   │   ├── pitch.ts         # 音域への折り返し
 │   │   ├── drums/
 │   │   │   ├── weights.ts   # ステップ重み表、パート別設定
 │   │   │   ├── pattern.ts   # 2bar パターンの型と操作
@@ -57,14 +63,15 @@ gendnb/
 │   │   │   ├── fill.ts      # フィル（8bar 末と32bar 末の大きなフィル）
 │   │   │   ├── compose.ts   # 層の合成
 │   │   │   └── index.ts     # ドラム生成器
-│   │   └── bass/
-│   │       ├── styles.ts    # リズムの型
-│   │       ├── pitch.ts     # 音域、音度の重み、オクターブ跳躍
-│   │       ├── plan.ts      # 32bar ごとの型と中心音の選択
-│   │       └── index.ts     # ベース生成器
+│   │   ├── sub/             # サブベース（リズムの型、音域とオクターブ跳躍、生成器）
+│   │   ├── reese/           # リースベース（リズムの型、生成器）
+│   │   ├── stab/            # スタブ（リズムの型、生成器）
+│   │   └── pad/             # パッド（声部連結のボイシング、生成器）
 │   ├── random/rng.ts        # シード付き PRNG、シード派生
-│   ├── params/store.ts      # パラメーター管理
-│   ├── ui/                  # 操作パネル、小節位置、ステップグリッド
+│   ├── params/
+│   │   ├── store.ts         # パラメーター管理
+│   │   └── mixer.ts         # ミキサーとダッキングの設定
+│   ├── ui/                  # 操作パネル、小節位置とコード、ステップグリッド、ミキサー
 │   └── main.ts
 ├── tools/
 │   ├── simulate.ts          # オフライン長時間生成と統計出力
@@ -93,7 +100,7 @@ npm run dev
 | `npm run dev` | 開発サーバーを起動 |
 | `npm run build` | 本番用ビルド |
 | `npm test` | 単体テストを実行 |
-| `npm run simulate -- --bars 4096 --seed 42` | 音声なしで長時間生成し、密度・反復率・32bar の役割ごとの密度・ベースの統計を出力（`--m2` `--m8` `--m32` `--energy` `--fill` `--key` `--json` も指定可） |
+| `npm run simulate -- --bars 4096 --seed 42` | 音声なしで長時間生成し、密度・反復率・32bar の役割ごとの密度・進行・各パートの統計を出力（`--m2` `--m8` `--m32` `--energy` `--fill` `--key` `--json` も指定可） |
 | `npm run samples` | 仮のドラムサンプルを `public/samples/drums/` に合成し直す |
 | `npm run typecheck` | 型検査 |
 

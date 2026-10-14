@@ -36,9 +36,15 @@ export const TAG = {
   transition: 7,
   ornament: 8,
   thin: 9,
-  bassStyle: 10,
-  bassRhythm: 11,
-  bassPitch: 12,
+  subStyle: 10,
+  subRhythm: 11,
+  subPitch: 12,
+  progression: 13,
+  reeseStyle: 14,
+  reeseRhythm: 15,
+  reesePitch: 16,
+  stabStyle: 17,
+  stabRhythm: 18,
 } as const;
 export const REL = { repeat: 1, variant: 2 } as const;
 

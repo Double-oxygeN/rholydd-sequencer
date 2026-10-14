@@ -2,6 +2,7 @@ import { toSeed, type Seed } from '../random/rng.ts';
 import type { LiveParams } from '../structure/conductor.ts';
 import { DEFAULT_KEY, type Key } from '../structure/key.ts';
 import { clampUnit, type Brand, type UnitInterval } from '../units.ts';
+import { DEFAULT_DUCKING, DEFAULT_MIXER, type DuckingSettings, type MixerSettings } from './mixer.ts';
 
 /** Tempo in [160, 180] BPM. */
 export type Bpm = Brand<number, 'Bpm'>;
@@ -20,6 +21,10 @@ export interface Params extends LiveParams {
   readonly volume: UnitInterval;
   readonly seed: Seed;
   readonly key: Key;
+  /** Only shapes the sound and never reaches the ensemble. */
+  readonly mixer: MixerSettings;
+  /** Read each time 2 bars are scheduled. Never reaches the ensemble either. */
+  readonly ducking: DuckingSettings;
 }
 
 export function randomSeed(): Seed {
@@ -43,6 +48,8 @@ export function defaultParams(): Params {
     volume: clampUnit(0.8),
     seed: randomSeed(),
     key: DEFAULT_KEY,
+    mixer: DEFAULT_MIXER,
+    ducking: DEFAULT_DUCKING,
   };
 }
 

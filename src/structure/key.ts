@@ -37,6 +37,16 @@ export function degreeOf(key: Key, note: number): ScaleDegree | undefined {
   return degree < 0 ? undefined : (degree as ScaleDegree);
 }
 
+const SHARP_NAMES = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B'] as const;
+const FLAT_NAMES = ['C', 'D♭', 'D', 'E♭', 'E', 'F', 'G♭', 'G', 'A♭', 'A', 'B♭', 'B'] as const;
+// Minor keys written with sharps: E, B, F♯ and C♯. A minor has neither, and the rest use flats.
+const SHARP_KEYS: readonly number[] = [1, 4, 6, 11];
+
+/** Name of a pitch class spelled the way the key signature writes it, such as D♭ rather than C♯ in F minor. */
+export function noteNameIn(key: Key, pitchClass: PitchClass): string {
+  return (SHARP_KEYS.includes(key) ? SHARP_NAMES : FLAT_NAMES)[pitchClass] ?? '';
+}
+
 // Enharmonic spellings that KEY_NAMES does not use.
 const KEY_ALIASES: Readonly<Record<string, Key>> = {
   'D♭': 1 as Key,

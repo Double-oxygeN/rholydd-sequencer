@@ -36,8 +36,8 @@ describe('MVP acceptance', () => {
     }
   });
 
-  it('plays the composed drum layers followed by the bass', () => {
-    const viaLayers = run(42, 256).map((pair) => [...pair.events, ...pair.bass.notes]);
+  it('plays the composed drum layers followed by the pitched parts', () => {
+    const viaLayers = run(42, 256).map((pair) => [...pair.events, ...pair.pitched]);
     expect(generateBars(42, 256)).toEqual(viaLayers);
   });
 
@@ -120,7 +120,7 @@ describe('MVP acceptance', () => {
     }
   });
 
-  it('generates 2 bars of drums and bass in 5 ms or less on average', () => {
+  it('generates 2 bars of every part in 5 ms or less on average', () => {
     const ensemble = createEnsemble({ seed: toSeed(42), key: DEFAULT_KEY });
     const pairs = 2048;
     const start = performance.now();

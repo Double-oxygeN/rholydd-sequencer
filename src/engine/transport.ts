@@ -2,8 +2,10 @@ import * as Tone from 'tone';
 import { createEnsemble, type SessionSettings } from '../generators/ensemble.ts';
 import { STEPS_PER_BAR, type NoteEvent, type Step } from '../generators/types.ts';
 import type { Bpm } from '../params/store.ts';
+import type { DuckingSettings } from '../params/mixer.ts';
 import type { Context, LiveParams } from '../structure/conductor.ts';
 import type { Instruments } from './audio.ts';
+import type { Seconds } from './ducking.ts';
 
 /** Fixed for the whole session: BPM, seed and key only change between stop and play. */
 export interface PlaybackSettings extends SessionSettings {
@@ -22,7 +24,16 @@ export interface Sequencer {
   stop(): void;
 }
 
-export function createSequencer(instruments: Instruments, readLive: () => LiveParams, listener: PlaybackListener): Sequencer {
+/** What the sequencer reads each time it schedules 2 bars. */
+export interface PlaybackParams extends LiveParams {
+  readonly ducking: DuckingSettings;
+}
+
+export function createSequencer(
+  instruments: Instruments,
+  readParams: () => PlaybackParams,
+  listener: PlaybackListener,
+): Sequencer {
   const transport = Tone.getTransport();
   const draw = Tone.getDraw();
 
@@ -34,18 +45,29 @@ export function createSequencer(instruments: Instruments, readLive: () => LivePa
       transport.bpm.value = bpm;
       transport.scheduleRepeat(
         (time) => {
-          const { ctx, events } = ensemble.next(readLive());
+          const { ducking, ...live } = readParams();
+          const { ctx, events } = ensemble.next(liveOnly(live));
           for (const event of events) {
             const at = time + event.step * stepSeconds;
             switch (event.instrument) {
               case 'drums':
                 instruments.drum(event.part, at, event.velocity);
                 break;
-              case 'bass':
-                instruments.bass(event.pitch, at, event.length * stepSeconds, event.velocity);
+              case 'sub':
+                instruments.sub(event.pitch, at, event.length * stepSeconds, event.velocity);
+                break;
+              case 'reese':
+                instruments.reese(event.pitch, at, event.length * stepSeconds, event.velocity);
+                break;
+              case 'stab':
+              case 'pad':
+                instruments.chord(event.instrument, event.voicing, at, event.length * stepSeconds, event.velocity);
                 break;
             }
           }
+          // The kicks that actually sound, not the ones a fill replaced: a dropped kick needs no room.
+          const kicks = ctx.drums.hits.filter((hit) => hit.part === 'kick').map((hit) => (time + hit.step * stepSeconds) as Seconds);
+          instruments.duck(kicks, ducking);
           draw.schedule(() => listener.pairStarted(ctx, events), time);
           for (let step = 0; step < STEPS_PER_BAR * 2; step++) {
             draw.schedule(() => listener.stepStarted(ctx, step as Step), time + step * stepSeconds);
@@ -65,4 +87,9 @@ export function createSequencer(instruments: Instruments, readLive: () => LivePa
       instruments.silence();
     },
   };
+}
+
+/** Copies just the generation parameters, so that nothing about the sound reaches the ensemble (N-11). */
+function liveOnly({ m2, m8, m32, fillIntensity, energyDepth }: LiveParams): LiveParams {
+  return { m2, m8, m32, fillIntensity, energyDepth };
 }

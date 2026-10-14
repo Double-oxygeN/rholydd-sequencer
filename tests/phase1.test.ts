@@ -7,7 +7,7 @@ import { PARTS, type Step } from '../src/generators/types.ts';
 import { toSeed } from '../src/random/rng.ts';
 import { ALL_KEYS, DEFAULT_KEY, degreeOf } from '../src/structure/key.ts';
 import { simulate } from '../tools/simulate.ts';
-import { DEFAULT_LIVE, PARAM_SETS, SEEDS, liveParams, run, type GeneratedPair } from './helpers.ts';
+import { DEFAULT_LIVE, PARAM_SETS, SEEDS, liveParams, relativeShape, run, type GeneratedPair } from './helpers.ts';
 
 // Automated acceptance criteria from docs/specs/phase1/requirements.md.
 
@@ -136,13 +136,13 @@ describe('phase 1 acceptance: bass', () => {
 
   it('keeps every note in the natural minor of the key between F1 and E3, starting each 2 bars between F1 and E2', () => {
     for (const key of ALL_KEYS) {
-      for (const { bass } of run(42, 256, () => DEFAULT_LIVE, key)) {
-        for (const note of bass.notes) {
+      for (const { sub } of run(42, 256, () => DEFAULT_LIVE, key)) {
+        for (const note of sub.notes) {
           expect(degreeOf(key, note.pitch)).toBeDefined();
           expect(note.pitch).toBeGreaterThanOrEqual(29);
           expect(note.pitch).toBeLessThanOrEqual(52);
         }
-        if (bass.notes[0] !== undefined) expect(bass.notes[0].pitch).toBeLessThanOrEqual(40);
+        if (sub.notes[0] !== undefined) expect(sub.notes[0].pitch).toBeLessThanOrEqual(40);
       }
     }
   });
@@ -150,7 +150,7 @@ describe('phase 1 acceptance: bass', () => {
   it('keeps notes inside the 2 bars and out of the big fill at the end of 32 bars', () => {
     for (const pairs of runs) {
       for (const pair of pairs) {
-        for (const note of pair.bass.notes) {
+        for (const note of pair.sub.notes) {
           expect(note.length).toBeGreaterThanOrEqual(1);
           expect(note.step + note.length).toBeLessThanOrEqual(cutFrom(pair));
         }
@@ -163,12 +163,12 @@ describe('phase 1 acceptance: bass', () => {
     for (const pairs of runs) {
       for (const pair of pairs) {
         const cut = cutFrom(pair);
-        if (cut > 0) expect(pair.bass.notes[0]?.step).toBe(0);
-        else expect(pair.bass.notes).toEqual([]);
-        if (pair.bass.style !== 'kickFollow') continue;
+        if (cut > 0) expect(pair.sub.notes[0]?.step).toBe(0);
+        else expect(pair.sub.notes).toEqual([]);
+        if (pair.sub.style !== 'kickFollow') continue;
         kickFollowPairs++;
         const kicks = layersKicks(pair).filter((step) => step < cut);
-        expect(pair.bass.notes.map((n) => n.step)).toEqual(kicks);
+        expect(pair.sub.notes.map((n) => n.step)).toEqual(kicks);
       }
     }
     expect(kickFollowPairs).toBeGreaterThan(0);
@@ -182,9 +182,9 @@ describe('phase 1 acceptance: bass', () => {
       for (let i = 0; i < withFills.length; i++) {
         const pair = withFills[i]!;
         if (pair.ctx.isSectionEnd && pair.ctx.sectionRole.isPhraseEnd) continue;
-        expect(pair.bass).toEqual(without[i]!.bass);
+        expect(pair.sub).toEqual(without[i]!.sub);
         const from = pair.ctx.drums.fill?.from ?? 32;
-        notesInFills += pair.bass.notes.filter((n) => n.step + n.length > from).length;
+        notesInFills += pair.sub.notes.filter((n) => n.step + n.length > from).length;
       }
     }
     expect(notesInFills).toBeGreaterThan(0);
@@ -194,16 +194,18 @@ describe('phase 1 acceptance: bass', () => {
     for (const pairs of runs) {
       for (let i = 0; i + 8 < pairs.length; i += 16) {
         expect(pairs[i + 8]!.ctx.sectionRole.relation).toBe('transition');
-        expect(pairs[i + 8]!.bass.style).not.toBe(pairs[i]!.bass.style);
+        expect(pairs[i + 8]!.sub.style).not.toBe(pairs[i]!.sub.style);
       }
     }
   });
 
-  it('repeats the same bass for the three repeat units of each 8 bars', () => {
+  // Revised in phase 2: the chord changes every 2 bars, so the repeat units match relative to their chords.
+  it('repeats the same bass relative to the chord for the three repeat units of each 8 bars', () => {
     for (const pairs of runs) {
       for (let i = 0; i < pairs.length; i += 4) {
-        expect(pairs[i + 1]!.bass).toEqual(pairs[i]!.bass);
-        expect(pairs[i + 2]!.bass).toEqual(pairs[i]!.bass);
+        const shape = (pair: GeneratedPair) => relativeShape(pair.ctx, pair.sub.notes);
+        expect(shape(pairs[i + 1]!)).toEqual(shape(pairs[i]!));
+        expect(shape(pairs[i + 2]!)).toEqual(shape(pairs[i]!));
       }
     }
   });
@@ -215,8 +217,8 @@ describe('phase 1 acceptance: bass', () => {
         const other = run(seed, 512, () => DEFAULT_LIVE, key);
         for (let i = 0; i < inF.length; i++) {
           expect(other[i]!.events).toEqual(inF[i]!.events);
-          const a = inF[i]!.bass.notes;
-          const b = other[i]!.bass.notes;
+          const a = inF[i]!.sub.notes;
+          const b = other[i]!.sub.notes;
           expect(b.map((n) => [n.step, n.length])).toEqual(a.map((n) => [n.step, n.length]));
           for (let j = 0; j < a.length; j++) {
             expect((((b[j]!.pitch - a[j]!.pitch - (key - DEFAULT_KEY)) % 12) + 12) % 12).toBe(0);
