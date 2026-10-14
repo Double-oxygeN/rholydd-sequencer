@@ -1,10 +1,18 @@
 import { PARTS, STEPS_PER_BAR, STEPS_PER_PAIR, type NoteEvent, type Part, type Pitch, type Step } from '../generators/types.ts';
 import { KEY_NAMES } from '../structure/key.ts';
 
-type Row = Part | 'sub';
+type Row = Part | 'sub' | 'reese' | 'stab';
 
-const ROWS: readonly Row[] = [...PARTS, 'sub'];
-const ROW_LABEL: Readonly<Record<Row, string>> = { kick: 'Kick', snare: 'Snare', hat: 'Hat', ghost: 'Ghost', sub: 'Sub' };
+const ROWS: readonly Row[] = [...PARTS, 'sub', 'reese', 'stab'];
+const ROW_LABEL: Readonly<Record<Row, string>> = {
+  kick: 'Kick',
+  snare: 'Snare',
+  hat: 'Hat',
+  ghost: 'Ghost',
+  sub: 'Sub',
+  reese: 'Reese',
+  stab: 'Stab',
+};
 
 export interface StepGrid {
   readonly element: HTMLElement;
@@ -56,14 +64,15 @@ export function createStepGrid(): StepGrid {
           case 'drums':
             paint(event.part, event.step, event.layer, event.velocity);
             break;
-          case 'sub': {
-            const name = noteName(event.pitch);
-            paint('sub', event.step, 'note', event.velocity, name);
-            for (let i = 1; i < event.length; i++) paint('sub', event.step + i, 'sustain', event.velocity, name);
+          case 'sub':
+          case 'reese':
+          case 'stab': {
+            const name = 'pitch' in event ? noteName(event.pitch) : event.voicing.map(noteName).join(' ');
+            paint(event.instrument, event.step, 'note', event.velocity, name);
+            for (let i = 1; i < event.length; i++) paint(event.instrument, event.step + i, 'sustain', event.velocity, name);
             break;
           }
-          case 'reese':
-          case 'stab':
+          // The pad holds one chord for the whole 2 bars, which the chord name above already shows.
           case 'pad':
             break;
         }
