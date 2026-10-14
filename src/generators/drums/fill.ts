@@ -1,4 +1,4 @@
-import { createRng, type Seed } from '../../random/rng.ts';
+import { createRng, pickWeighted, type Seed } from '../../random/rng.ts';
 import type { UnitInterval } from '../../units.ts';
 import { STEPS_PER_PAIR, stepRange, type NoteEvent, type Part, type Step, type Velocity } from '../types.ts';
 import { isAnchorStep } from './weights.ts';
@@ -6,9 +6,19 @@ import { isAnchorStep } from './weights.ts';
 export const FILL_KINDS = ['snareRoll', 'ghostRush', 'dropout', 'kickSolo', 'snareSolo', 'hatSolo'] as const;
 export type FillKind = (typeof FILL_KINDS)[number];
 
-/** The last 1 or 2 beats of the 8th bar. */
-export const FILL_LENGTHS = [4, 8] as const;
-export type FillLength = (typeof FILL_LENGTHS)[number];
+/**
+ * Steps counted back from the end of the 8th bar: 1 beat, 2 beats, the whole 8th bar, or bars 7 and 8.
+ * Longer fills are rarer so that they keep their impact.
+ */
+const LENGTH_CHANCES = [
+  [4, 0.4],
+  [8, 0.4],
+  [16, 0.15],
+  [32, 0.05],
+] as const;
+
+export type FillLength = (typeof LENGTH_CHANCES)[number][0];
+export const FILL_LENGTHS: readonly FillLength[] = LENGTH_CHANCES.map(([length]) => length);
 
 export interface Fill {
   readonly kind: FillKind;
@@ -47,7 +57,7 @@ export function fill(seed: Seed, intensity: UnitInterval): Fill | null {
   // All draws happen before the decision so that changing the intensity only switches the fill on or off.
   const fires = rng.float() < intensity;
   const kind = FILL_KINDS[rng.int(FILL_KINDS.length)] ?? 'snareRoll';
-  const length = FILL_LENGTHS[rng.int(FILL_LENGTHS.length)] ?? 4;
+  const length = FILL_LENGTHS[pickWeighted(rng, LENGTH_CHANCES.map(([, chance]) => chance)) ?? 0] ?? 4;
   if (!fires) return null;
   const start = STEPS_PER_PAIR - length;
   const steps = stepRange(start, STEPS_PER_PAIR);

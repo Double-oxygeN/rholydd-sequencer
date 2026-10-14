@@ -1,6 +1,6 @@
 import { parseArgs } from 'node:util';
 import { compose } from '../src/generators/drums/compose.ts';
-import { FILL_KINDS, type FillKind } from '../src/generators/drums/fill.ts';
+import { FILL_KINDS, FILL_LENGTHS, type FillKind, type FillLength } from '../src/generators/drums/fill.ts';
 import { createDrumGenerator } from '../src/generators/drums/index.ts';
 import { motifCell, patternsEqual, type Pattern } from '../src/generators/drums/pattern.ts';
 import { slotsOf } from '../src/generators/drums/weights.ts';
@@ -39,6 +39,7 @@ export interface SimulationReport {
     readonly distinctBasePatterns: number;
   };
   readonly fills: Record<FillKind | 'none', number>;
+  readonly fillLengths: Record<FillLength, number>;
   readonly generationMs: { readonly mean: number; readonly max: number };
 }
 
@@ -54,6 +55,7 @@ export function simulate({ bars, seed, live }: SimulationOptions): SimulationRep
   const changedSections = perPart(() => 0);
   const changedCells = perPart(() => 0);
   const fills = Object.fromEntries([...FILL_KINDS, 'none'].map((kind) => [kind, 0])) as Record<FillKind | 'none', number>;
+  const fillLengths = Object.fromEntries(FILL_LENGTHS.map((length) => [length, 0])) as Record<FillLength, number>;
   const distinctBases = new Set<string>();
   let repeatedPairs = 0;
   let repeatedSections = 0;
@@ -96,6 +98,7 @@ export function simulate({ bars, seed, live }: SimulationOptions): SimulationRep
       previousBase = layers.base;
     }
     if (ctx.isSectionEnd) fills[layers.fill?.kind ?? 'none']++;
+    if (layers.fill !== null) fillLengths[layers.fill.length]++;
   }
 
   const barCount = pairs * 2;
@@ -117,6 +120,7 @@ export function simulate({ bars, seed, live }: SimulationOptions): SimulationRep
       distinctBasePatterns: distinctBases.size,
     },
     fills,
+    fillLengths,
     generationMs: { mean: totalMs / pairs, max: maxMs },
   };
 }
@@ -156,6 +160,9 @@ function formatReport(report: SimulationReport): string {
     '',
     'Fills (per 8 bars)',
     ...Object.entries(report.fills).map(([kind, count]) => `  ${kind.padEnd(10)} ${String(count).padStart(6)}`),
+    '',
+    'Fill lengths (steps)',
+    ...Object.entries(report.fillLengths).map(([length, count]) => `  ${length.padStart(2)} steps  ${String(count).padStart(6)}`),
     '',
     `Generation time per 2 bars: mean ${report.generationMs.mean.toFixed(3)} ms, max ${report.generationMs.max.toFixed(3)} ms`,
   ];

@@ -126,15 +126,20 @@ describe('fill', () => {
     }
   });
 
-  it('covers the last 1 or 2 beats with every template', () => {
+  it('covers the end of the 8th bar, choosing 16 and 32 steps less often than 8', () => {
     const kinds = new Set<string>();
-    for (let i = 0; i < 400; i++) {
+    const lengths = new Map<number, number>();
+    for (let i = 0; i < 4000; i++) {
       const result = fill(hash(i), clampUnit(1))!;
       kinds.add(result.kind);
+      lengths.set(result.length, (lengths.get(result.length) ?? 0) + 1);
       expect(result.steps).toEqual(ALL_STEPS.slice(32 - result.length));
       for (const event of result.events) expect(result.steps).toContain(event.step);
     }
     expect([...kinds].sort()).toEqual([...FILL_KINDS].sort());
+    expect([...lengths.keys()].sort((a, b) => a - b)).toEqual([4, 8, 16, 32]);
+    expect(lengths.get(16)!).toBeLessThan(lengths.get(8)!);
+    expect(lengths.get(32)!).toBeLessThan(lengths.get(16)!);
   });
 });
 
