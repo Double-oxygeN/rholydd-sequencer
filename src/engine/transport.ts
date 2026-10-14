@@ -47,7 +47,7 @@ export function createSequencer(
       transport.scheduleRepeat(
         (time) => {
           const { ducking, ...live } = readParams();
-          const { ctx, events } = ensemble.next(liveOnly(live));
+          const { ctx, events, fx } = ensemble.next(liveOnly(live));
           for (const event of events) {
             const at = time + event.step * stepSeconds;
             switch (event.instrument) {
@@ -71,6 +71,7 @@ export function createSequencer(
             .filter((hit) => hit.part === 'kick')
             .map((hit) => (time + hit.step * stepSeconds) as Seconds);
           instruments.duck(kicks, ducking);
+          instruments.fx(fx, time as Seconds, stepSeconds);
           draw.schedule(() => listener.pairStarted(ctx, events), time);
           for (let step = 0; step < STEPS_PER_BAR * 2; step++) {
             draw.schedule(() => listener.stepStarted(ctx, step as Step), time + step * stepSeconds);

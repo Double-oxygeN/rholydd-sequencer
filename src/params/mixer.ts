@@ -54,6 +54,8 @@ export interface MixerSettings {
   readonly reese: SendingChannel;
   readonly stab: SendingChannel;
   readonly pad: SendingChannel;
+  /** Risers and impacts. */
+  readonly fx: SendingChannel;
   readonly reverbReturn: Channel;
 }
 
@@ -68,6 +70,7 @@ export const CHANNEL_IDS: readonly ChannelId[] = [
   'reese',
   'stab',
   'pad',
+  'fx',
   'reverbReturn',
 ];
 
@@ -92,6 +95,7 @@ export const DEFAULT_MIXER: MixerSettings = {
   reese: wet(0, 0),
   stab: wet(-0.2, 0.35),
   pad: wet(0, 0.4),
+  fx: wet(0, 0.3),
   reverbReturn: dry(),
 };
 
