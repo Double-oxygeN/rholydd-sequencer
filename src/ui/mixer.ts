@@ -37,19 +37,27 @@ export interface MixerView {
   resetLevel(): void;
 }
 
+/** What the one slider of every channel row adjusts. */
+export const MIXER_MODES = ['level', 'pan', 'send'] as const;
+export type MixerMode = (typeof MIXER_MODES)[number];
+
+const MODE_LABEL: Readonly<Record<MixerMode, string>> = { level: '音量', pan: 'パン', send: 'センド' };
+
 export function createMixerView(store: ParamStore): MixerView {
   const element = document.createElement('section');
   element.className = 'mixer';
   const table = document.createElement('div');
   table.className = 'mixer-table';
-  table.append(...['', '音量', 'パン', 'センド', '', ''].map((text) => cell('mixer-head', text)));
-  const renders = CHANNEL_IDS.map((id) => channelRow(store, id, table));
+  const rows = CHANNEL_IDS.map((id) => channelRow(store, id, table));
+  const modes = modeSwitch((mode) => {
+    for (const r of rows) r.show(mode);
+  });
   const ducking = duckingControls(store);
   const level = levelMeter();
-  element.append(table, ducking.element, level.element);
+  element.append(modes, table, ducking.element, level.element);
 
   const render = (mixer: MixerSettings) => {
-    for (const r of renders) r(mixer);
+    for (const r of rows) r.render(mixer);
   };
   store.subscribe((params) => {
     render(params.mixer);
@@ -139,7 +147,37 @@ function field(label: string, control: HTMLElement): HTMLElement {
 }
 
 /** Appends one row of controls and returns how to show new settings in it. */
-function channelRow(store: ParamStore, id: ChannelId, table: HTMLElement): (mixer: MixerSettings) => void {
+/**
+ * One switch for all channels, so that each row needs a single slider that can take the whole width, and the
+ * channels compare at a glance on the same quantity.
+ */
+function modeSwitch(onChange: (mode: MixerMode) => void): HTMLElement {
+  const element = document.createElement('div');
+  element.className = 'mixer-modes';
+  element.setAttribute('role', 'tablist');
+  const buttons = MIXER_MODES.map((mode) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = MODE_LABEL[mode];
+    button.setAttribute('role', 'tab');
+    button.addEventListener('click', () => select(mode));
+    return button;
+  });
+  const select = (mode: MixerMode) => {
+    MIXER_MODES.forEach((m, i) => buttons[i]!.setAttribute('aria-selected', String(m === mode)));
+    onChange(mode);
+  };
+  element.append(...buttons);
+  select('level');
+  return element;
+}
+
+interface ChannelRow {
+  render(mixer: MixerSettings): void;
+  show(mode: MixerMode): void;
+}
+
+function channelRow(store: ParamStore, id: ChannelId, table: HTMLElement): ChannelRow {
   const update = (patch: Partial<{ level: Decibels; muted: boolean; soloed: boolean; pan: Pan; send: UnitInterval }>) => {
     const mixer = store.get().mixer;
     store.update({ mixer: { ...mixer, [id]: { ...mixer[id], ...patch } } });
@@ -160,15 +198,26 @@ function channelRow(store: ParamStore, id: ChannelId, table: HTMLElement): (mixe
   });
   const soloCell = isSoloable(initial) ? solo : cell('mixer-none', '');
 
-  table.append(cell('mixer-label', CHANNEL_LABEL[id]), row(level, levelOut));
+  const slots: Record<MixerMode, HTMLElement> = {
+    level: row(level, levelOut),
+    // The kick, the sub and the reverb return have no pan and no send: the low end stays mono and dry.
+    pan: cell('mixer-none', '—'),
+    send: cell('mixer-none', '—'),
+  };
+  const slot = document.createElement('div');
+  slot.className = 'mixer-slot';
+  table.append(cell('mixer-label', CHANNEL_LABEL[id]), slot, mute, soloCell);
+  const show = (mode: MixerMode) => slot.replaceChildren(slots[mode]);
   if (!isSending(initial)) {
-    table.append(cell('mixer-none', ''), cell('mixer-none', ''), mute, soloCell);
-    return (mixer) => {
-      const settings = mixer[id];
-      level.value = String(settings.level);
-      levelOut.textContent = formatLevel(settings.level);
-      showOn(mute, settings.muted);
-      if (isSoloable(settings)) showOn(solo, settings.soloed);
+    return {
+      show,
+      render(mixer) {
+        const settings = mixer[id];
+        level.value = String(settings.level);
+        levelOut.textContent = formatLevel(settings.level);
+        showOn(mute, settings.muted);
+        if (isSoloable(settings)) showOn(solo, settings.soloed);
+      },
     };
   }
 
@@ -180,19 +229,23 @@ function channelRow(store: ParamStore, id: ChannelId, table: HTMLElement): (mixe
   const send = range(0, 1, 0.01);
   send.addEventListener('input', () => update({ send: clampUnit(Number(send.value)) }));
   const sendOut = document.createElement('output');
-  table.append(row(pan, panOut), row(send, sendOut), mute, soloCell);
+  slots.pan = row(pan, panOut);
+  slots.send = row(send, sendOut);
 
-  return (mixer) => {
-    const settings = mixer[id];
-    level.value = String(settings.level);
-    levelOut.textContent = formatLevel(settings.level);
-    showOn(mute, settings.muted);
-    if (isSoloable(settings)) showOn(solo, settings.soloed);
-    if (!isSending(settings)) return;
-    pan.value = String(settings.pan);
-    panOut.textContent = formatPan(settings.pan);
-    send.value = String(settings.send);
-    sendOut.textContent = `${Math.round(settings.send * 100)}%`;
+  return {
+    show,
+    render(mixer) {
+      const settings = mixer[id];
+      level.value = String(settings.level);
+      levelOut.textContent = formatLevel(settings.level);
+      showOn(mute, settings.muted);
+      if (isSoloable(settings)) showOn(solo, settings.soloed);
+      if (!isSending(settings)) return;
+      pan.value = String(settings.pan);
+      panOut.textContent = formatPan(settings.pan);
+      send.value = String(settings.send);
+      sendOut.textContent = `${Math.round(settings.send * 100)}%`;
+    },
   };
 }
 

@@ -348,6 +348,7 @@ button:disabled {
   border-radius: 10px;
 }
 
+.mixer-modes button[aria-selected='true'],
 .spectrum canvas {
   display: block;
   width: 100%;
@@ -402,13 +403,13 @@ button:disabled {
 
 .mixer-table {
   display: grid;
-  grid-template-columns: 6em repeat(3, minmax(0, 1fr)) auto auto;
+  grid-template-columns: 6em minmax(0, 1fr) auto auto;
   gap: 6px 10px;
   align-items: center;
 }
 
-.mixer-head {
-  font-size: 0.8rem;
+.mixer-none {
+  font-size: 0.85rem;
   color: var(--muted);
 }
 
@@ -451,6 +452,12 @@ button:disabled {
   border-radius: 2px;
   background: var(--cell);
   overflow: hidden;
+.mixer-modes {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
 }
 
 .level-fill {
@@ -485,7 +492,7 @@ button.solo.on {
 
 @media (max-width: 640px) {
   .mixer-table {
-    grid-template-columns: 5.5em repeat(3, minmax(0, 1fr)) auto auto;
+    grid-template-columns: 5.5em minmax(0, 1fr) auto auto;
     gap: 6px;
   }
 
