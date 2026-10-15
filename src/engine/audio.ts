@@ -1,7 +1,14 @@
 import * as Tone from 'tone';
 import type { FxEvent } from '../generators/fx/index.ts';
 import { PARTS, type Part, type Pitch, type Velocity, type Voicing } from '../generators/types.ts';
-import { CHANNEL_IDS, isSending, type ChannelId, type DuckingSettings, type MixerSettings } from '../params/mixer.ts';
+import {
+  CHANNEL_IDS,
+  audibleChannels,
+  isSending,
+  type ChannelId,
+  type DuckingSettings,
+  type MixerSettings,
+} from '../params/mixer.ts';
 import { clampUnit, type UnitInterval } from '../units.ts';
 import { CLIP_METER_NAME, type LevelReport } from './clip.ts';
 import clipWorkletUrl from './clip-worklet.ts?worker&url';
@@ -148,9 +155,11 @@ export async function loadInstruments(
     riserGain,
   );
   new Tone.Noise('white').connect(riserFilter).start();
-  // Taken after the snare's trim but before its fader, so a throw never depends on how the snare is mixed.
+  // Taken after the snare's trim but before its fader, so a throw never depends on the snare's level. It still
+  // follows the snare's mute and the solos: a throw from a silenced snare would sound like a fault.
   const throwSend = new Tone.Gain(resting.throwSend).connect(reverbIn);
-  strips.snare.input.connect(throwSend);
+  const throwGate = new Tone.Gain(audibleChannels(mixer).snare ? 1 : 0).connect(throwSend);
+  strips.snare.input.connect(throwGate);
   const automated: Readonly<Record<AutomationTarget, readonly Automatable[]>> = {
     riserGain: [riserGain.gain],
     riserFrequency: [riserFilter.frequency],
@@ -223,7 +232,10 @@ export async function loadInstruments(
       listening.volume.rampTo(Tone.gainToDb(volume), MIXER_RAMP_SECONDS);
     },
     setMixer(next) {
-      for (const id of CHANNEL_IDS) strips[id].apply(next[id]);
+      const audible = audibleChannels(next);
+      for (const id of CHANNEL_IDS) strips[id].apply(next[id], audible[id]);
+      // Kept apart from the throw's own send, so that the mixer and the automation never move the same parameter.
+      throwGate.gain.rampTo(audible.snare ? 1 : 0, MIXER_RAMP_SECONDS);
     },
     fx(events, pairStart, stepSeconds) {
       for (const point of fxAutomation(events, pairStart, stepSeconds, sound.fx)) {
@@ -283,7 +295,7 @@ function lowpassForSweep(frequency: number): Tone.Filter {
 interface Strip {
   /** Where the source connects, after its trim. */
   readonly input: Tone.ToneAudioNode;
-  apply(settings: MixerSettings[ChannelId]): void;
+  apply(settings: MixerSettings[ChannelId], audible: boolean): void;
 }
 
 interface Buses {
@@ -295,10 +307,12 @@ interface Buses {
 const DRUM_CHANNELS: readonly ChannelId[] = PARTS;
 
 function createStrips(mixer: MixerSettings, trimDb: SoundTuning['trimDb'], buses: Buses): Record<ChannelId, Strip> {
+  const audible = audibleChannels(mixer);
   return Object.fromEntries(
     CHANNEL_IDS.map((id) => {
       const settings = mixer[id];
-      const channel = new Tone.Channel({ volume: settings.level, mute: settings.muted, pan: 0 });
+      // Tone's own solo is not used: it solos one channel at a time and silences the reverb return with the rest.
+      const channel = new Tone.Channel({ volume: settings.level, mute: !audible[id], pan: 0 });
       channel.connect(DRUM_CHANNELS.includes(id) ? buses.drums : buses.mix);
       // Taken after the fader so that pulling a part down also pulls down its reverb.
       const send = isSending(settings) ? new Tone.Gain(settings.send) : null;
@@ -306,16 +320,16 @@ function createStrips(mixer: MixerSettings, trimDb: SoundTuning['trimDb'], buses
       const input = id === 'reverbReturn' ? channel : new Tone.Volume(trimDb[id as SourceId]).connect(channel);
       const strip: Strip = {
         input,
-        apply(next) {
+        apply(next, sounds) {
           channel.volume.rampTo(next.level, MIXER_RAMP_SECONDS);
-          channel.mute = next.muted;
+          channel.mute = !sounds;
           if (isSending(next)) {
             channel.pan.rampTo(next.pan, MIXER_RAMP_SECONDS);
             send?.gain.rampTo(next.send, MIXER_RAMP_SECONDS);
           }
         },
       };
-      strip.apply(settings);
+      strip.apply(settings, audible[id]);
       return [id, strip];
     }),
   ) as Record<ChannelId, Strip>;

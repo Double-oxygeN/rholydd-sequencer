@@ -30,9 +30,15 @@ export function clampRelease(x: number): Milliseconds {
   return Math.round(Math.min(RELEASE_RANGE.max, Math.max(RELEASE_RANGE.min, x))) as Milliseconds;
 }
 
-export interface Channel {
+/** What every channel has. The reverb return has nothing more. */
+export interface Fader {
   readonly level: Decibels;
   readonly muted: boolean;
+}
+
+/** A source channel, which can be soloed. */
+export interface Channel extends Fader {
+  readonly soloed: boolean;
 }
 
 export interface PannedChannel extends Channel {
@@ -56,10 +62,12 @@ export interface MixerSettings {
   readonly pad: SendingChannel;
   /** Risers and impacts. */
   readonly fx: SendingChannel;
-  readonly reverbReturn: Channel;
+  /** Never soloed and never silenced by a solo, so that a soloed part keeps its reverb. */
+  readonly reverbReturn: Fader;
 }
 
 export type ChannelId = keyof MixerSettings;
+export type SoloableId = Exclude<ChannelId, 'reverbReturn'>;
 
 export const CHANNEL_IDS: readonly ChannelId[] = [
   'kick',
@@ -74,14 +82,35 @@ export const CHANNEL_IDS: readonly ChannelId[] = [
   'reverbReturn',
 ];
 
-export function isSending(channel: Channel): channel is SendingChannel {
+export const SOLOABLE_IDS = CHANNEL_IDS.filter((id): id is SoloableId => id !== 'reverbReturn');
+
+export function isSending(channel: Fader): channel is SendingChannel {
   return 'send' in channel;
 }
 
-const dry = (): Channel => ({ level: 0 as Decibels, muted: false });
+export function isSoloable(channel: Fader): channel is Channel {
+  return 'soloed' in channel;
+}
+
+/**
+ * Which channels sound. Once any channel is soloed, only the soloed ones do, and a mute always wins over a solo.
+ * The reverb return answers to its mute alone, so a soloed part is heard with its reverb.
+ */
+export function audibleChannels(mixer: MixerSettings): Readonly<Record<ChannelId, boolean>> {
+  const anySolo = SOLOABLE_IDS.some((id) => mixer[id].soloed);
+  return Object.fromEntries(
+    CHANNEL_IDS.map((id) => {
+      const channel = mixer[id];
+      return [id, !channel.muted && (!anySolo || !isSoloable(channel) || channel.soloed)];
+    }),
+  ) as Record<ChannelId, boolean>;
+}
+
+const dry = (): Channel => ({ level: 0 as Decibels, muted: false, soloed: false });
 const wet = (pan: number, send: number): SendingChannel => ({
   level: 0 as Decibels,
   muted: false,
+  soloed: false,
   pan: clampPan(pan),
   send: clampUnit(send),
 });
@@ -96,7 +125,7 @@ export const DEFAULT_MIXER: MixerSettings = {
   stab: wet(-0.2, 0.35),
   pad: wet(0, 0.4),
   fx: wet(0, 0.3),
-  reverbReturn: dry(),
+  reverbReturn: { level: 0 as Decibels, muted: false },
 };
 
 export interface DuckingSettings {

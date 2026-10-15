@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { STAB_LOWEST, STAB_SPAN } from '../src/generators/stab/index.ts';
+import { CHANNEL_IDS, DEFAULT_MIXER, SOLOABLE_IDS, audibleChannels, type MixerSettings } from '../src/params/mixer.ts';
 import type { PitchedEvent } from '../src/generators/types.ts';
 import { toSeed } from '../src/random/rng.ts';
 import { chordOf } from '../src/structure/conductor.ts';
@@ -184,5 +185,32 @@ describe('phase 4 acceptance: the sequencer', () => {
         expect(run(seed, 8192, () => liveParams(0.3, 0.35, fill)).some(overlap)).toBe(false);
       }
     }
+  });
+});
+
+describe('phase 4 acceptance: solo', () => {
+  const withFlags = (soloed: readonly string[], muted: readonly string[] = []): MixerSettings =>
+    Object.fromEntries(
+      CHANNEL_IDS.map((id) => {
+        const channel = DEFAULT_MIXER[id];
+        const flags = { muted: muted.includes(id), ...('soloed' in channel ? { soloed: soloed.includes(id) } : {}) };
+        return [id, { ...channel, ...flags }];
+      }),
+    ) as unknown as MixerSettings;
+
+  it('plays every unmuted channel when nothing is soloed', () => {
+    expect(Object.values(audibleChannels(withFlags([])))).toEqual(CHANNEL_IDS.map(() => true));
+    expect(audibleChannels(withFlags([], ['kick', 'reverbReturn']))).toMatchObject({ kick: false, reverbReturn: false, snare: true });
+  });
+
+  it('plays only the soloed channels and the reverb return once any is soloed, adding solos together', () => {
+    const audible = audibleChannels(withFlags(['snare', 'pad']));
+    for (const id of SOLOABLE_IDS) expect(audible[id]).toBe(id === 'snare' || id === 'pad');
+    expect(audible.reverbReturn).toBe(true);
+  });
+
+  it('lets a mute win over a solo, on the reverb return too', () => {
+    expect(audibleChannels(withFlags(['snare'], ['snare'])).snare).toBe(false);
+    expect(audibleChannels(withFlags(['snare'], ['reverbReturn'])).reverbReturn).toBe(false);
   });
 });

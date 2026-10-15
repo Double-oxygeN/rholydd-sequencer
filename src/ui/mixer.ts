@@ -6,6 +6,7 @@ import {
   clampRelease,
   clampPan,
   isSending,
+  isSoloable,
   type ChannelId,
   type Decibels,
   type DuckingSettings,
@@ -41,7 +42,7 @@ export function createMixerView(store: ParamStore): MixerView {
   element.className = 'mixer';
   const table = document.createElement('div');
   table.className = 'mixer-table';
-  table.append(...['', '音量', 'パン', 'センド', ''].map((text) => cell('mixer-head', text)));
+  table.append(...['', '音量', 'パン', 'センド', '', ''].map((text) => cell('mixer-head', text)));
   const renders = CHANNEL_IDS.map((id) => channelRow(store, id, table));
   const ducking = duckingControls(store);
   const level = levelMeter();
@@ -139,7 +140,7 @@ function field(label: string, control: HTMLElement): HTMLElement {
 
 /** Appends one row of controls and returns how to show new settings in it. */
 function channelRow(store: ParamStore, id: ChannelId, table: HTMLElement): (mixer: MixerSettings) => void {
-  const update = (patch: Partial<{ level: Decibels; muted: boolean; pan: Pan; send: UnitInterval }>) => {
+  const update = (patch: Partial<{ level: Decibels; muted: boolean; soloed: boolean; pan: Pan; send: UnitInterval }>) => {
     const mixer = store.get().mixer;
     store.update({ mixer: { ...mixer, [id]: { ...mixer[id], ...patch } } });
   };
@@ -149,21 +150,25 @@ function channelRow(store: ParamStore, id: ChannelId, table: HTMLElement): (mixe
   level.addEventListener('input', () => update({ level: clampLevel(Number(level.value)) }));
   const levelOut = document.createElement('output');
 
-  const mute = document.createElement('button');
-  mute.type = 'button';
-  mute.className = 'mute';
-  mute.textContent = 'M';
-  mute.title = 'ミュート';
+  const mute = toggle('M', 'mute', 'ミュート');
   mute.addEventListener('click', () => update({ muted: !store.get().mixer[id].muted }));
+
+  const solo = toggle('S', 'solo', 'ソロ');
+  solo.addEventListener('click', () => {
+    const settings = store.get().mixer[id];
+    if (isSoloable(settings)) update({ soloed: !settings.soloed });
+  });
+  const soloCell = isSoloable(initial) ? solo : cell('mixer-none', '');
 
   table.append(cell('mixer-label', CHANNEL_LABEL[id]), row(level, levelOut));
   if (!isSending(initial)) {
-    table.append(cell('mixer-none', ''), cell('mixer-none', ''), mute);
+    table.append(cell('mixer-none', ''), cell('mixer-none', ''), mute, soloCell);
     return (mixer) => {
       const settings = mixer[id];
       level.value = String(settings.level);
       levelOut.textContent = formatLevel(settings.level);
-      showMuted(mute, settings.muted);
+      showOn(mute, settings.muted);
+      if (isSoloable(settings)) showOn(solo, settings.soloed);
     };
   }
 
@@ -175,13 +180,14 @@ function channelRow(store: ParamStore, id: ChannelId, table: HTMLElement): (mixe
   const send = range(0, 1, 0.01);
   send.addEventListener('input', () => update({ send: clampUnit(Number(send.value)) }));
   const sendOut = document.createElement('output');
-  table.append(row(pan, panOut), row(send, sendOut), mute);
+  table.append(row(pan, panOut), row(send, sendOut), mute, soloCell);
 
   return (mixer) => {
     const settings = mixer[id];
     level.value = String(settings.level);
     levelOut.textContent = formatLevel(settings.level);
-    showMuted(mute, settings.muted);
+    showOn(mute, settings.muted);
+    if (isSoloable(settings)) showOn(solo, settings.soloed);
     if (!isSending(settings)) return;
     pan.value = String(settings.pan);
     panOut.textContent = formatPan(settings.pan);
@@ -190,9 +196,18 @@ function channelRow(store: ParamStore, id: ChannelId, table: HTMLElement): (mixe
   };
 }
 
-function showMuted(button: HTMLButtonElement, muted: boolean): void {
-  button.classList.toggle('on', muted);
-  button.setAttribute('aria-pressed', String(muted));
+function showOn(button: HTMLButtonElement, on: boolean): void {
+  button.classList.toggle('on', on);
+  button.setAttribute('aria-pressed', String(on));
+}
+
+function toggle(text: string, className: string, title: string): HTMLButtonElement {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = className;
+  button.textContent = text;
+  button.title = title;
+  return button;
 }
 
 function formatLevel(level: Decibels): string {

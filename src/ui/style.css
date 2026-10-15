@@ -10,6 +10,7 @@
   --ornament: #1a9e74;
   --fill: #e08a1e;
   --bass: #7a4fd6;
+  --solo: #e6c229;
   color-scheme: light;
 }
 
@@ -26,6 +27,7 @@
     --ornament: #45cf9f;
     --fill: #ffb24d;
     --bass: #b18cff;
+    --solo: #f2d75c;
     color-scheme: dark;
   }
 }
@@ -280,7 +282,7 @@ button.play.playing {
 
 .mixer-table {
   display: grid;
-  grid-template-columns: 7em repeat(3, minmax(0, 1fr)) auto;
+  grid-template-columns: 7em repeat(3, minmax(0, 1fr)) auto auto;
   gap: 6px 12px;
   align-items: center;
 }
@@ -337,7 +339,8 @@ button.play.playing {
   font-weight: 700;
 }
 
-button.mute {
+button.mute,
+button.solo {
   width: 2.2em;
   padding: 4px 0;
   font-weight: 700;
@@ -349,9 +352,15 @@ button.mute.on {
   color: #fff;
 }
 
+button.solo.on {
+  background: var(--solo);
+  border-color: var(--solo);
+  color: #000;
+}
+
 @media (max-width: 640px) {
   .mixer-table {
-    grid-template-columns: 5.5em repeat(3, minmax(0, 1fr)) auto;
+    grid-template-columns: 5.5em repeat(3, minmax(0, 1fr)) auto auto;
     gap: 6px;
   }
 
