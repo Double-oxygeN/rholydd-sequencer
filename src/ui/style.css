@@ -118,8 +118,9 @@ h1 {
 
 .panel {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 16px;
+  /* One value per line: the menu has room to spare downwards, and the sliders get the full width. */
+  grid-template-columns: 1fr;
+  gap: 14px;
   padding: 16px;
   background: var(--panel);
   border: 1px solid var(--line);
@@ -130,6 +131,11 @@ h1 {
   display: grid;
   gap: 4px;
   align-content: start;
+}
+
+.panel .field {
+  grid-template-columns: 9em minmax(0, 1fr);
+  align-items: center;
 }
 
 .field-label {
