@@ -377,6 +377,9 @@ type VoiceInputs = {
 // Falls from about 98 Hz, and the high-pass keeps it clear of the kick's and the sub's fundamentals.
 const IMPACT_BOOM_NOTE = 'G2';
 const IMPACT_SECONDS = 1.2;
+// Listening wanted the impact a little below the drop it lands with. Set on the synths, as the other per-sound
+// levels are, so that the riser on the same channel keeps its level.
+const IMPACT_VOLUME_DB = -3;
 
 function createVoices(to: VoiceInputs): Voices {
   return {
@@ -391,10 +394,12 @@ function createVoices(to: VoiceInputs): Voices {
       pitchDecay: 0.4,
       octaves: 3,
       envelope: { attack: 0.002, decay: 1, sustain: 0, release: 0.4 },
+      volume: IMPACT_VOLUME_DB,
     }).connect(to.impact),
     impactNoise: new Tone.NoiseSynth({
       noise: { type: 'white' },
       envelope: { attack: 0.002, decay: IMPACT_SECONDS, sustain: 0, release: 0.2 },
+      volume: IMPACT_VOLUME_DB,
     }).connect(to.impact),
   };
 }
