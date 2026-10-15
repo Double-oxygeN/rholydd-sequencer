@@ -34,16 +34,25 @@ export function createControls(store: ParamStore): Controls {
   volume.addEventListener('input', () => store.update({ volume: clampUnit(Number(volume.value)) }));
   const volumeIcon = document.createElement('span');
   volumeIcon.className = 'volume-icon';
+  // The level shows above the thumb only while the slider is pointed at or moved, to keep the bar uncluttered.
+  const slider = document.createElement('span');
+  slider.className = 'volume-slider';
+  const value = document.createElement('output');
+  value.className = 'volume-value';
+  slider.append(volume, value);
   const render = () => {
     const { volume: level } = store.get();
     volume.value = String(level);
+    value.textContent = `${Math.round(level * 100)}%`;
+    slider.style.setProperty('--value', String(level));
     volumeIcon.replaceChildren(icon(level > 0 ? Volume2 : VolumeX));
   };
   store.subscribe(render);
   render();
+  showWhileAdjusting(slider, volume);
   const volumeLabel = document.createElement('label');
   volumeLabel.className = 'volume';
-  volumeLabel.append(volumeIcon, volume);
+  volumeLabel.append(volumeIcon, slider);
 
   element.append(play, stop, volumeLabel);
   return {
@@ -60,4 +69,29 @@ export function createControls(store: ParamStore): Controls {
       stop.addEventListener('click', handler);
     },
   };
+}
+
+// How long the level stays up after a key moves the slider, since keys give no sign of when they are done.
+const KEY_ADJUST_MS = 1000;
+
+/** Marks the slider as being adjusted from the press to the release, wherever the pointer goes meanwhile. */
+function showWhileAdjusting(slider: HTMLElement, input: HTMLInputElement): void {
+  let pressed = false;
+  let timer: number | undefined;
+  input.addEventListener('pointerdown', () => {
+    pressed = true;
+    slider.classList.add('adjusting');
+  });
+  window.addEventListener('pointerup', () => {
+    if (!pressed) return;
+    pressed = false;
+    slider.classList.remove('adjusting');
+  });
+  input.addEventListener('keydown', () => {
+    slider.classList.add('adjusting');
+    window.clearTimeout(timer);
+    timer = window.setTimeout(() => {
+      if (!pressed) slider.classList.remove('adjusting');
+    }, KEY_ADJUST_MS);
+  });
 }
