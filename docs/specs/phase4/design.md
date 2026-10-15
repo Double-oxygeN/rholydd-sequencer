@@ -27,6 +27,10 @@ tools/simulate ──▶ generators/ensemble
 | `src/engine/audio.ts` | 一時停止、再開位置の値からの開始、ソロ、リバーブスローの消音、スペクトラムアナライザーの取り出し | あり |
 | `src/params/mixer.ts` | ソロの欄と、鳴らすチャンネルの判定 `audibleChannels` | なし |
 | `src/params/query.ts` | クエリ文字列から初期シードを読む | なし |
+| `src/structure/tuning.ts` | 生成の調整用の数値の型と既定値（`GenerationTuning`） | なし |
+| `src/engine/tuning.ts` | 音の調整用の数値の型と既定値（`SoundTuning`） | なし |
+| `src/params/config.ts` | 設定ファイルの型、既定値、JSON の検証と既定値との合成 | なし |
+| `src/params/load-config.ts` | ブラウザで `config.json` を取りに行く | なし（`fetch` だけ） |
 | `src/ui/controls.ts` | 再生・一時停止・再開のボタン、停止のボタン、音量 | なし |
 | `src/ui/position.ts` | 累計の数値と2行のメーター | なし |
 | `src/ui/grid.ts` | スネアとゴーストを1つのレーンにまとめる | なし |
@@ -152,12 +156,12 @@ const MAIN_SKELETONS: readonly MainSkeleton[] = [
 ### 色付けの抽選
 
 ```ts
-const TENSION_CHANCE = 0.5;
-const BORROW_CHANCE = 0.4;
-
-function colorMain(skeleton: MainSkeleton, seed: Seed): MainProgression;
-function colorTransition(skeleton: TransitionSkeleton, seed: Seed): TransitionProgression;
+// 確率は GenerationTuning の harmony から受け取る。既定値は tensionChance 0.5、borrowChance 0.4（設定ファイルで上書きできる）
+function colorMain(skeleton: MainSkeleton, seed: Seed, harmony: HarmonyTuning): MainProgression;
+function colorTransition(skeleton: TransitionSkeleton, seed: Seed, harmony: HarmonyTuning): TransitionProgression;
 ```
+
+以下、要件の `TENSION_CHANCE` は `harmony.tensionChance`、`BORROW_CHANCE` は `harmony.borrowChance` のことです。
 
 どちらも `createRng(hash(seed, TAG.harmonyColor))`（`TAG.harmonyColor = 24`）から、4つのコードの順に、コードごとに4つの float を引きます。
 
@@ -321,7 +325,7 @@ function fxAutomation(events, pairStart, stepSeconds, from: Step = 0): readonly 
 | ハイパス側の割合 | ハイパスのスイープの区間がある2bar では 1、ない2bar では 0 |
 | リバーブスローの送り量 | ステップ `step` にスローがあれば 1、なければ 0 |
 | パッドのゲート | `cut` の溜めで `step ≥ from` なら 0、それ以外は 1 |
-| ほか | `RESTING_VALUE` |
+| ほか | `restingValue(sound.fx)`（フェーズ3の `RESTING_VALUE`。設定ファイルの周波数の範囲から求める） |
 
 `fxAutomation` に `from` を加えます。`from > 0` のときは、効果の始まりの点を作らず、時刻が `at(from)` より前の点を除きます。残るランプは、`open` が再開の時刻に `set` した値から、一時停止しなかった場合と同じ終点に向かうので、曲線も一致します。
 
@@ -332,7 +336,7 @@ function fxAutomation(events, pairStart, stepSeconds, from: Step = 0): readonly 
 | メソッド | 変更 |
 | --- | --- |
 | `silence(time: Seconds)` | 時刻を引数で受け取る。停止はこれまでどおり `Tone.now()`、一時停止は `Tone.immediate()` を渡す。ゲートを 10 ms で閉じる（N-17）のはフェーズ3のまま |
-| `open(time, state: FxState = RESTING_VALUE)` | `rest(time)` の後に、`state` の値を同じ時刻に `set` する。同時刻の値は後に予約したものが効く。ゲートは一気に開けず、10 ms のランプで開く。ビルドの途中で再開すると、ライザーのノイズが途中の音量で鳴っていて、無音から一気に立ち上がるとクリックになるため（N-17） |
+| `open(time, state: FxState = restingValue(sound.fx))` | `rest(time)` の後に、`state` の値を同じ時刻に `set` する。同時刻の値は後に予約したものが効く。ゲートは一気に開けず、10 ms のランプで開く。ビルドの途中で再開すると、ライザーのノイズが途中の音量で鳴っていて、無音から一気に立ち上がるとクリックになるため（N-17） |
 | `open` で作り直すもの | フェーズ3のシンセ・インパクト・リバーブに加えて、ドラムのサンプラーも、読み込み済みのバッファから作り直す（読み込み直さない） |
 
 **サンプラーを作り直す理由**: 一時停止→再開は、停止→再生と違い、同じ2bar の残り（174 BPM で最大約 2.7 秒）のうちに押されるのが普通です。`Tone.Sampler.releaseAll` は、まだ始まっていない予約済みの打音を、Tone.js の内部のタイマー（`context.setTimeout`）から止めます。そのため、止まるかどうかはタイマーが予約の時刻より前に動くかどうかに左右されます。止まらないと、一時停止の前に予約した打音がゲートを開いた後に鳴り、再開後の打音と二重になります。シンセと同じく、作り直して古い予約ごと捨てれば、タイマーの都合によらず確実に消せます。
@@ -441,7 +445,133 @@ status
 function seedFromQuery(search: string): Seed | undefined;   // new URLSearchParams(search).get('seed') を parseSeed で読む
 ```
 
-`defaultParams` は `seedFromQuery(location.search) ?? randomSeed()` を初期シードにします。`location` を読むのは `main.ts` だけにし、`defaultParams` には引数で渡します。Node.js 上のテストで `location` なしに呼べるようにするためです。
+初期シードは `seedFromQuery(location.search) ?? config.params.seed ?? randomSeed()` です（F-95）。`location` を読むのは `main.ts` だけにし、初期値を作る関数には引数で渡します。Node.js 上のテストで `location` なしに呼べるようにするためです。
+
+## 設定ファイル
+
+### 型と既定値の置き場所
+
+```ts
+// structure/tuning.ts（生成側）
+interface GenerationTuning { readonly harmony: …; readonly energy: …; readonly layout: …; readonly fill: …; readonly lines: … }
+const DEFAULT_GENERATION_TUNING: GenerationTuning;
+
+// engine/tuning.ts（音側。Tone.js に依存しない）
+interface SoundTuning { readonly trimDb: …; readonly duckRatio: …; readonly reverb: …; readonly dynamics: …; readonly fx: FxTuning }
+const DEFAULT_SOUND_TUNING: SoundTuning;
+
+// params/config.ts
+interface Config {
+  readonly params: InitialParams;          // seed だけは省略できる（Seed | undefined）
+  readonly mixer: MixerSettings;
+  readonly ducking: DuckingSettings;
+  readonly generation: GenerationTuning;
+  readonly sound: SoundTuning;
+}
+const DEFAULT_CONFIG: Config;
+```
+
+生成の数値の型と既定値を `structure` に、音の数値を `engine` に置くのは、依存の向き（`params` → `structure`、`engine` → `structure`）を変えないためです。`params/config.ts` は両方を読んで1つの `Config` にまとめるだけです。これまでモジュールの定数だった値（`MODULATION_SHARE`、`ENERGY_CURVE`、`DROP_EXTENSIONS`、`SOURCE_TRIM_DB`、`RISER` など）は、この既定値に移し、モジュールの定数としては残しません。既定値と定数を二重に持つと、どちらが効いているのかが分からなくなるためです。
+
+### 値の渡し方
+
+| 値 | 渡し先 | 渡し方 |
+| --- | --- | --- |
+| `params`・`mixer`・`ducking` | パラメーターのストアの初期値 | `initialParams(config, seed)` が `Params` を作る |
+| `generation` | アンサンブル | `SessionSettings` に `tuning` を加え、コンダクターが `Context` の `tuning` に入れる。生成器は `ctx.tuning` を読み、`sceneEnergy`・`cycleModulation`・`colorMain`・`drawLayout`・`fill` などの関数は引数で受け取る |
+| `sound` | エンジン | `loadInstruments(url, mixer, sound)`。`fxAutomation` と `fxStateAt` は `sound.fx` を引数で受け取り、`RESTING_VALUE` は `restingValue(sound.fx)` にする |
+
+生成の数値を `Context` に入れるのは、生成器がすでに `Context` だけを読む形になっていて、引数を増やさずに済むためです。値はセッションの間は変わらないので、ラッチは要りません。`sound` はアンサンブルに渡しません。音の数値を変えても展開は変わりません（N-11 と同じ考え方）。
+
+### キーと検証
+
+キーの名前は、型の欄の名前をそのまま使います。JSON の例と既定値は `config.example.json` に置きます。
+
+**`params`**
+
+| キー | 型と範囲 | 既定値 |
+| --- | --- | --- |
+| `bpm` | 160〜180 の整数 | 174 |
+| `volume`、`m2`、`m8`、`m32`、`fillIntensity`、`energyDepth` | 0〜1 | 0.5、0.3、0.35、0.6、0.3、0.5 |
+| `initialKey` | キーの名前（`parseKey` が読める文字列。`F`、`F#`、`B♭` など） | `"F"` |
+| `seed` | 0〜4294967295 の整数 | なし（乱数） |
+
+**`mixer`**: チャンネルの名前（`kick` … `fx`、`reverbReturn`）ごとに `level`（−40〜6。整数に丸める）、`pan`（−1〜1。0.01 刻みに丸める）、`send`（0〜1）、`muted`、`soloed`（真偽値）。パンとセンドのないチャンネル（キック・サブベース）にそのキーを書いたとき、`reverbReturn` に `soloed` を書いたときは、知らないキーとして無視します。`ducking` は `depth`（0〜1）と `release`（30〜300 の整数 ms）です。
+
+**`generation`**
+
+| キー | 型と範囲 | 既定値 |
+| --- | --- | --- |
+| `harmony.tensionChance`、`harmony.borrowChance` | 0〜1 | 0.5、0.4 |
+| `harmony.modulationShare` | 0〜1 | 0.5 |
+| `energy.phrase`（`A`・`A'`・`B`・`A''`） | 0〜1 | 0.75、0.9、0.5、1.0 |
+| `energy.scene`（`intro`・`buildFirst`・`buildLast`・`breakdown`） | 0〜1 | 0.5、0.6、0.75、0.4 |
+| `layout.longIntroChance`、`layout.longBreakdownChance` | 0〜1（24bar になる確率） | 0.5、0.5 |
+| `layout.dropExtension`（`none`・`first`・`second`・`both`） | 0 以上の重み | 1/3、1/6、1/6、1/3 |
+| `fill.sectionLength`（`4`・`8`・`16`・`32`）、`fill.phraseLength`（`16`・`32`） | 0 以上の重み | 0.4、0.4、0.15、0.05 と 0.6、0.4 |
+| `lines.subOctaveJumpChance` | 0〜1 | 0.2 |
+| `lines.subToneWeights`、`lines.reeseToneWeights` | 0 以上の重み4つ（`root`・`third`・`fifth`・`seventh`） | 0.5、0.1、0.15、0.1 と 0.6、0.1、0.2、0.1 |
+| `lines.velocity`（`sub`・`reese`・`stab`・`pad`・`pickup`） | 0 より大きく 1 以下 | 0.8、0.8、0.7、0.6、0.9 |
+
+**`sound`**
+
+| キー | 型と範囲 | 既定値 |
+| --- | --- | --- |
+| `trimDb`（`kick` … `fx`） | −60〜0 dB | −8、−10、−14、−8、−6、−10、−13、−16、−12 |
+| `duckRatio`（`sub`・`reese`・`pad`） | 0〜1 | 1、0.7、0.5 |
+| `reverb.decay`、`reverb.preDelay` | 0.1〜10 秒、0〜0.5 秒 | 2.5、0.02 |
+| `dynamics.drumBus`、`dynamics.masterBus`（`threshold`・`ratio`・`attack`・`release`） | −40〜0 dB、1〜20、0 より大きく 1 秒以下 | −12・3・0.01・0.1 と −10・2・0.02・0.2 |
+| `dynamics.limiterThresholdDb` | −12〜0 dB | −1 |
+| `fx.riser`（`peakGain`・`lowHz`・`highHz`） | 0〜1、20〜20000 Hz | 0.5、300、8000 |
+| `fx.highpass`（`openHz`・`closedHz`）、`fx.lowpass`（`closedHz`・`openHz`） | 20〜20000 Hz | 20・600 と 400・18000 |
+| `fx.throwSend` | 0〜1 | 1 |
+| `fx.impactVolumeDb` | −40〜0 dB | −3 |
+
+トリムと補正を 0 dB 以下に限るのは、フェーズ3の「補正はマイナスだけ」と同じく、既定の釣り合いより大きくしてクリップしない保証（N-10・N-13）を崩しにくくするためです。とはいえ、N-10・N-13 と試聴の受け入れ基準を保証するのは既定値だけで、設定ファイルで変えた値の音は保証しません。
+
+**関係の検証**: 次の組は、関係が崩れたら組ごと既定値に戻します。片方だけ戻すと、書いた人の意図とも既定値とも違う組み合わせになるためです。
+
+| 組 | 関係 | 根拠 |
+| --- | --- | --- |
+| `energy.scene.buildFirst`・`buildLast` と `energy.phrase.A` | `buildFirst ≤ buildLast ≤ A` | ビルドでエネルギーが単調に増え、ドロップの A を超えない（フェーズ3の受け入れ基準） |
+| 重みの組（`dropExtension`、`fill.*`、`*ToneWeights`） | 合計が正 | すべて0では選べない |
+| `fx.riser` | `lowHz < highHz` | 上がっていくライザーにする |
+| `fx.highpass` | `openHz < closedHz` | |
+| `fx.lowpass` | `closedHz < openHz` | |
+
+### 検証の仕組み
+
+```ts
+interface Decoded<T> { readonly value: T; readonly warnings: readonly string[] }
+function parseConfigText(text: string): Decoded<Config>;   // JSON.parse に失敗したら既定値と警告1つ
+function decodeConfig(raw: unknown): Decoded<Config>;
+```
+
+値ごとの小さな読み取り関数（`unit`、`integerIn(min, max)`、`weights`、`keyName` など）を組み合わせ、既定値の形をたどって読みます。各関数は「読んだ値か、既定値と警告」を返し、例外を投げません。警告には `generation.harmony.borrowChance` のような JSON 上の位置を含めます。既定値の形をたどるので、既定値にないキーはすべて「知らないキー」として警告できます。
+
+既存の `clampLevel`・`clampBpm` などは使いません。範囲外の値を丸めて受け入れると、書き間違いに気づけないためです。整数への丸め（`level`、`release`）とパンの 0.01 刻みは、範囲内の値にだけ行います。
+
+### 読み込み（`params/load-config.ts`）
+
+```ts
+async function loadConfig(url: string): Promise<Decoded<Config>>;
+```
+
+| 状況 | 結果 |
+| --- | --- |
+| 404 などの失敗の応答 | 既定値。警告なし（ファイルがないのは正常） |
+| 応答の Content-Type が JSON でない | 既定値。警告なし |
+| 通信の失敗 | 既定値と警告 |
+| JSON として読めない | 既定値と警告 |
+| 読めた | `decodeConfig` の結果 |
+
+`fetch` には `Accept: application/json` と `cache: 'no-store'` を付けます。Vite の開発サーバーは、`Accept` に `*/*` か `text/html` を含むリクエストで、ないファイルの代わりに `index.html` を返すためです（SPA のフォールバック）。Content-Type も確かめるのは、配布先のサーバーが同じことをしても「ファイルなし」と見なすためです。`cache: 'no-store'` は、値を書き換えて開き直したときに古いファイルを使わないようにするためです。
+
+`main.ts` は、起動の最初に `loadConfig(`${BASE_URL}config.json`)` を待ってから、ストア・パネル・エンジンを作ります。警告は1つずつ `console.warn` に出し、1つでもあれば状態表示に「設定ファイルの一部の値を無視しました（詳細はコンソール）」と出します。
+
+### シミュレーション
+
+`--config <パス>` で、ファイルを読んで `parseConfigText` に渡します。警告は標準エラーに出します。`params` は CLI のオプションの既定値になり、CLI で明示したオプションが優先します。`generation` はアンサンブルに渡します。`sound` は使いません。
 
 ## シミュレーション
 
@@ -475,7 +605,13 @@ function seedFromQuery(search: string): Seed | undefined;   // new URLSearchPara
 | 再開位置の値 | 連続する2bar の点列を Web Audio と同じ規則（`set`、直線、指数のランプ）で評価する関数をテスト側に作る。全2bar・全ステップで、その評価値と `fxStateAt` が一致する（許容誤差つき）。`from > 0` の点列を `fxStateAt` から評価した値が、ステップ `from` 以降で元の評価値と一致する |
 | 生成済みの2bar | `locate` が、`cutTime` の位置ごとに正しい2bar とステップを返し、`pairs` が予約済みの列の後ろをすべて含む。一時停止を挟んだアンサンブルの呼び出し回数と、取り出した2bar の列が、一時停止しない場合と一致する |
 | ソロ | `audibleChannels` を、ソロとミュートの組み合わせで表と照合する |
-| クエリ文字列 | `seedFromQuery` が、`?seed=0`、`?seed=4294967295`、`?seed=4294967296`、`?seed=-1`、`?seed=abc`、`?seed=`、指定なしで期待どおり |
+| クエリ文字列 | `seedFromQuery` が、`?seed=0`、`?seed=4294967295`、`?seed=4294967296`、`?seed=-1`、`?seed=abc`、`?seed=`、指定なしで期待どおり。初期シードの順（クエリ、設定ファイル、乱数）を `initialParams` で確かめる |
+| 設定ファイルなし | `decodeConfig({})` の値が `DEFAULT_CONFIG` と一致し、警告がない。既存のテストは `DEFAULT_GENERATION_TUNING` と `DEFAULT_SOUND_TUNING` で動かす |
+| 一部のキー | キーを1つだけ書いた入力で、そのキーだけが変わる（全キーについて表駆動で確かめる） |
+| 不正な値 | キーごとに、型違い・範囲外で既定値と警告。関係の組ごとに、崩れた入力で組ごと既定値と警告。知らないキーで警告。`parseConfigText` に壊れた JSON を渡して例外にならない |
+| 例のファイル | `config.example.json` を `decodeConfig` に通した値が `DEFAULT_CONFIG` と一致し、警告がない。`DEFAULT_CONFIG` のどのキーも例のファイルにある |
+| 設定ファイルと再現性 | 同じ `GenerationTuning` で2回生成した `events` が一致する。`borrowChance` を 0 と 1 にしたシミュレーションで、借用和音の数が 0 と、iv・v の位置すべてになる |
+| 読み込み | `loadConfig` を、`fetch` を差し替えて、表の5つの状況で確かめる |
 | 5ms 以内 | アンサンブルの `next` の平均時間（色付けを含む） |
 
 試聴・UI の確認・長時間動作の基準は、`npm run dev` で開いた画面で確かめます。
