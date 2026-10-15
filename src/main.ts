@@ -1,9 +1,10 @@
 import * as Tone from 'tone';
 import { configureAudioContext, loadInstruments } from './engine/audio.ts';
 import { createSequencer } from './engine/transport.ts';
-import { DEFAULT_SOUND_TUNING } from './engine/tuning.ts';
-import { DEFAULT_GENERATION_TUNING } from './generators/tuning.ts';
-import { createParamStore, defaultParams } from './params/store.ts';
+import { initialParams } from './params/config.ts';
+import { loadConfig } from './params/load-config.ts';
+import { seedFromQuery } from './params/query.ts';
+import { createParamStore } from './params/store.ts';
 import { createStepGrid } from './ui/grid.ts';
 import { createMixerView } from './ui/mixer.ts';
 import { createPanel } from './ui/panel.ts';
@@ -11,10 +12,13 @@ import { createPositionView } from './ui/position.ts';
 import './ui/style.css';
 
 const SAMPLE_BASE_URL = `${import.meta.env.BASE_URL}samples/drums/`;
+const CONFIG_URL = `${import.meta.env.BASE_URL}config.json`;
 
 async function boot(root: HTMLElement) {
   configureAudioContext();
-  const store = createParamStore(defaultParams());
+  const { value: config, warnings } = await loadConfig(CONFIG_URL);
+  for (const warning of warnings) console.warn(warning);
+  const store = createParamStore(initialParams(config, seedFromQuery(location.search)));
   const panel = createPanel(store);
   const position = createPositionView();
   const grid = createStepGrid();
@@ -27,8 +31,8 @@ async function boot(root: HTMLElement) {
   status.textContent = 'サンプルを読み込み中…';
   root.append(title, panel.element, position.element, grid.element, mixerView.element, status);
 
-  const instruments = await loadInstruments(SAMPLE_BASE_URL, store.get().mixer, DEFAULT_SOUND_TUNING);
-  status.textContent = '';
+  const instruments = await loadInstruments(SAMPLE_BASE_URL, store.get().mixer, config.sound);
+  status.textContent = warnings.length > 0 ? '設定ファイルの一部の値を無視しました（詳細はコンソール）' : '';
   instruments.setVolume(store.get().volume);
   instruments.onLevel((report) => mixerView.showLevel(report));
   let mixer = store.get().mixer;
@@ -58,7 +62,7 @@ async function boot(root: HTMLElement) {
       await Tone.start();
       const { bpm, seed, initialKey } = store.get();
       mixerView.resetLevel();
-      sequencer.start({ bpm, seed, initialKey, tuning: DEFAULT_GENERATION_TUNING });
+      sequencer.start({ bpm, seed, initialKey, tuning: config.generation });
     }
     playing = !playing;
     panel.setPlaying(playing);

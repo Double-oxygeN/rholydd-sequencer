@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { ALL_FILL_KINDS, FILL_LENGTHS, type FillKind, type FillLength } from '../src/generators/drums/fill.ts';
 import { motifCell, patternsEqual, type Pattern } from '../src/generators/drums/pattern.ts';
@@ -13,7 +14,7 @@ import { STAB_STYLES, type StabStyle } from '../src/generators/stab/styles.ts';
 import { HIGHEST_PITCH, LOWEST_PITCH } from '../src/generators/sub/pitch.ts';
 import { SUB_STYLES, type SubStyle } from '../src/generators/sub/styles.ts';
 import { PARTS, type Layer, type NoteEvent, type Part, type PitchedEvent } from '../src/generators/types.ts';
-import { DEFAULT_LIVE_PARAMS } from '../src/params/store.ts';
+import { DEFAULT_CONFIG, parseConfigText, type Config } from '../src/params/config.ts';
 import { parseSeed, type Seed } from '../src/random/rng.ts';
 import {
   BARS_PER_SECTION,
@@ -625,36 +626,48 @@ function formatStyles<S extends string>(title: string, styles: StyleCounts<S>): 
   ];
 }
 
+/** Reads --config as the page reads config.json, warning on standard error about every value left at its default. */
+function readConfig(path: string | undefined): Config {
+  if (path === undefined) return DEFAULT_CONFIG;
+  const { value, warnings } = parseConfigText(readFileSync(path, 'utf8'));
+  for (const warning of warnings) console.error(warning);
+  return value;
+}
+
 function main() {
   const { values } = parseArgs({
     options: {
+      config: { type: 'string' },
       bars: { type: 'string', default: '4096' },
-      seed: { type: 'string', default: '42' },
-      m2: { type: 'string', default: String(DEFAULT_LIVE_PARAMS.m2) },
-      m8: { type: 'string', default: String(DEFAULT_LIVE_PARAMS.m8) },
-      m32: { type: 'string', default: String(DEFAULT_LIVE_PARAMS.m32) },
-      energy: { type: 'string', default: String(DEFAULT_LIVE_PARAMS.energyDepth) },
-      'initial-key': { type: 'string', default: KEY_NAMES[DEFAULT_KEY] },
-      fill: { type: 'string', default: String(DEFAULT_LIVE_PARAMS.fillIntensity) },
+      seed: { type: 'string' },
+      m2: { type: 'string' },
+      m8: { type: 'string' },
+      m32: { type: 'string' },
+      energy: { type: 'string' },
+      'initial-key': { type: 'string' },
+      fill: { type: 'string' },
       json: { type: 'boolean', default: false },
     },
   });
+  // Options given on the command line win over the config file, which wins over the defaults.
+  const config = readConfig(values.config);
+  const { params } = config;
   const bars = Number(values.bars);
-  const seed = parseSeed(values.seed);
+  const seed = parseSeed(values.seed ?? String(params.seed ?? 42));
   if (!Number.isInteger(bars) || bars < 2) throw new Error(`--bars must be an integer of 2 or more: ${values.bars}`);
   if (seed === undefined) throw new Error(`--seed must be a 32-bit unsigned integer: ${values.seed}`);
   const live: LiveParams = {
-    m2: clampUnit(Number(values.m2)),
-    m8: clampUnit(Number(values.m8)),
-    m32: clampUnit(Number(values.m32)),
-    energyDepth: clampUnit(Number(values.energy)),
-    fillIntensity: clampUnit(Number(values.fill)),
+    m2: clampUnit(Number(values.m2 ?? params.m2)),
+    m8: clampUnit(Number(values.m8 ?? params.m8)),
+    m32: clampUnit(Number(values.m32 ?? params.m32)),
+    energyDepth: clampUnit(Number(values.energy ?? params.energyDepth)),
+    fillIntensity: clampUnit(Number(values.fill ?? params.fillIntensity)),
   };
-  const initialKey = parseKey(values['initial-key'] ?? '');
+  const initialKey = parseKey(values['initial-key'] ?? KEY_NAMES[params.initialKey] ?? '');
   if (initialKey === undefined) {
     throw new Error(`--initial-key must be a note name such as F, F# or Bb: ${values['initial-key']}`);
   }
-  const report = simulate({ bars, seed, live, initialKey });
+  const report = simulate({ bars, seed, live, initialKey, tuning: config.generation });
   console.log(values.json ? JSON.stringify(report, null, 2) : formatReport(report));
 }
 
