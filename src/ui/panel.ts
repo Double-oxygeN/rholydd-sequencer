@@ -1,9 +1,10 @@
+import type { PlaybackState } from './controls.ts';
 import { BPM_RANGE, clampBpm, randomSeed, type ParamStore, type Params } from '../params/store.ts';
 import { parseSeed } from '../random/rng.ts';
 import { KEY_NAMES, keyName, toKey, type Key } from '../structure/key.ts';
 import { clampUnit, type UnitInterval } from '../units.ts';
 
-type UnitKey = 'm2' | 'm8' | 'm32' | 'fillIntensity' | 'energyDepth' | 'volume';
+type UnitKey = 'm2' | 'm8' | 'm32' | 'fillIntensity' | 'energyDepth';
 
 const UNIT_CONTROLS: readonly { key: UnitKey; label: string }[] = [
   { key: 'm2', label: '2bar 変化率' },
@@ -11,13 +12,11 @@ const UNIT_CONTROLS: readonly { key: UnitKey; label: string }[] = [
   { key: 'm32', label: '32bar 変化率' },
   { key: 'fillIntensity', label: 'フィル強度' },
   { key: 'energyDepth', label: 'エネルギーの起伏' },
-  { key: 'volume', label: '音量' },
 ];
 
 export interface Panel {
   readonly element: HTMLElement;
-  setPlaying(playing: boolean): void;
-  onToggle(handler: () => void): void;
+  show(state: PlaybackState): void;
 }
 
 export function createPanel(store: ParamStore): Panel {
@@ -25,7 +24,6 @@ export function createPanel(store: ParamStore): Panel {
   element.className = 'panel';
   element.addEventListener('submit', (e) => e.preventDefault());
 
-  const play = button('再生', 'play');
   const bpm = input({ type: 'number', min: String(BPM_RANGE.min), max: String(BPM_RANGE.max), step: '1' });
   bpm.value = String(store.get().bpm);
   bpm.addEventListener('change', () => {
@@ -59,7 +57,6 @@ export function createPanel(store: ParamStore): Panel {
   });
 
   element.append(
-    play,
     field('BPM', bpm),
     field('初期キー', initialKey),
     ...UNIT_CONTROLS.map(({ key, label }) => field(label, slider(store, key))),
@@ -68,14 +65,10 @@ export function createPanel(store: ParamStore): Panel {
 
   return {
     element,
-    setPlaying(playing) {
-      play.textContent = playing ? '停止' : '再生';
-      play.classList.toggle('playing', playing);
-      bpm.disabled = playing;
-      initialKey.disabled = playing;
-    },
-    onToggle(handler) {
-      play.addEventListener('click', handler);
+    // A session fixes its tempo and key until it stops, pausing included.
+    show(state) {
+      bpm.disabled = state !== 'stopped';
+      initialKey.disabled = state !== 'stopped';
     },
   };
 }

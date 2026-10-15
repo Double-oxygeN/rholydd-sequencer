@@ -1,6 +1,6 @@
 import * as Tone from 'tone';
 import type { FxEvent } from '../generators/fx/index.ts';
-import { PARTS, type Part, type Pitch, type Velocity, type Voicing } from '../generators/types.ts';
+import { PARTS, type Part, type Pitch, type Step, type Velocity, type Voicing } from '../generators/types.ts';
 import {
   CHANNEL_IDS,
   audibleChannels,
@@ -12,7 +12,14 @@ import {
 import { clampUnit, type UnitInterval } from '../units.ts';
 import { CLIP_METER_NAME, type LevelReport } from './clip.ts';
 import clipWorkletUrl from './clip-worklet.ts?worker&url';
-import { AUTOMATION_TARGETS, fxAutomation, restingValue, type AutomationPoint, type AutomationTarget } from './automation.ts';
+import {
+  AUTOMATION_TARGETS,
+  fxAutomation,
+  fxStateAt,
+  restingValue,
+  type AutomationPoint,
+  type AutomationTarget,
+} from './automation.ts';
 import { duckPoints, type Dip, type Seconds } from './ducking.ts';
 import {
   CHORD_POLYPHONY,
@@ -48,6 +55,8 @@ const DUCKED_PARTS: readonly DuckedPart[] = ['sub', 'reese', 'pad'];
 
 // Short enough to feel immediate, long enough not to click.
 const MIXER_RAMP_SECONDS = 0.05;
+// Stopping and starting cut the whole mix, so the gate fades rather than jumps, or a riser resumed halfway clicks.
+const GATE_FADE_SECONDS = 0.01;
 
 // A mono synth may click or drop the next note when a release and an attack land on the same instant.
 const LEGATO_GAP_SECONDS = 0.005;
@@ -67,18 +76,28 @@ export interface Instruments {
     seconds: number,
     velocity: Velocity,
   ): void;
-  /** Lets scheduled notes through from the given time on. */
-  open(time: number): void;
-  /** Cuts every note and the reverb tail, including notes already scheduled ahead of time. */
-  silence(): void;
+  /**
+   * Lets scheduled notes through from the given time on, with the effects where they stand at a step of 2 bars
+   * when playback resumes there, or at rest.
+   */
+  open(time: number, resumed?: ResumedEffects): void;
+  /** Cuts every note and the reverb tail from the given time, including notes already scheduled ahead of time. */
+  silence(time: number): void;
   setVolume(volume: UnitInterval): void;
   setMixer(mixer: MixerSettings): void;
   /** Dips the sub, the reese and the pad on the given kicks, continuing the dips of the previous call. */
   duck(kicks: readonly Seconds[], ducking: DuckingSettings): void;
-  /** Schedules the effects of the 2 bars starting at the given time. */
-  fx(events: readonly FxEvent[], pairStart: Seconds, stepSeconds: number): void;
+  /** Schedules the effects of the 2 bars starting at the given time, from a step on when playback resumes there. */
+  fx(events: readonly FxEvent[], pairStart: Seconds, stepSeconds: number, from?: Step): void;
   /** Reports the peak and the clipped samples after the limiter about ten times a second. */
   onLevel(listener: (report: LevelReport) => void): void;
+}
+
+/** The effects of the 2 bars playback resumes within, and the step it resumes from. */
+export interface ResumedEffects {
+  readonly events: readonly FxEvent[];
+  readonly step: Step;
+  readonly stepSeconds: number;
 }
 
 export function configureAudioContext(): void {
@@ -118,14 +137,17 @@ export async function loadInstruments(
   const reverbIn = new Tone.Gain();
 
   const strips = createStrips(mixer, sound.trimDb, { drums: drumBus, mix: mixBus, reverb: reverbIn });
-  const samplers = Object.fromEntries(
-    PARTS.map((part) => [
-      part,
-      new Tone.Sampler({ urls: { [ROOT_NOTE]: `${part}.wav` }, baseUrl: drumSamplesUrl, release: 0.02 }).connect(
-        strips[part].input,
-      ),
-    ]),
-  ) as Record<Part, Tone.Sampler>;
+  const drumBuffers = Object.fromEntries(
+    PARTS.map((part) => [part, new Tone.ToneAudioBuffer(`${drumSamplesUrl}${part}.wav`)]),
+  ) as Record<Part, Tone.ToneAudioBuffer>;
+  const createSamplers = () =>
+    Object.fromEntries(
+      PARTS.map((part) => [
+        part,
+        new Tone.Sampler({ urls: { [ROOT_NOTE]: drumBuffers[part] }, release: 0.02 }).connect(strips[part].input),
+      ]),
+    ) as Record<Part, Tone.Sampler>;
+  let samplers = createSamplers();
   // Tone.Compressor has no sidechain input, so the kick's dips are scheduled on plain gains instead.
   const ducks: Record<DuckedPart, Tone.Gain> = {
     sub: new Tone.Gain(1).connect(strips.sub.input),
@@ -196,11 +218,15 @@ export async function loadInstruments(
     chord(part, timbre, voicing, time, seconds, velocity) {
       chordSynth(voices, part, timbre).triggerAttackRelease(voicing.map(frequencyOf), legatoSeconds(seconds), time, velocity);
     },
-    open(time) {
+    open(time, resumed) {
       // Notes of the previous session stay scheduled on the synths' timelines, and the gate would let them
       // collide with the new ones on the mono voices or hold on to poly voices. Fresh synths drop them all at once.
       disposeVoices(voices);
       voices = createVoices(inputs, sound.fx.impactVolumeDb);
+      // A resume follows a pause within the same 2 bars, where hits scheduled before the pause would still be due.
+      // releaseAll only stops those from a timer that may run late, so fresh samplers drop them for certain.
+      for (const sampler of Object.values(samplers)) sampler.dispose();
+      samplers = createSamplers();
       // The reverb still rings with the previous session; a fresh one starts silent. It renders its impulse
       // response asynchronously, which only leaves the first few tens of milliseconds dry.
       reverb.dispose();
@@ -208,13 +234,20 @@ export async function loadInstruments(
       // Scheduled before the transport starts, so that the first 2 bars, which the transport times at this very
       // instant, set the values their effects start from after these.
       rest(time);
+      if (resumed !== undefined) {
+        const state = fxStateAt(resumed.events, resumed.step, resumed.stepSeconds, sound.fx);
+        for (const target of AUTOMATION_TARGETS) {
+          // Nothing sounds before the gate opens, so the high-pass can take the mix in one step here.
+          for (const param of automated[target]) param.setValueAtTime(state[target], time);
+        }
+      }
       gate.gain.cancelScheduledValues(time);
-      gate.gain.setValueAtTime(1, time);
+      gate.gain.setValueAtTime(0, time);
+      gate.gain.linearRampToValueAtTime(1, time + GATE_FADE_SECONDS);
     },
-    silence() {
-      const now = Tone.now();
+    silence(now) {
       gate.gain.cancelScheduledValues(now);
-      gate.gain.rampTo(0, 0.01, now);
+      gate.gain.rampTo(0, GATE_FADE_SECONDS, now);
       for (const sampler of Object.values(samplers)) sampler.releaseAll(now);
       // Dips scheduled ahead for the stopped session must not reach the next one.
       for (const part of DUCKED_PARTS) {
@@ -237,12 +270,12 @@ export async function loadInstruments(
       // Kept apart from the throw's own send, so that the mixer and the automation never move the same parameter.
       throwGate.gain.rampTo(audible.snare ? 1 : 0, MIXER_RAMP_SECONDS);
     },
-    fx(events, pairStart, stepSeconds) {
-      for (const point of fxAutomation(events, pairStart, stepSeconds, sound.fx)) {
+    fx(events, pairStart, stepSeconds, from = 0 as Step) {
+      for (const point of fxAutomation(events, pairStart, stepSeconds, sound.fx, from)) {
         for (const param of automated[point.target]) apply(param, point);
       }
       for (const event of events) {
-        if (event.fx !== 'impact') continue;
+        if (event.fx !== 'impact' || event.step < from) continue;
         const time = pairStart + event.step * stepSeconds;
         voices.impactBoom.triggerAttackRelease(IMPACT_BOOM_NOTE, IMPACT_SECONDS, time);
         voices.impactNoise.triggerAttackRelease(IMPACT_SECONDS, time);

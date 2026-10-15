@@ -1,5 +1,5 @@
 import { startsEffect, type FxEvent, type FxSpan } from '../generators/fx/index.ts';
-import { STEPS_PER_PAIR } from '../generators/types.ts';
+import { STEPS_PER_PAIR, type Step } from '../generators/types.ts';
 import type { Seconds } from './ducking.ts';
 import type { FxTuning } from './tuning.ts';
 
@@ -65,7 +65,7 @@ export function riserGain(progress: number, fx: FxTuning): number {
 }
 
 /** Frequencies move in equal ratios, which the ear hears as moving at an even speed. */
-function logBetween(from: number, to: number, progress: number): number {
+export function logBetween(from: number, to: number, progress: number): number {
   return from * (to / from) ** progress;
 }
 
@@ -75,8 +75,71 @@ export const highpassFrequency = (progress: number, fx: FxTuning) =>
 export const lowpassFrequency = (progress: number, fx: FxTuning) =>
   logBetween(fx.lowpass.closedHz, fx.lowpass.openHz, progress);
 
-/** Points for the effects of one 2-bar unit. Impacts are notes rather than automation, so they are left out. */
+/**
+ * Points for the effects of one 2-bar unit. Impacts are notes rather than automation, so they are left out.
+ * Resuming from a step leaves out every point before it: the values the effects have reached there are set apart
+ * (fxStateAt), and the ramps that end later carry on from them along the same curves.
+ */
 export function fxAutomation(
+  events: readonly FxEvent[],
+  pairStart: Seconds,
+  stepSeconds: number,
+  fx: FxTuning,
+  from: Step = 0 as Step,
+): readonly AutomationPoint[] {
+  const points = pairAutomation(events, pairStart, stepSeconds, fx);
+  if (from === 0) return points;
+  const resumed = pairStart + from * stepSeconds;
+  return points.filter((point) => point.time >= resumed);
+}
+
+/**
+ * The values the effects of 2 bars hold at the start of a step, as they would if playback had never stopped. Each
+ * effect running on from the previous 2 bars carries its progress in its own span, so these 2 bars alone say it.
+ * Ramps are followed as Web Audio draws them between the 2 bars' points: gains in straight lines, frequencies in
+ * equal ratios.
+ */
+export function fxStateAt(events: readonly FxEvent[], step: Step, stepSeconds: number, fx: FxTuning): AutomationValues {
+  const state: Record<AutomationTarget, number> = { ...restingValue(fx) };
+  const along = (span: FxSpan, value: (p: number) => number, between: (a: number, b: number, t: number) => number) =>
+    step < span.to ? between(value(span.startProgress), value(span.endProgress), step / span.to) : value(span.endProgress);
+  for (const event of events) {
+    switch (event.fx) {
+      case 'riser':
+        state.riserGain =
+          step > event.span.to && event.span.endProgress >= 1 ? 0 : along(event.span, (p) => riserGain(p, fx), linearBetween);
+        state.riserFrequency = along(event.span, (p) => riserFrequency(p, fx), logBetween);
+        break;
+      case 'sweep':
+        if (event.filter === 'highpass') {
+          state.highpassShare = 1;
+          state.highpass = along(event.span, (p) => highpassFrequency(p, fx), logBetween);
+        } else {
+          state.lowpass = along(event.span, (p) => lowpassFrequency(p, fx), logBetween);
+        }
+        break;
+      case 'throw': {
+        // The send opens just before the hit and stays open past the next 16th.
+        const sinceHit = (step - event.step) * stepSeconds;
+        if (sinceHit >= -THROW_LEAD_SECONDS && sinceHit < THROW_HOLD_SECONDS) state.throwSend = fx.throwSend;
+        break;
+      }
+      case 'gap':
+        if (event.pad === 'cut' && step > event.from) state.padGate = 0;
+        break;
+      case 'filterReset':
+      case 'impact':
+        break;
+    }
+  }
+  return state;
+}
+
+function linearBetween(from: number, to: number, t: number): number {
+  return from + (to - from) * t;
+}
+
+function pairAutomation(
   events: readonly FxEvent[],
   pairStart: Seconds,
   stepSeconds: number,

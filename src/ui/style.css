@@ -138,6 +138,35 @@ button.play.playing {
   color: var(--bg);
 }
 
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.controls button.play {
+  min-width: 6.5em;
+}
+
+.volume {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.volume input {
+  width: 140px;
+  accent-color: var(--accent);
+}
+
 .position {
   display: grid;
   gap: 8px;

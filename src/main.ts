@@ -1,10 +1,11 @@
 import * as Tone from 'tone';
 import { configureAudioContext, loadInstruments } from './engine/audio.ts';
-import { createSequencer } from './engine/transport.ts';
+import { createSequencer, type PlaybackSession } from './engine/transport.ts';
 import { initialParams } from './params/config.ts';
 import { loadConfig } from './params/load-config.ts';
 import { seedFromQuery } from './params/query.ts';
 import { createParamStore } from './params/store.ts';
+import { createControls } from './ui/controls.ts';
 import { createStepGrid } from './ui/grid.ts';
 import { createMixerView } from './ui/mixer.ts';
 import { createPanel } from './ui/panel.ts';
@@ -19,6 +20,7 @@ async function boot(root: HTMLElement) {
   const { value: config, warnings } = await loadConfig(CONFIG_URL);
   for (const warning of warnings) console.warn(warning);
   const store = createParamStore(initialParams(config, seedFromQuery(location.search)));
+  const controls = createControls(store);
   const panel = createPanel(store);
   const position = createPositionView();
   const grid = createStepGrid();
@@ -29,7 +31,7 @@ async function boot(root: HTMLElement) {
   const status = document.createElement('p');
   status.className = 'status';
   status.textContent = 'サンプルを読み込み中…';
-  root.append(title, panel.element, position.element, grid.element, mixerView.element, status);
+  root.append(title, controls.element, panel.element, position.element, grid.element, mixerView.element, status);
 
   const instruments = await loadInstruments(SAMPLE_BASE_URL, store.get().mixer, config.sound);
   status.textContent = warnings.length > 0 ? '設定ファイルの一部の値を無視しました（詳細はコンソール）' : '';
@@ -50,22 +52,33 @@ async function boot(root: HTMLElement) {
     },
   });
 
-  let playing = false;
-  panel.setPlaying(playing);
-  panel.onToggle(async () => {
-    if (playing) {
-      sequencer.stop();
-      grid.highlight(null);
-      position.clear();
-    } else {
+  let session: PlaybackSession | null = null;
+  const render = () => {
+    const state = session?.state ?? 'stopped';
+    controls.show(state);
+    panel.show(state);
+  };
+  render();
+  controls.onPlay(async () => {
+    if (session === null) {
       // Browsers only allow the AudioContext to start from a user gesture.
       await Tone.start();
       const { bpm, seed, initialKey } = store.get();
+      // Only a new session clears the peak and the clip count: they count from the start of playback.
       mixerView.resetLevel();
-      sequencer.start({ bpm, seed, initialKey, tuning: config.generation });
+      session = sequencer.start({ bpm, seed, initialKey, tuning: config.generation });
+    } else {
+      // A paused session keeps the grid and the position where they stopped.
+      session = session.state === 'playing' ? session.pause() : session.resume();
     }
-    playing = !playing;
-    panel.setPlaying(playing);
+    render();
+  });
+  controls.onStop(() => {
+    session?.stop();
+    session = null;
+    grid.highlight(null);
+    position.clear();
+    render();
   });
 }
 
