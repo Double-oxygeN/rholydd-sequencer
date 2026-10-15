@@ -1,7 +1,8 @@
 import { REL, createRng, hash, weightedIndex, type Seed } from '../random/rng.ts';
 import { chordOf, type Seeds } from '../structure/conductor.ts';
-import { CHORD_TONE_STEPS, rootDegree } from '../structure/harmony.ts';
+import { CHORD_TONES, CHORD_TONE_STEPS, rootDegree } from '../structure/harmony.ts';
 import { shiftDegree, type ScaleDegree } from '../structure/key.ts';
+import type { ToneWeights } from './tuning.ts';
 import { STEPS_PER_PAIR, type ContextWithDrums, type Step, type StepLength } from './types.ts';
 
 /** Rules shared by the parts that play pitches over the chord progression. */
@@ -48,12 +49,9 @@ export function playableEnd(ctx: ContextWithDrums): number {
   return bigFill?.from ?? STEPS_PER_PAIR;
 }
 
-/** Weight for each distance along the scale from the root to a chord tone, in the order of CHORD_TONE_STEPS. */
-export type ChordToneWeights = readonly [number, number, number, number];
-
 /** A chord tone of the 2 bars, picked from a roll drawn beforehand. */
-export function chordTone(ctx: ContextWithDrums, roll: number, weights: ChordToneWeights): ScaleDegree {
-  const steps = CHORD_TONE_STEPS[weightedIndex(roll, weights) ?? 0] ?? 0;
+export function chordTone(ctx: ContextWithDrums, roll: number, weights: ToneWeights): ScaleDegree {
+  const steps = CHORD_TONE_STEPS[weightedIndex(roll, CHORD_TONES.map((tone) => weights[tone])) ?? 0] ?? 0;
   return shiftDegree(rootDegree(chordOf(ctx)), steps);
 }
 

@@ -39,9 +39,9 @@ export function createSequencer(
   const draw = Tone.getDraw();
 
   return {
-    start({ bpm, seed, initialKey }) {
+    start({ bpm, seed, initialKey, tuning }) {
       // A fresh ensemble per session replays the same seed from the very beginning (F-02).
-      const ensemble = createEnsemble({ seed, initialKey });
+      const ensemble = createEnsemble({ seed, initialKey, tuning });
       const stepSeconds = 60 / bpm / (STEPS_PER_BAR / 4);
       transport.bpm.value = bpm;
       transport.scheduleRepeat(

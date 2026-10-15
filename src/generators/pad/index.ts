@@ -8,31 +8,30 @@ import {
   type Pitch,
   type Step,
   type StepLength,
-  type Velocity,
   type Voicing,
 } from '../types.ts';
+import type { LineTuning } from '../tuning.ts';
 
 /** F3 to E5. */
 export const PAD_LOWEST = 53 as Pitch;
 export const PAD_HIGHEST = 76 as Pitch;
 const PAD_CENTER = (PAD_LOWEST + PAD_HIGHEST) / 2;
-const PAD_VELOCITY = 0.6 as Velocity;
 
 export type PadGenerator = Generator<Context, PadChord>;
 
 /** Stateless and random-free: the progression alone decides the pad. */
-export function createPadGenerator(): PadGenerator {
-  return { generate: padChord };
+export function createPadGenerator(tuning: LineTuning): PadGenerator {
+  return { generate: (ctx) => padChord(ctx, tuning) };
 }
 
 /** Plays through the big fill too, keeping the harmony while the basses stop. */
-export function padChord(ctx: Context): PadChord {
+export function padChord(ctx: Context, tuning: LineTuning): PadChord {
   return {
     instrument: 'pad',
     step: 0 as Step,
     length: STEPS_PER_PAIR as StepLength,
     voicing: sectionVoicings(ctx.key, ctx.progression.slice(0, ctx.pairIn8 + 1)).at(-1)!,
-    velocity: PAD_VELOCITY,
+    velocity: tuning.velocity.pad,
   };
 }
 

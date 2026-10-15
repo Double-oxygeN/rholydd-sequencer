@@ -1,11 +1,9 @@
 import { TAG, createRng } from '../../random/rng.ts';
-import { ALL_STEPS, type ContextWithDrums, type Generator, type SubNote, type Velocity } from '../types.ts';
+import { ALL_STEPS, type ContextWithDrums, type Generator, type SubNote } from '../types.ts';
 import { chordRoot, chordTone, legato, motifSeed, playableEnd, styleOf, stylePlan } from '../line.ts';
-import { OCTAVE_JUMP_CHANCE, SUB_TONE_WEIGHTS, subPitch } from './pitch.ts';
+import type { LineTuning } from '../tuning.ts';
+import { subPitch } from './pitch.ts';
 import { SUB_STYLES, attackChance, type SubStyle } from './styles.ts';
-
-// Level differences between parts are left to the mixer.
-const SUB_VELOCITY = 0.8 as Velocity;
 
 export interface SubLine {
   readonly style: SubStyle;
@@ -15,11 +13,11 @@ export interface SubLine {
 export type SubGenerator = Generator<ContextWithDrums, SubLine>;
 
 /** Stateless: everything comes from the context, including the kicks the drums decided. */
-export function createSubGenerator(): SubGenerator {
-  return { generate: subLine };
+export function createSubGenerator(tuning: LineTuning): SubGenerator {
+  return { generate: (ctx) => subLine(ctx, tuning) };
 }
 
-export function subLine(ctx: ContextWithDrums): SubLine {
+export function subLine(ctx: ContextWithDrums, tuning: LineTuning): SubLine {
   const style = styleOf(ctx, stylePlan(ctx.seeds, TAG.subStyle, SUB_STYLES));
   const rhythm = createRng(motifSeed(ctx, TAG.subRhythm));
   const pitch = createRng(motifSeed(ctx, TAG.subPitch));
@@ -37,13 +35,13 @@ export function subLine(ctx: ContextWithDrums): SubLine {
   const notes = legato(starts, end).map(({ step, length }, i): SubNote => {
     const first = i === 0;
     const rolls = pitchRolls[step]!;
-    const degree = first ? chordRoot(ctx) : chordTone(ctx, rolls.degree, SUB_TONE_WEIGHTS);
+    const degree = first ? chordRoot(ctx) : chordTone(ctx, rolls.degree, tuning.subToneWeights);
     return {
       instrument: 'sub',
       step,
       length,
-      pitch: subPitch(ctx.key, degree, !first && rolls.octave < OCTAVE_JUMP_CHANCE),
-      velocity: SUB_VELOCITY,
+      pitch: subPitch(ctx.key, degree, !first && rolls.octave < tuning.subOctaveJumpChance),
+      velocity: tuning.velocity.sub,
     };
   });
   return { style, notes };

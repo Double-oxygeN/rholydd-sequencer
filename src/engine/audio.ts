@@ -5,15 +5,7 @@ import { CHANNEL_IDS, isSending, type ChannelId, type DuckingSettings, type Mixe
 import { clampUnit, type UnitInterval } from '../units.ts';
 import { CLIP_METER_NAME, type LevelReport } from './clip.ts';
 import clipWorkletUrl from './clip-worklet.ts?worker&url';
-import {
-  AUTOMATION_TARGETS,
-  HIGHPASS,
-  RESTING_VALUE,
-  RISER,
-  fxAutomation,
-  type AutomationPoint,
-  type AutomationTarget,
-} from './automation.ts';
+import { AUTOMATION_TARGETS, fxAutomation, restingValue, type AutomationPoint, type AutomationTarget } from './automation.ts';
 import { duckPoints, type Dip, type Seconds } from './ducking.ts';
 import {
   CHORD_POLYPHONY,
@@ -26,24 +18,10 @@ import {
   type ReesePatch,
 } from './patches.ts';
 import type { CycleTimbre, PadTimbre, ReeseTimbre, StabTimbre } from '../structure/timbre.ts';
+import type { DuckedPart, SoundTuning, SourceId } from './tuning.ts';
 
 /** Every sample is mapped to one note and played back at its original pitch. */
 const ROOT_NOTE = 'C3';
-
-// Evens out the sources so that every fader starts at 0 dB; velocities still come from the generators.
-// Measured alone, the drums otherwise peaked right at full scale and left the limiter no headroom.
-const SOURCE_TRIM_DB: Readonly<Record<Exclude<ChannelId, 'reverbReturn'>, number>> = {
-  kick: -8,
-  snare: -10,
-  hat: -14,
-  ghost: -8,
-  // Listening put the sub's fader at -6 dB to sit right against the kick and the reese, so the trim takes it instead.
-  sub: -6,
-  reese: -10,
-  stab: -13,
-  pad: -16,
-  fx: -12,
-};
 
 // A pure sine has no harmonics, so small speakers would lose the bass pitch entirely.
 const SUB_DRIVE = 0.15;
@@ -59,15 +37,7 @@ const PAD_LOWPASS_HZ = 1500;
 const IMPACT_HIGHPASS_HZ = 80;
 const RISER_Q = 2;
 
-/** How deep each ducked part dips relative to the ducking depth. The sub clears the most room for the kick. */
-const DUCK_RATIO: Readonly<Record<DuckedPart, number>> = { sub: 1, reese: 0.7, pad: 0.5 };
-type DuckedPart = 'sub' | 'reese' | 'pad';
 const DUCKED_PARTS: readonly DuckedPart[] = ['sub', 'reese', 'pad'];
-
-const REVERB = { decay: 2.5, preDelay: 0.02 } as const;
-const DRUM_BUS = { threshold: -12, ratio: 3, attack: 0.01, release: 0.1 } as const;
-const MASTER_BUS = { threshold: -10, ratio: 2, attack: 0.02, release: 0.2 } as const;
-const LIMITER_THRESHOLD_DB = -1;
 
 // Short enough to feel immediate, long enough not to click.
 const MIXER_RAMP_SECONDS = 0.05;
@@ -108,7 +78,12 @@ export function configureAudioContext(): void {
   Tone.setContext(new Tone.Context({ latencyHint: 'playback', lookAhead: LOOK_AHEAD_SECONDS }));
 }
 
-export async function loadInstruments(drumSamplesUrl: string, mixer: MixerSettings): Promise<Instruments> {
+export async function loadInstruments(
+  drumSamplesUrl: string,
+  mixer: MixerSettings,
+  sound: SoundTuning,
+): Promise<Instruments> {
+  const resting = restingValue(sound.fx);
   const listening = new Tone.Volume().toDestination();
   // Notes scheduled within the look-ahead window keep playing after Transport.stop, so stop needs a gate.
   // It sits last so that it also cuts the reverb tail.
@@ -118,24 +93,24 @@ export async function loadInstruments(drumSamplesUrl: string, mixer: MixerSettin
   await context.addAudioWorkletModule(clipWorkletUrl);
   const clipMeter = context.createAudioWorkletNode(CLIP_METER_NAME, { outputChannelCount: [2] });
   Tone.connect(clipMeter, gate);
-  const limiter = new Tone.Limiter(LIMITER_THRESHOLD_DB).connect(clipMeter);
-  const masterBus = new Tone.Compressor(MASTER_BUS).connect(limiter);
+  const limiter = new Tone.Limiter(sound.dynamics.limiterThresholdDb).connect(clipMeter);
+  const masterBus = new Tone.Compressor(sound.dynamics.masterBus).connect(limiter);
   // The mix runs through one of two equal high-passes: the swept one, or one resting open that keeps the low end
   // shaped as it always is. Their shares come from one signal, so that they always add up to the whole mix.
-  const sweepHighpass = new Tone.Filter({ type: 'highpass', frequency: RESTING_VALUE.highpass, rolloff: -24 });
-  const restingHighpass = new Tone.Filter({ type: 'highpass', frequency: HIGHPASS.openHz, rolloff: -24 });
+  const sweepHighpass = new Tone.Filter({ type: 'highpass', frequency: resting.highpass, rolloff: -24 });
+  const restingHighpass = new Tone.Filter({ type: 'highpass', frequency: sound.fx.highpass.openHz, rolloff: -24 });
   const sweptShare = new Tone.Gain(0).connect(masterBus);
   const restingShare = new Tone.Gain(0).connect(masterBus);
-  const highpassShare = new Tone.Signal(RESTING_VALUE.highpassShare);
+  const highpassShare = new Tone.Signal(resting.highpassShare);
   highpassShare.connect(sweptShare.gain);
   highpassShare.chain(new Tone.Negate(), new Tone.Add(1), restingShare.gain);
   const mixBus = new Tone.Gain().fan(sweepHighpass, restingHighpass);
   sweepHighpass.connect(sweptShare);
   restingHighpass.connect(restingShare);
-  const drumBus = new Tone.Compressor(DRUM_BUS).connect(mixBus);
+  const drumBus = new Tone.Compressor(sound.dynamics.drumBus).connect(mixBus);
   const reverbIn = new Tone.Gain();
 
-  const strips = createStrips(mixer, { drums: drumBus, mix: mixBus, reverb: reverbIn });
+  const strips = createStrips(mixer, sound.trimDb, { drums: drumBus, mix: mixBus, reverb: reverbIn });
   const samplers = Object.fromEntries(
     PARTS.map((part) => [
       part,
@@ -153,13 +128,13 @@ export async function loadInstruments(drumSamplesUrl: string, mixer: MixerSettin
   let carried: Record<DuckedPart, Dip | null> = { sub: null, reese: null, pad: null };
   // One per pitched part, before the channels, so that the intro's sweep also darkens what goes to the reverb.
   const introLowpass = {
-    sub: lowpassForSweep(),
-    reese: lowpassForSweep(),
-    stab: lowpassForSweep(),
-    pad: lowpassForSweep(),
+    sub: lowpassForSweep(resting.lowpass),
+    reese: lowpassForSweep(resting.lowpass),
+    stab: lowpassForSweep(resting.lowpass),
+    pad: lowpassForSweep(resting.lowpass),
   };
   // Kept apart from the ducking gain so that the gap and the kicks never schedule the same parameter.
-  const padGate = new Tone.Gain(RESTING_VALUE.padGate).connect(ducks.pad);
+  const padGate = new Tone.Gain(resting.padGate).connect(ducks.pad);
   const inputs: VoiceInputs = {
     sub: new Tone.Distortion(SUB_DRIVE).chain(new Tone.Filter(SUB_LOWPASS), introLowpass.sub, ducks.sub),
     reese: new Tone.Filter(REESE_HIGHPASS_HZ, 'highpass').chain(introLowpass.reese, ducks.reese),
@@ -168,13 +143,13 @@ export async function loadInstruments(drumSamplesUrl: string, mixer: MixerSettin
     impact: new Tone.Filter(IMPACT_HIGHPASS_HZ, 'highpass').connect(strips.fx.input),
   };
   // Runs for the whole session at zero gain, so that stopping a riser only means cancelling its gain.
-  const riserGain = new Tone.Gain(RESTING_VALUE.riserGain).connect(strips.fx.input);
-  const riserFilter = new Tone.Filter({ type: 'bandpass', frequency: RESTING_VALUE.riserFrequency, Q: RISER_Q }).connect(
+  const riserGain = new Tone.Gain(resting.riserGain).connect(strips.fx.input);
+  const riserFilter = new Tone.Filter({ type: 'bandpass', frequency: resting.riserFrequency, Q: RISER_Q }).connect(
     riserGain,
   );
   new Tone.Noise('white').connect(riserFilter).start();
   // Taken after the snare's trim but before its fader, so a throw never depends on how the snare is mixed.
-  const throwSend = new Tone.Gain(RESTING_VALUE.throwSend).connect(reverbIn);
+  const throwSend = new Tone.Gain(resting.throwSend).connect(reverbIn);
   strips.snare.input.connect(throwSend);
   const automated: Readonly<Record<AutomationTarget, readonly Automatable[]>> = {
     riserGain: [riserGain.gain],
@@ -189,12 +164,12 @@ export async function loadInstruments(drumSamplesUrl: string, mixer: MixerSettin
     for (const target of AUTOMATION_TARGETS) {
       for (const param of automated[target]) {
         param.cancelScheduledValues(time);
-        param.setValueAtTime(RESTING_VALUE[target], time);
+        param.setValueAtTime(resting[target], time);
       }
     }
   };
-  let voices = createVoices(inputs);
-  let reverb = createReverb(reverbIn, strips.reverbReturn.input);
+  let voices = createVoices(inputs, sound.fx.impactVolumeDb);
+  let reverb = createReverb(reverbIn, strips.reverbReturn.input, sound.reverb);
   await Tone.loaded();
 
   return {
@@ -216,11 +191,11 @@ export async function loadInstruments(drumSamplesUrl: string, mixer: MixerSettin
       // Notes of the previous session stay scheduled on the synths' timelines, and the gate would let them
       // collide with the new ones on the mono voices or hold on to poly voices. Fresh synths drop them all at once.
       disposeVoices(voices);
-      voices = createVoices(inputs);
+      voices = createVoices(inputs, sound.fx.impactVolumeDb);
       // The reverb still rings with the previous session; a fresh one starts silent. It renders its impulse
       // response asynchronously, which only leaves the first few tens of milliseconds dry.
       reverb.dispose();
-      reverb = createReverb(reverbIn, strips.reverbReturn.input);
+      reverb = createReverb(reverbIn, strips.reverbReturn.input, sound.reverb);
       // Scheduled before the transport starts, so that the first 2 bars, which the transport times at this very
       // instant, set the values their effects start from after these.
       rest(time);
@@ -251,7 +226,7 @@ export async function loadInstruments(drumSamplesUrl: string, mixer: MixerSettin
       for (const id of CHANNEL_IDS) strips[id].apply(next[id]);
     },
     fx(events, pairStart, stepSeconds) {
-      for (const point of fxAutomation(events, pairStart, stepSeconds)) {
+      for (const point of fxAutomation(events, pairStart, stepSeconds, sound.fx)) {
         for (const param of automated[point.target]) apply(param, point);
       }
       for (const event of events) {
@@ -266,7 +241,7 @@ export async function loadInstruments(drumSamplesUrl: string, mixer: MixerSettin
     },
     duck(kicks, { depth, release }) {
       for (const part of DUCKED_PARTS) {
-        const shape = { floor: clampUnit(1 - depth * DUCK_RATIO[part]), release: (release / 1000) as Seconds };
+        const shape = { floor: clampUnit(1 - depth * sound.duckRatio[part]), release: (release / 1000) as Seconds };
         const plan = duckPoints(kicks, carried[part], shape);
         const gain = ducks[part].gain;
         const first = plan.points[0];
@@ -301,8 +276,8 @@ function apply(param: Automatable, { time, value, ramp }: AutomationPoint): void
   }
 }
 
-function lowpassForSweep(): Tone.Filter {
-  return new Tone.Filter({ type: 'lowpass', frequency: RESTING_VALUE.lowpass, rolloff: -12 });
+function lowpassForSweep(frequency: number): Tone.Filter {
+  return new Tone.Filter({ type: 'lowpass', frequency, rolloff: -12 });
 }
 
 interface Strip {
@@ -319,7 +294,7 @@ interface Buses {
 
 const DRUM_CHANNELS: readonly ChannelId[] = PARTS;
 
-function createStrips(mixer: MixerSettings, buses: Buses): Record<ChannelId, Strip> {
+function createStrips(mixer: MixerSettings, trimDb: SoundTuning['trimDb'], buses: Buses): Record<ChannelId, Strip> {
   return Object.fromEntries(
     CHANNEL_IDS.map((id) => {
       const settings = mixer[id];
@@ -328,7 +303,7 @@ function createStrips(mixer: MixerSettings, buses: Buses): Record<ChannelId, Str
       // Taken after the fader so that pulling a part down also pulls down its reverb.
       const send = isSending(settings) ? new Tone.Gain(settings.send) : null;
       if (send !== null) channel.chain(send, buses.reverb);
-      const input = id === 'reverbReturn' ? channel : new Tone.Volume(SOURCE_TRIM_DB[id]).connect(channel);
+      const input = id === 'reverbReturn' ? channel : new Tone.Volume(trimDb[id as SourceId]).connect(channel);
       const strip: Strip = {
         input,
         apply(next) {
@@ -346,8 +321,8 @@ function createStrips(mixer: MixerSettings, buses: Buses): Record<ChannelId, Str
   ) as Record<ChannelId, Strip>;
 }
 
-function createReverb(from: Tone.ToneAudioNode, to: Tone.InputNode): Tone.Reverb {
-  const reverb = new Tone.Reverb({ ...REVERB, wet: 1 });
+function createReverb(from: Tone.ToneAudioNode, to: Tone.InputNode, settings: SoundTuning['reverb']): Tone.Reverb {
+  const reverb = new Tone.Reverb({ ...settings, wet: 1 });
   from.connect(reverb);
   reverb.connect(to);
   return reverb;
@@ -377,11 +352,7 @@ type VoiceInputs = {
 // Falls from about 98 Hz, and the high-pass keeps it clear of the kick's and the sub's fundamentals.
 const IMPACT_BOOM_NOTE = 'G2';
 const IMPACT_SECONDS = 1.2;
-// Listening wanted the impact a little below the drop it lands with. Set on the synths, as the other per-sound
-// levels are, so that the riser on the same channel keeps its level.
-const IMPACT_VOLUME_DB = -3;
-
-function createVoices(to: VoiceInputs): Voices {
+function createVoices(to: VoiceInputs, impactVolumeDb: number): Voices {
   return {
     sub: new Tone.Synth({
       oscillator: { type: 'sine' },
@@ -394,12 +365,12 @@ function createVoices(to: VoiceInputs): Voices {
       pitchDecay: 0.4,
       octaves: 3,
       envelope: { attack: 0.002, decay: 1, sustain: 0, release: 0.4 },
-      volume: IMPACT_VOLUME_DB,
+      volume: impactVolumeDb,
     }).connect(to.impact),
     impactNoise: new Tone.NoiseSynth({
       noise: { type: 'white' },
       envelope: { attack: 0.002, decay: IMPACT_SECONDS, sustain: 0, release: 0.2 },
-      volume: IMPACT_VOLUME_DB,
+      volume: impactVolumeDb,
     }).connect(to.impact),
   };
 }

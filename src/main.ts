@@ -1,6 +1,8 @@
 import * as Tone from 'tone';
 import { configureAudioContext, loadInstruments } from './engine/audio.ts';
 import { createSequencer } from './engine/transport.ts';
+import { DEFAULT_SOUND_TUNING } from './engine/tuning.ts';
+import { DEFAULT_GENERATION_TUNING } from './generators/tuning.ts';
 import { createParamStore, defaultParams } from './params/store.ts';
 import { createStepGrid } from './ui/grid.ts';
 import { createMixerView } from './ui/mixer.ts';
@@ -25,7 +27,7 @@ async function boot(root: HTMLElement) {
   status.textContent = 'サンプルを読み込み中…';
   root.append(title, panel.element, position.element, grid.element, mixerView.element, status);
 
-  const instruments = await loadInstruments(SAMPLE_BASE_URL, store.get().mixer);
+  const instruments = await loadInstruments(SAMPLE_BASE_URL, store.get().mixer, DEFAULT_SOUND_TUNING);
   status.textContent = '';
   instruments.setVolume(store.get().volume);
   instruments.onLevel((report) => mixerView.showLevel(report));
@@ -56,7 +58,7 @@ async function boot(root: HTMLElement) {
       await Tone.start();
       const { bpm, seed, initialKey } = store.get();
       mixerView.resetLevel();
-      sequencer.start({ bpm, seed, initialKey });
+      sequencer.start({ bpm, seed, initialKey, tuning: DEFAULT_GENERATION_TUNING });
     }
     playing = !playing;
     panel.setPlaying(playing);

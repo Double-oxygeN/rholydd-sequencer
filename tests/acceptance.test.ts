@@ -1,16 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { PICKUP } from '../src/generators/arrange.ts';
 import { createEnsemble } from '../src/generators/ensemble.ts';
 import { cellAt, patternsEqual } from '../src/generators/drums/pattern.ts';
 import { ALL_STEPS, type NoteEvent, type Step } from '../src/generators/types.ts';
 import { toSeed } from '../src/random/rng.ts';
 import { DEFAULT_KEY } from '../src/structure/key.ts';
-import { DEFAULT_LIVE, PARAM_SETS, SEEDS, eventsAt, liveParams, run } from './helpers.ts';
+import { DEFAULT_LIVE, PARAM_SETS, PICKUP, SEEDS, TUNING, eventsAt, liveParams, run } from './helpers.ts';
 
 // Automated acceptance criteria from docs/specs/mvp/requirements.md.
 
 function generateBars(seed: number, bars: number): (readonly NoteEvent[])[] {
-  const ensemble = createEnsemble({ seed: toSeed(seed), initialKey: DEFAULT_KEY });
+  const ensemble = createEnsemble({ seed: toSeed(seed), initialKey: DEFAULT_KEY, tuning: TUNING });
   return Array.from({ length: bars / 2 }, () => ensemble.next(DEFAULT_LIVE).events);
 }
 
@@ -138,7 +137,7 @@ describe('MVP acceptance', () => {
   });
 
   it('generates 2 bars of every part in 5 ms or less on average', () => {
-    const ensemble = createEnsemble({ seed: toSeed(42), initialKey: DEFAULT_KEY });
+    const ensemble = createEnsemble({ seed: toSeed(42), initialKey: DEFAULT_KEY, tuning: TUNING });
     const pairs = 2048;
     const start = performance.now();
     for (let i = 0; i < pairs; i++) ensemble.next(liveParams(1, 1, 1, 1, 1));

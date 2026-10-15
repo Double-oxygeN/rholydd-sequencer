@@ -7,7 +7,7 @@ import { PARTS, type Step } from '../src/generators/types.ts';
 import { sectionEnergy } from '../src/structure/energy.ts';
 import { ALL_KEYS, DEFAULT_KEY, degreeOf } from '../src/structure/key.ts';
 import { clampUnit } from '../src/units.ts';
-import { DEFAULT_LIVE, PARAM_SETS, SEEDS, liveParams, relativeShape, run, type GeneratedPair } from './helpers.ts';
+import { DEFAULT_LIVE, PARAM_SETS, SEEDS, TUNING, liveParams, relativeShape, run, type GeneratedPair } from './helpers.ts';
 
 // Automated acceptance criteria from docs/specs/phase1/requirements.md.
 
@@ -124,7 +124,7 @@ describe('phase 1 acceptance: energy curve', () => {
       for (const depth of [0, 0.5, 1]) {
         for (const { ctx } of run(seed, BARS, () => liveParams(0.3, 0.35, 0.7, 0.6, depth))) {
           if (ctx.sceneRole.scene !== 'drop') continue;
-          expect(ctx.energy).toBe(sectionEnergy(ctx.sectionRole.sectionIn32, clampUnit(depth)));
+          expect(ctx.energy).toBe(sectionEnergy(ctx.sectionRole.sectionIn32, clampUnit(depth), TUNING.energy.phrase));
         }
       }
     }

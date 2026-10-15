@@ -57,6 +57,10 @@ export const TRANSITION_PROGRESSIONS: readonly TransitionProgression[] = [
   [VI, VII, iv, v],
 ];
 
+/** The four notes of a chord, which the basses choose from. */
+export const CHORD_TONES = ['root', 'third', 'fifth', 'seventh'] as const;
+export type ChordTone = (typeof CHORD_TONES)[number];
+
 /** Scale steps from the root to each chord tone: root, 3rd, 5th and 7th. */
 export const CHORD_TONE_STEPS = [0, 2, 4, 6] as const;
 
@@ -102,19 +106,22 @@ export function cycleMainProgression(
     : previousMain;
 }
 
-// Half of m32, because a new key stands out more than a new progression and feels restless when it comes too often.
-const MODULATION_SHARE = 0.5;
-
 /**
  * Key of a cycle, as steps from the initial key. Each move goes one step round the circle of fifths from the
  * previous cycle's key, the keys a DJ can mix into without a clash, with no pull back towards the initial key:
  * like a DJ set, each track only has to suit the one before it.
  */
-export function cycleModulation(previous: FifthsFromInitial, cycleSeed: Seed, m32: UnitInterval): FifthsFromInitial {
+export function cycleModulation(
+  previous: FifthsFromInitial,
+  cycleSeed: Seed,
+  m32: UnitInterval,
+  // Below 1, because a new key stands out more than a new progression and feels restless when it comes too often.
+  share: UnitInterval,
+): FifthsFromInitial {
   const rng = createRng(hash(cycleSeed, TAG.modulation));
   const changeRoll = rng.float();
   const directionRoll = rng.float();
-  if (changeRoll >= m32 * MODULATION_SHARE) return previous;
+  if (changeRoll >= m32 * share) return previous;
   return stepFifths(previous, directionRoll < 0.5 ? 1 : -1);
 }
 

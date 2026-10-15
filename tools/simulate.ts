@@ -4,6 +4,7 @@ import { motifCell, patternsEqual, type Pattern } from '../src/generators/drums/
 import { slotsOf } from '../src/generators/drums/weights.ts';
 import { createEnsemble } from '../src/generators/ensemble.ts';
 import type { FxEvent } from '../src/generators/fx/index.ts';
+import { DEFAULT_GENERATION_TUNING, type GenerationTuning } from '../src/generators/tuning.ts';
 import { PAD_HIGHEST, PAD_LOWEST } from '../src/generators/pad/index.ts';
 import { REESE_HIGHEST, REESE_LOWEST } from '../src/generators/reese/index.ts';
 import { REESE_STYLES, type ReeseStyle } from '../src/generators/reese/styles.ts';
@@ -46,6 +47,7 @@ export interface SimulationOptions {
   readonly seed: Seed;
   readonly live: LiveParams;
   readonly initialKey?: Key;
+  readonly tuning?: GenerationTuning;
 }
 
 const DEGREE_NAMES = ['1', '2', '♭3', '4', '5', '♭6', '♭7'] as const;
@@ -195,8 +197,14 @@ function styleCounts<S extends string>(styles: readonly S[]): StyleCounts<S> {
 const perPart = <T>(make: () => T): PerPart<T> =>
   Object.fromEntries(PARTS.map((part) => [part, make()])) as PerPart<T>;
 
-export function simulate({ bars, seed, live, initialKey = DEFAULT_KEY }: SimulationOptions): SimulationReport {
-  const ensemble = createEnsemble({ seed, initialKey });
+export function simulate({
+  bars,
+  seed,
+  live,
+  initialKey = DEFAULT_KEY,
+  tuning = DEFAULT_GENERATION_TUNING,
+}: SimulationOptions): SimulationReport {
+  const ensemble = createEnsemble({ seed, initialKey, tuning });
   const pairs = Math.ceil(bars / 2);
 
   const styles = styleCounts(SUB_STYLES);

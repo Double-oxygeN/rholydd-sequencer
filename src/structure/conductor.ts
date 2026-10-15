@@ -19,8 +19,9 @@ import {
   type MainProgression,
   type TransitionProgression,
 } from './harmony.ts';
-import { AT_INITIAL_KEY, DEFAULT_KEY, keyAt, type FifthsFromInitial, type Key } from './key.ts';
+import { AT_INITIAL_KEY, keyAt, type FifthsFromInitial, type Key } from './key.ts';
 import { cycleTimbre, type CycleTimbre } from './timbre.ts';
+import type { StructureTuning } from './tuning.ts';
 import {
   BARS_PER_PAIR,
   PAIRS_PER_SECTION,
@@ -130,12 +131,19 @@ interface CycleState {
   readonly timbre: CycleTimbre;
 }
 
+/** Fixed for the whole session: changing any of them needs a new conductor. */
+export interface ConductorSettings {
+  readonly seed: Seed;
+  readonly initialKey: Key;
+  readonly tuning: StructureTuning;
+}
+
 export interface Conductor {
   /** Context for the next 2 bars. */
   next(live: LiveParams): Context;
 }
 
-export function createConductor(master: Seed, initialKey: Key = DEFAULT_KEY): Conductor {
+export function createConductor({ seed: master, initialKey, tuning }: ConductorSettings): Conductor {
   let pair = 0;
   let sectionParams: SectionParams | undefined;
   let phraseParams: PhraseParams | undefined;
@@ -156,13 +164,13 @@ export function createConductor(master: Seed, initialKey: Key = DEFAULT_KEY): Co
       }
       // Cycles always start on a 32-bar boundary, after m32 has been latched for the phrase.
       if (cycle === undefined || section === cycle.firstSection + cycleSections(cycle.layout)) {
-        cycle = nextCycle(master, cycle, section, phraseParams.m32);
+        cycle = nextCycle(master, cycle, section, phraseParams.m32, tuning);
       }
       const sectionInCycle = (section - cycle.firstSection) as SectionInCycle;
       const sceneRole = cycle.scenes[sectionInCycle]!;
       if (role.isSectionStart || sectionParams === undefined || energy === undefined) {
         sectionParams = { m2: live.m2, m8: live.m8 };
-        energy = sceneEnergy(sceneRole, inPhrase.sectionIn32, live.energyDepth);
+        energy = sceneEnergy(sceneRole, inPhrase.sectionIn32, live.energyDepth, tuning.energy);
       }
       const sectionSeed = hash(phraseSeed, TAG.section, inPhrase.sectionIn32);
       const ctx: Context = {
@@ -195,10 +203,16 @@ export function createConductor(master: Seed, initialKey: Key = DEFAULT_KEY): Co
   };
 }
 
-function nextCycle(master: Seed, previous: CycleState | undefined, firstSection: number, m32: UnitInterval): CycleState {
+function nextCycle(
+  master: Seed,
+  previous: CycleState | undefined,
+  firstSection: number,
+  m32: UnitInterval,
+  tuning: StructureTuning,
+): CycleState {
   const index = (previous === undefined ? 0 : previous.index + 1) as CycleIndex;
   const seed = hash(master, TAG.cycle, index);
-  const layout = drawLayout(seed);
+  const layout = drawLayout(seed, tuning.layout);
   return {
     index,
     seed,
@@ -206,7 +220,7 @@ function nextCycle(master: Seed, previous: CycleState | undefined, firstSection:
     scenes: cycleScenes(layout),
     firstSection,
     main: cycleMainProgression(previous?.main, seed, m32),
-    fifths: previous === undefined ? AT_INITIAL_KEY : cycleModulation(previous.fifths, seed, m32),
+    fifths: previous === undefined ? AT_INITIAL_KEY : cycleModulation(previous.fifths, seed, m32, tuning.harmony.modulationShare),
     timbre: cycleTimbre(previous?.timbre, seed, m32),
   };
 }

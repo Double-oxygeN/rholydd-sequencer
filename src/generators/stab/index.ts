@@ -12,16 +12,15 @@ import {
   type StabHit,
   type Step,
   type StepLength,
-  type Velocity,
   type Voicing,
 } from '../types.ts';
+import type { LineTuning } from '../tuning.ts';
 import { STAB_STYLES, stabChance, type StabStyle } from './styles.ts';
 
 /** C4. Each chord tone is folded into the octave from here. */
 export const STAB_LOWEST = 60 as Pitch;
 export const STAB_HIGHEST = (STAB_LOWEST + 11) as Pitch;
 export const STAB_LENGTH = 2 as StepLength;
-const STAB_VELOCITY = 0.7 as Velocity;
 
 export interface StabLine {
   readonly style: StabStyle;
@@ -30,11 +29,11 @@ export interface StabLine {
 
 export type StabGenerator = Generator<ContextWithDrums, StabLine>;
 
-export function createStabGenerator(): StabGenerator {
-  return { generate: stabLine };
+export function createStabGenerator(tuning: LineTuning): StabGenerator {
+  return { generate: (ctx) => stabLine(ctx, tuning) };
 }
 
-export function stabLine(ctx: ContextWithDrums): StabLine {
+export function stabLine(ctx: ContextWithDrums, tuning: LineTuning): StabLine {
   const style = styleOf(ctx, stylePlan(ctx.seeds, TAG.stabStyle, STAB_STYLES));
   const rhythm = createRng(motifSeed(ctx, TAG.stabRhythm));
   const rolls = ALL_STEPS.map(() => rhythm.float());
@@ -47,7 +46,7 @@ export function stabLine(ctx: ContextWithDrums): StabLine {
     const clear = last === undefined || step - last >= STAB_LENGTH;
     if (clear && step + STAB_LENGTH <= end && (rolls[step] ?? 1) < stabChance(style, step, ctx.energy)) starts.push(step);
   }
-  const hits = starts.map((step): StabHit => ({ instrument: 'stab', step, length: STAB_LENGTH, voicing, velocity: STAB_VELOCITY }));
+  const hits = starts.map((step): StabHit => ({ instrument: 'stab', step, length: STAB_LENGTH, voicing, velocity: tuning.velocity.stab }));
   return { style, hits };
 }
 
