@@ -239,16 +239,15 @@ describe('phase 3 acceptance: effects', () => {
     }
   });
 
-  it('throws the last snare before any gap into the reverb before every drop after a build and every breakdown, and nowhere else', () => {
+  it('throws the last snare into the reverb before every drop after a build and every breakdown, and nowhere else, keeping the drop\'s last beat dry', () => {
     let throws = 0;
     for (const { pairs } of runs) {
       for (const pair of pairs) {
         const thrown = ofKind(pair, 'throw');
         const before = leadsIntoDrop(pair.ctx) || (changesScene(pair.ctx) && pair.ctx.nextScene === 'breakdown');
-        const leadIn = dropLeadIn(pair.ctx);
-        const gapped = leadIn !== null && leadIn !== 'straight';
         const snares = pair.heard.filter(
-          (event) => event.instrument === 'drums' && event.part === 'snare' && (!gapped || event.step < GAP_START),
+          (event) =>
+            event.instrument === 'drums' && event.part === 'snare' && (!leadsIntoDrop(pair.ctx) || event.step < GAP_START),
         );
         if (!before || snares.length === 0) {
           expect(thrown).toEqual([]);

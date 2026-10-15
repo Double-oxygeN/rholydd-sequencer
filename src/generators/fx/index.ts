@@ -88,11 +88,14 @@ export function fxEvents(ctx: Context, heard: readonly NoteEvent[]): readonly Fx
   }
   if (opensDrop(ctx)) events.push({ fx: 'impact', step: 0 as Step }, { fx: 'filterReset', step: 0 as Step });
   const leadIn = dropLeadIn(ctx);
-  const gapped = leadIn !== null && hasGap(leadIn);
-  if (gapped) events.push({ fx: 'gap', from: GAP_START as Step, pad: silencesGap(leadIn) ? 'cut' : 'held' });
+  if (leadIn !== null && hasGap(leadIn)) {
+    events.push({ fx: 'gap', from: GAP_START as Step, pad: silencesGap(leadIn) ? 'cut' : 'held' });
+  }
   if (leadsIntoDrop(ctx) || leadsIntoBreakdown(ctx)) {
-    // The pickup inside the gap stays dry, so that no reverb tail smears the drop's first hit.
-    const lastSnare = heardDrums(heard).findLast((hit) => hit.part === 'snare' && (!gapped || hit.step < GAP_START));
+    // Whatever the lead-in, snares in the last beat before a drop stay dry so that no tail smears the drop's first hit.
+    const lastSnare = heardDrums(heard).findLast(
+      (hit) => hit.part === 'snare' && (!leadsIntoDrop(ctx) || hit.step < GAP_START),
+    );
     if (lastSnare !== undefined) events.push({ fx: 'throw', step: lastSnare.step });
   }
   return events;
