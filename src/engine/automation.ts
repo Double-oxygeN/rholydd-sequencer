@@ -38,6 +38,9 @@ const RISER_CUT_SECONDS = 0.01;
 const THROW_LEAD_SECONDS = 0.005;
 const THROW_HOLD_SECONDS = 0.12;
 const GAP_FADE_SECONDS = 0.03;
+// A filter whose frequency jumps while sound flows through it lets out a thump far louder than the sound itself.
+// The low-pass closes over the tails of the drop before an intro, so it glides shut instead of jumping.
+const LOWPASS_CLOSE_SECONDS = 0.02;
 // Slow enough that the tail of the chord cut by the gap does not come back, and no slower than any pad's attack
 // (checked against the sound table), so the gate never blunts the first chord of the drop.
 export const GATE_REOPEN_SECONDS = 0.4;
@@ -63,10 +66,13 @@ export function fxAutomation(events: readonly FxEvent[], pairStart: Seconds, ste
   // A span carrying on from the previous 2 bars only ramps on from where those ended. Setting its start value again
   // would be timed from this pair's own start, which can fall a hair before the previous ramp's end and hold that
   // whole ramp at its start value.
-  const along = (target: AutomationTarget, span: FxSpan, value: (p: number) => number, ramp: Ramp): AutomationPoint[] => [
-    ...(startsEffect(span) ? [{ target, time: at(0), value: value(0), ramp: 'set' } as const] : []),
-    { target, time: at(span.to), value: value(span.endProgress), ramp },
-  ];
+  const along = (
+    target: AutomationTarget,
+    span: FxSpan,
+    value: (p: number) => number,
+    ramp: Ramp,
+    onset: readonly AutomationPoint[] = [{ target, time: at(0), value: value(0), ramp: 'set' }],
+  ): AutomationPoint[] => [...(startsEffect(span) ? onset : []), { target, time: at(span.to), value: value(span.endProgress), ramp }];
   return events.flatMap((event): AutomationPoint[] => {
     switch (event.fx) {
       case 'riser': {
@@ -81,7 +87,10 @@ export function fxAutomation(events: readonly FxEvent[], pairStart: Seconds, ste
       case 'sweep':
         return event.filter === 'highpass'
           ? along('highpass', event.span, highpassFrequency, 'exponential')
-          : along('lowpass', event.span, lowpassFrequency, 'exponential');
+          : along('lowpass', event.span, lowpassFrequency, 'exponential', [
+              { target: 'lowpass', time: at(0), value: LOWPASS.openHz, ramp: 'set' },
+              { target: 'lowpass', time: after(at(0), LOWPASS_CLOSE_SECONDS), value: LOWPASS.closedHz, ramp: 'exponential' },
+            ]);
       case 'filterReset':
         return [
           { target: 'highpass', time: at(STEPS_PER_PAIR), value: HIGHPASS.openHz, ramp: 'set' },

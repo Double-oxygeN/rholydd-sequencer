@@ -115,12 +115,19 @@ describe('fx automation', () => {
     }
   });
 
-  it('opens the low-pass from closed at the start of every intro', () => {
+  it('opens the low-pass from closed at the start of every intro, closing it first within a moment', () => {
     const intros = automate(3, 2048).filter(
       ({ pair }) => pair.ctx.sceneRole.scene === 'intro' && pair.ctx.sectionRole.isPhraseStart && pair.ctx.pairIn8 === 0,
     );
     expect(intros.length).toBeGreaterThan(5);
-    for (const { points } of intros) expect(of(points, 'lowpass')[0]).toMatchObject({ value: LOWPASS.closedHz, ramp: 'set' });
+    for (const { pair, points } of intros) {
+      const [open, closed] = of(points, 'lowpass');
+      const start = pair.ctx.pair * 32 * STEP;
+      expect(open).toEqual({ target: 'lowpass', time: start, value: LOWPASS.openHz, ramp: 'set' });
+      expect(closed).toMatchObject({ value: LOWPASS.closedHz, ramp: 'exponential' });
+      expect(closed!.time - start).toBeGreaterThan(0);
+      expect(closed!.time - start).toBeLessThan(STEP / 2);
+    }
   });
 
   it('sends one snare hit to the reverb and closes the send before the next 16th', () => {
