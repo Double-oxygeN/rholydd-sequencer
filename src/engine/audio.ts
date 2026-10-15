@@ -25,7 +25,8 @@ const SOURCE_TRIM_DB: Readonly<Record<Exclude<ChannelId, 'reverbReturn'>, number
   snare: -10,
   hat: -14,
   ghost: -8,
-  sub: 0,
+  // Listening put the sub's fader at -6 dB to sit right against the kick and the reese, so the trim takes it instead.
+  sub: -6,
   reese: -10,
   stab: -13,
   pad: -16,
