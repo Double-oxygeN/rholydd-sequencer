@@ -10,6 +10,8 @@ import { createStepGrid } from './ui/grid.ts';
 import { createMixerView } from './ui/mixer.ts';
 import { createPanel } from './ui/panel.ts';
 import { createPositionView } from './ui/position.ts';
+import { createSpectrumView } from './ui/spectrum.ts';
+import { createViews } from './ui/views.ts';
 import './ui/style.css';
 
 const SAMPLE_BASE_URL = `${import.meta.env.BASE_URL}samples/drums/`;
@@ -25,6 +27,8 @@ async function boot(root: HTMLElement) {
   const position = createPositionView();
   controls.element.append(position.counters);
   const grid = createStepGrid();
+  const spectrum = createSpectrumView();
+  const views = createViews({ sequencer: grid.element, spectrum: spectrum.element });
   const mixerView = createMixerView(store);
 
   const title = document.createElement('h1');
@@ -32,7 +36,7 @@ async function boot(root: HTMLElement) {
   const status = document.createElement('p');
   status.className = 'status';
   status.textContent = 'サンプルを読み込み中…';
-  root.append(title, controls.element, panel.element, position.element, grid.element, mixerView.element, status);
+  root.append(title, controls.element, panel.element, position.element, views.element, mixerView.element, status);
 
   const instruments = await loadInstruments(SAMPLE_BASE_URL, store.get().mixer, config.sound);
   status.textContent = warnings.length > 0 ? '設定ファイルの一部の値を無視しました（詳細はコンソール）' : '';
@@ -54,10 +58,17 @@ async function boot(root: HTMLElement) {
   });
 
   let session: PlaybackSession | null = null;
+  // The spectrum only draws while it is shown and something plays (N-16).
+  const drawSpectrum = () => {
+    if (views.current() === 'spectrum' && session?.state === 'playing') spectrum.run(instruments.spectrum);
+    else spectrum.halt();
+  };
+  views.onChange(drawSpectrum);
   const render = () => {
     const state = session?.state ?? 'stopped';
     controls.show(state);
     panel.show(state);
+    drawSpectrum();
   };
   render();
   controls.onPlay(async () => {

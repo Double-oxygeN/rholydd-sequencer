@@ -91,7 +91,19 @@ export interface Instruments {
   fx(events: readonly FxEvent[], pairStart: Seconds, stepSeconds: number, from?: Step): void;
   /** Reports the peak and the clipped samples after the limiter about ten times a second. */
   onLevel(listener: (report: LevelReport) => void): void;
+  /** The spectrum of what is heard right now, before the volume: silent while stopped or paused. */
+  spectrum(): Spectrum;
 }
+
+export interface Spectrum {
+  /** Level of each FFT bin in decibels, bin i lying at i × sampleRate / (2 × bins.length) Hz. */
+  readonly bins: Float32Array;
+  readonly sampleRate: number;
+}
+
+// Fine enough to tell the kick's fundamental from the sub's in the lowest band, at a cost only paid when read.
+const SPECTRUM_FFT_SIZE = 4096;
+const SPECTRUM_SMOOTHING = 0.6;
 
 /** The effects of the 2 bars playback resumes within, and the step it resumes from. */
 export interface ResumedEffects {
@@ -114,6 +126,10 @@ export async function loadInstruments(
   // Notes scheduled within the look-ahead window keep playing after Transport.stop, so stop needs a gate.
   // It sits last so that it also cuts the reverb tail.
   const gate = new Tone.Gain(0).connect(listening);
+  // Taken where the clip meter listens, after the gate so that stopping clears it, before the volume so that the
+  // listener's volume never changes what it shows.
+  const analyser = new Tone.Analyser({ type: 'fft', size: SPECTRUM_FFT_SIZE, smoothing: SPECTRUM_SMOOTHING });
+  gate.connect(analyser);
   // Tone.Limiter is a fast compressor rather than a brickwall, so whatever still overshoots is counted here.
   const context = Tone.getContext();
   await context.addAudioWorkletModule(clipWorkletUrl);
@@ -280,6 +296,9 @@ export async function loadInstruments(
         voices.impactBoom.triggerAttackRelease(IMPACT_BOOM_NOTE, IMPACT_SECONDS, time);
         voices.impactNoise.triggerAttackRelease(IMPACT_SECONDS, time);
       }
+    },
+    spectrum() {
+      return { bins: analyser.getValue() as Float32Array, sampleRate: context.sampleRate };
     },
     onLevel(listener) {
       clipMeter.port.onmessage = (message: MessageEvent<LevelReport>) => listener(message.data);

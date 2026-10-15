@@ -5,6 +5,7 @@ import { DEFAULT_CONFIG, decodeConfig, initialParams, parseConfigText } from '..
 import { loadConfig } from '../src/params/load-config.ts';
 import { CHANNEL_IDS, DEFAULT_MIXER, SOLOABLE_IDS, audibleChannels, type MixerSettings } from '../src/params/mixer.ts';
 import { seedFromQuery } from '../src/params/query.ts';
+import { BAND_CENTERS, FLOOR_DB, SEGMENTS, bandLevels, holdPeaks, litSegments } from '../src/ui/spectrum.ts';
 import type { PitchedEvent } from '../src/generators/types.ts';
 import { toSeed } from '../src/random/rng.ts';
 import { chordOf } from '../src/structure/conductor.ts';
@@ -371,5 +372,48 @@ describe('phase 4 acceptance: config file', () => {
     expect((await loadConfig('config.json', answer('{', json))).warnings).toHaveLength(1);
     const read = await loadConfig('config.json', answer('{"params": {"bpm": 170}}', json));
     expect(read).toEqual({ value: { ...DEFAULT_CONFIG, params: { ...DEFAULT_CONFIG.params, bpm: 170 } }, warnings: [] });
+  });
+});
+
+describe('phase 4 acceptance: spectrum analyser', () => {
+  const SAMPLE_RATE = 48000;
+  const BINS = 2048;
+  const binOf = (hz: number) => Math.round((hz * 2 * BINS) / SAMPLE_RATE);
+  const spectrumWith = (peaks: Readonly<Record<number, number>>) => {
+    const bins = new Float32Array(BINS).fill(-120);
+    for (const [hz, db] of Object.entries(peaks)) bins[binOf(Number(hz))] = db;
+    return { bins, sampleRate: SAMPLE_RATE };
+  };
+
+  it('splits 31.5 Hz to 16 kHz into half-octave bands, telling the kick and the sub from the hats', () => {
+    expect(BAND_CENTERS).toHaveLength(19);
+    expect(BAND_CENTERS[0]).toBeCloseTo(31.5);
+    expect(BAND_CENTERS.at(-1)).toBeCloseTo(16128);
+    // A full-scale sine reads about −13.6 dB on the analyser and lights its band to the top.
+    const levels = bandLevels(spectrumWith({ 45: -13.6, 8000: -40 }));
+    const bandOf = (hz: number) => BAND_CENTERS.findIndex((c) => hz >= c * 2 ** -0.25 && hz < c * 2 ** 0.25);
+    expect(litSegments(levels[bandOf(45)]!)).toBe(SEGMENTS);
+    expect(litSegments(levels[bandOf(8000)]!)).toBe(Math.ceil((-26.5 - FLOOR_DB) / 3));
+    expect(levels.filter((level) => litSegments(level) > 0)).toHaveLength(2);
+  });
+
+  it('lights no segment at the floor or below, and all of them at 0 dBFS and above', () => {
+    expect(litSegments(-Infinity)).toBe(0);
+    expect(litSegments(FLOOR_DB)).toBe(0);
+    expect(litSegments(FLOOR_DB + 0.1)).toBe(1);
+    expect(litSegments(-3)).toBe(SEGMENTS - 1);
+    expect(litSegments(0)).toBe(SEGMENTS);
+    expect(litSegments(6)).toBe(SEGMENTS);
+  });
+
+  it('holds a peak for a second, then lets it fall no lower than the level', () => {
+    let peaks = holdPeaks([], [12], 0.016);
+    for (let t = 0; t < 0.9; t += 0.1) peaks = holdPeaks(peaks, [2], 0.1);
+    expect(peaks[0]!.segment).toBe(12);
+    for (let t = 0; t < 0.5; t += 0.1) peaks = holdPeaks(peaks, [2], 0.1);
+    expect(peaks[0]!.segment).toBeLessThan(12);
+    for (let t = 0; t < 5; t += 0.1) peaks = holdPeaks(peaks, [2], 0.1);
+    expect(peaks[0]!.segment).toBe(2);
+    expect(holdPeaks(peaks, [9], 0.1)[0]).toEqual({ segment: 9, age: 0 });
   });
 });
