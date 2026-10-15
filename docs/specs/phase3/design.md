@@ -18,7 +18,7 @@ tools/simulate ──▶ generators/ensemble          （Tone.js に依存しな
 | モジュール | 責務 | Tone.js 依存 |
 | --- | --- | --- |
 | `src/structure/arrangement.ts` | サイクルのレイアウト、8bar ごとのシーン、シーンのエネルギー、シーンごとに鳴らすパート、シーンの境界の判定 | なし |
-| `src/structure/key.ts` | 初期キーから五度圏で何歩離れているかを表す型と、そこからキーを求める関数 | なし |
+| `src/structure/key.ts` | 初期キーから五度圏を何歩進んだかを表す型と、1歩動かす関数、そこからキーを求める関数 | なし |
 | `src/structure/harmony.ts` | 主進行の選択をサイクル単位に、転換進行の選択を32bar 単位に分ける。サイクルの頭での移調を決める | なし |
 | `src/structure/conductor.ts` | サイクルを数え、`Context` にサイクル・シーン・次のシーンを加え、キーをサイクルごとに求める | なし |
 | `src/generators/line.ts` | 型とモチーフのシードを A 系はサイクルから、B は32bar から派生させる | なし |
@@ -46,7 +46,8 @@ tools/simulate ──▶ generators/ensemble          （Tone.js に依存しな
 | `Scene` | `'intro' \| 'build' \| 'drop' \| 'breakdown'` | |
 | `SceneRole` | シーンごとの判別共用体（下記） | 長さを超える位置を表現できない |
 | `FxEvent` | FX の判別共用体（下記） | |
-| `FifthsFromInitial` | `-1 \| 0 \| 1` | 初期キーから五度圏で何歩離れているか。下属調 −1、初期キー 0、属調 1。両隣より遠いキーを表現できない |
+| `FifthsFromInitial` | number | 初期キーから五度圏を属調の向きに何歩進んだか。0〜11 の整数で、12歩で 0 に戻る |
+| `FifthStep` | `-1 \| 1` | 1回の移調の向き。下属調 −1、属調 1。2歩以上の移調を表現できない |
 
 ```ts
 type LeadPosition  = { sections: 2; index: 0 | 1 } | { sections: 3; index: 0 | 1 | 2 };
@@ -141,13 +142,14 @@ type Context = PairRole & SectionHarmony & {
 
 ### 移調（`structure/key.ts`、`structure/harmony.ts`）
 
-- `keyAt(initialKey, fifths)`: 初期キーの主音を `7 × fifths` 半音（mod 12）動かしたキーを返す。属調は +7、下属調は −7（= +5）
-- `cycleModulation(previous, cycleSeed, m32)`: `hash(cycleSeed, TAG.modulation)` から「移調の判定」「移調先」の2つを、`previous` によらず引く。判定が `m32 × MODULATION_SHARE`（0.5）未満なら、`previous` が 0 のとき移調先が 0.5 未満で 1、それ以外で −1、`previous` が ±1 のとき 0 を返す。判定が外れたら `previous` を返す
+- `keyAt(initialKey, fifths)`: 初期キーの主音を `7 × fifths` 半音（mod 12）動かしたキーを返す。1歩進むごとに属調になる
+- `stepFifths(fifths, step)`: `fifths + step` を 0〜11 に折り返して返す
+- `cycleModulation(previous, cycleSeed, m32)`: `hash(cycleSeed, TAG.modulation)` から「移調の判定」「移調の向き」の2つを引く。判定が `m32 × MODULATION_SHARE`（0.5）未満なら、向きが 0.5 未満で `stepFifths(previous, 1)`、それ以外で `stepFifths(previous, -1)` を返す。判定が外れたら `previous` を返す
 
 | 乱数 | 使い方 |
 | --- | --- |
 | 1つ目 | `m32 × 0.5` 未満なら移調する |
-| 2つ目 | 初期キーから移るときの向き。0.5 未満なら属調、それ以外は下属調。属調・下属調にいるときは引いて捨てる |
+| 2つ目 | 移調の向き。0.5 未満なら属調、それ以外は下属調。移調しないときは引いて捨てる |
 
 コンダクターは `CycleState` に `fifths: FifthsFromInitial` を持ち、`nextCycle` で、最初のサイクルは 0、以降は `cycleModulation(previous.fifths, seed, m32)` とします。`Context` の `key` は `keyAt(initialKey, cycle.fifths)` です。
 
@@ -331,7 +333,7 @@ snare のトリム ─▶ [スロー用 Gain] ─▶ リバーブ
 - シーンごとの小節数、鳴る側のドラムの1小節あたりの打音数、音程のあるパートの2bar あたりのノート数
 - FX の種類ごとの出現数
 - シーンで鳴らさないパートの鳴る側のイベント数（0になるはず）
-- 移調の回数と、初期キーからの移調の幅（下属調・初期キー・属調）ごとの小節数
+- 移調の回数と、初期キーから五度圏で何歩離れたキーか（−5〜+6。負は下属調の向き）ごとの小節数
 
 音度やコードトーンの判定（サブベースの音度の分布、コード外の音の数、反復率）は、セッションのキーではなく `ctx.key` で数えます。
 
@@ -348,7 +350,7 @@ snare のトリム ─▶ [スロー用 Gain] ─▶ リバーブ
 | イントロの最初の8bar | すべてのイントロの `index: 0` で、サブベース・ゴースト・奇数ステップのハイハットが鳴る側にない。`index` が1以上ではサブベースが鳴る |
 | エネルギー | ビルドで単調増加かつドロップの A 以下、ドロップはフェーズ1のカーブ、2周目以降のイントロは単調減少、`energyDepth = 0` で全て1 |
 | 主進行 | サイクルの頭以外で主進行が替わらない。`m32 = 0` で替わらない |
-| 移調 | `ctx.key` が変わるのはサイクルの頭だけ。最初のサイクルは初期キー。初期キーとの差（半音、mod 12）が常に 0・5・7 のいずれかで、5 と 7 の間を直接移らない。`m32 = 0` で変わらない。8192bar・複数シードで 5 と 7 の両方が現れる |
+| 移調 | `ctx.key` が変わるのはサイクルの頭だけ。最初のサイクルは初期キー。変わるときは前のキーとの差（半音、mod 12）が 5 か 7。`m32 = 0` で変わらない。8192bar・複数シードで、差 5 と 7 の移調がどちらも現れ、初期キーとの差が 0・5・7 以外のキーが現れる |
 | 音階 | 音程のある全パートの音が `ctx.key` のナチュラルマイナーに含まれる（フェーズ1・2の音階のテストを `ctx.key` で数えるように改める） |
 | 初期キーと移調 | 同じシードで初期キーだけを変えた2回の生成で、全サイクルの `ctx.key − initialKey` が一致する（フェーズ1・2の移調のテストがそのまま通る） |
 | ドロップ間の主題 | 同じサイクルのドロップの32bar の A 系で、進行と、大きなフィル区間より前のリース・スタブ・パッドのイベント列が一致 |
