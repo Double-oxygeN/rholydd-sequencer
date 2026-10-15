@@ -13,7 +13,18 @@ import {
   leadsIntoDrop,
   sceneEnergy,
 } from '../src/structure/arrangement.ts';
-import { ALL_KEYS, DEFAULT_KEY, KEY_NAMES, degreeOf, keyAt, parseKey, type Key } from '../src/structure/key.ts';
+import {
+  ALL_KEYS,
+  AT_INITIAL_KEY,
+  DEFAULT_KEY,
+  KEY_NAMES,
+  degreeOf,
+  keyAt,
+  parseKey,
+  stepFifths,
+  type FifthsFromInitial,
+  type Key,
+} from '../src/structure/key.ts';
 import { clampUnit } from '../src/units.ts';
 import { DEFAULT_LIVE, PARAM_SETS, SEEDS, liveParams, run, type GeneratedPair } from './helpers.ts';
 
@@ -377,33 +388,47 @@ describe('phase 3 acceptance: a theme per cycle', () => {
 const shiftOf = (pair: GeneratedPair, initialKey: Key) => (((pair.ctx.key - initialKey) % 12) + 12) % 12;
 
 describe('phase 3 acceptance: modulation', () => {
-  it('names the dominant and the subdominant minor of the initial key', () => {
-    expect(KEY_NAMES[keyAt(DEFAULT_KEY, 1)]).toBe('C');
-    expect(KEY_NAMES[keyAt(DEFAULT_KEY, -1)]).toBe('B♭');
-    expect(KEY_NAMES[keyAt(parseKey('C')!, -1)]).toBe('F');
-    expect(KEY_NAMES[keyAt(parseKey('B')!, 1)]).toBe('F♯');
+  it('names the key a number of fifths round the circle from the initial key', () => {
+    const fifths = (n: number) => n as FifthsFromInitial;
+    expect(KEY_NAMES[keyAt(DEFAULT_KEY, AT_INITIAL_KEY)]).toBe('F');
+    expect(KEY_NAMES[keyAt(DEFAULT_KEY, stepFifths(AT_INITIAL_KEY, 1))]).toBe('C');
+    expect(KEY_NAMES[keyAt(DEFAULT_KEY, stepFifths(AT_INITIAL_KEY, -1))]).toBe('B♭');
+    expect(KEY_NAMES[keyAt(DEFAULT_KEY, fifths(2))]).toBe('G');
+    expect(KEY_NAMES[keyAt(parseKey('B')!, fifths(1))]).toBe('F♯');
+    expect(stepFifths(fifths(11), 1)).toBe(0);
+    expect(stepFifths(AT_INITIAL_KEY, -1)).toBe(11);
   });
 
-  it('moves the key only at the start of a cycle, between the initial key and its neighbours, and never when m32 is 0', () => {
+  it("moves the key only at the start of a cycle, one fifth from the previous cycle's key, and never when m32 is 0", () => {
     for (const { params, pairs } of runs) {
       expect(shiftOf(pairs[0]!, DEFAULT_KEY)).toBe(0);
       let moves = 0;
       for (let i = 1; i < pairs.length; i++) {
-        const before = shiftOf(pairs[i - 1]!, DEFAULT_KEY);
-        const after = shiftOf(pairs[i]!, DEFAULT_KEY);
-        expect([0, 5, 7]).toContain(after);
+        const before = pairs[i - 1]!.ctx.key;
+        const after = pairs[i]!.ctx.key;
         if (before === after) continue;
         moves++;
         expect(pairs[i]!.ctx.sectionInCycle === 0 && pairs[i]!.ctx.isSectionStart).toBe(true);
-        expect(before === 0 || after === 0).toBe(true);
+        expect([5, 7]).toContain((((after - before) % 12) + 12) % 12);
       }
       if (params.m32 === 0) expect(moves).toBe(0);
     }
   });
 
-  it('reaches both the dominant and the subdominant over long runs', () => {
-    const shifts = new Set(SEEDS.flatMap((seed) => run(seed, 8192).map((pair) => shiftOf(pair, DEFAULT_KEY))));
-    expect([...shifts].sort((a, b) => a - b)).toEqual([0, 5, 7]);
+  it('moves both ways and reaches keys beyond the neighbours of the initial key over long runs', () => {
+    const steps = new Set<number>();
+    const shifts = new Set<number>();
+    for (const seed of SEEDS) {
+      const pairs = run(seed, 8192);
+      pairs.forEach((pair, i) => {
+        shifts.add(shiftOf(pair, DEFAULT_KEY));
+        if (i > 0 && pair.ctx.key !== pairs[i - 1]!.ctx.key) {
+          steps.add((((pair.ctx.key - pairs[i - 1]!.ctx.key) % 12) + 12) % 12);
+        }
+      });
+    }
+    expect([...steps].sort((a, b) => a - b)).toEqual([5, 7]);
+    expect([...shifts].some((shift) => ![0, 5, 7].includes(shift))).toBe(true);
   });
 
   it("plays every pitched note in the natural minor of the cycle's key", () => {

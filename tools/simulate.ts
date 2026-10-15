@@ -33,7 +33,7 @@ import {
   rootDegree,
   type MainProgression,
 } from '../src/structure/harmony.ts';
-import { DEFAULT_KEY, KEY_NAMES, degreeOf, keyAt, parseKey, type FifthsFromInitial, type Key } from '../src/structure/key.ts';
+import { DEFAULT_KEY, KEY_NAMES, degreeOf, parseKey, type Key } from '../src/structure/key.ts';
 import { clampUnit } from '../src/units.ts';
 
 export interface SimulationOptions {
@@ -89,10 +89,10 @@ export interface SimulationReport {
     readonly transition: Record<string, number>;
     /** Number of 32-bar boundaries where the main progression changed. */
     readonly mainChanges: number;
-    /** Number of cycle starts where the key moved. */
-    readonly modulations: number;
-    /** Bars played in each key, named by its place relative to the initial key. */
-    readonly barsByKey: Record<KeyPlace, number>;
+    /** Number of cycle starts where the key moved, by the way it moved. */
+    readonly modulations: Record<'dominant' | 'subdominant', number>;
+    /** Bars played in each key, keyed by signed steps round the circle of fifths from the initial key, -5 to +6. */
+    readonly barsByFifths: Record<string, number>;
     /** Notes of any pitched part outside the chord of their 2 bars. The generators should never produce one. */
     readonly outOfChord: number;
     /** Notes of any pitched part outside the part's range. The generators should never produce one. */
@@ -131,16 +131,18 @@ export interface SimulationReport {
 }
 
 type PitchedPart = PitchedEvent['instrument'];
-type KeyPlace = 'subdominant' | 'initial' | 'dominant';
 
-const KEY_PLACES: Readonly<Record<FifthsFromInitial, KeyPlace>> = { [-1]: 'subdominant', 0: 'initial', 1: 'dominant' };
-const ALL_FIFTHS: readonly FifthsFromInitial[] = [-1, 0, 1];
+const SIGNED_FIFTHS = [-5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6] as const;
 
-/** Where a key lies relative to the initial key, or undefined for a key the conductor should never reach. */
-function keyPlace(initialKey: Key, key: Key): KeyPlace | undefined {
-  const fifths = ALL_FIFTHS.find((f) => keyAt(initialKey, f) === key);
-  return fifths === undefined ? undefined : KEY_PLACES[fifths];
+/** Steps round the circle of fifths from one key to another, negative towards the subdominant. */
+function fifthsBetween(from: Key, to: Key): (typeof SIGNED_FIFTHS)[number] {
+  // A fifth is 7 semitones, and 7 × 7 ≡ 1 (mod 12), so multiplying the semitones by 7 counts the fifths.
+  const fifths = (((to - from) * 7) % 12 + 12) % 12;
+  return (fifths > 6 ? fifths - 12 : fifths) as (typeof SIGNED_FIFTHS)[number];
 }
+
+// Zero is written ±0 so that it is not an integer-like key, which objects would list before every other key.
+const signed = (n: number) => (n > 0 ? `+${n}` : n === 0 ? '±0' : String(n));
 type CycleBars = 128 | 160 | 192;
 type DropExtension = 'none' | 'first' | 'second' | 'both';
 
@@ -192,8 +194,8 @@ export function simulate({ bars, seed, live, initialKey = DEFAULT_KEY }: Simulat
   let previousMain: MainProgression | undefined;
   let mainChanges = 0;
   let previousKey: Key | undefined;
-  let modulations = 0;
-  const barsByKey: Record<KeyPlace, number> = { subdominant: 0, initial: 0, dominant: 0 };
+  const modulations = { dominant: 0, subdominant: 0 };
+  const barsByFifths = Object.fromEntries(SIGNED_FIFTHS.map((f) => [signed(f), 0])) as Record<string, number>;
   let outOfChord = 0;
   const degrees = Object.fromEntries(DEGREE_NAMES.map((d) => [d, 0])) as Record<(typeof DEGREE_NAMES)[number], number>;
   let subNotes = 0;
@@ -248,10 +250,13 @@ export function simulate({ bars, seed, live, initialKey = DEFAULT_KEY }: Simulat
       leads[`${ctx.layout.intro * BARS_PER_SECTION}/${ctx.layout.breakdown * BARS_PER_SECTION}`]! += 1;
       extensions[extensionOf(ctx.layout)]++;
     }
-    const place = keyPlace(initialKey, ctx.key);
-    if (place === undefined) throw new Error(`key ${KEY_NAMES[ctx.key]} is not next to the initial key ${KEY_NAMES[initialKey]}`);
-    barsByKey[place] += 2;
-    if (previousKey !== undefined && previousKey !== ctx.key) modulations++;
+    barsByFifths[signed(fifthsBetween(initialKey, ctx.key))]! += 2;
+    if (previousKey !== undefined && previousKey !== ctx.key) {
+      const step = fifthsBetween(previousKey, ctx.key);
+      if (step === 1) modulations.dominant++;
+      else if (step === -1) modulations.subdominant++;
+      else throw new Error(`the key moved ${step} steps round the circle of fifths at bar ${ctx.bar}`);
+    }
     previousKey = ctx.key;
     const { scene } = ctx.sceneRole;
     sceneBars[scene] += 2;
@@ -358,7 +363,7 @@ export function simulate({ bars, seed, live, initialKey = DEFAULT_KEY }: Simulat
       section: boundaries > 0 ? repeatedSections / boundaries : 0,
       distinctBasePatterns: distinctBases.size,
     },
-    harmony: { main: mainProgressions, transition: transitionProgressions, mainChanges, modulations, barsByKey, outOfChord, outOfRange },
+    harmony: { main: mainProgressions, transition: transitionProgressions, mainChanges, modulations, barsByFifths, outOfChord, outOfRange },
     notesPerPair: Object.fromEntries(PITCHED_PARTS.map((part) => [part, pitchedNotes[part] / pairs])) as Record<
       PitchedPart,
       number
@@ -469,7 +474,8 @@ function formatReport(report: SimulationReport): string {
     ...Object.entries(report.harmony.main).map(([name, count]) => `  A/A'/A''  ${name.padEnd(18)} ${String(count).padStart(6)}`),
     ...Object.entries(report.harmony.transition).map(([name, count]) => `  B         ${name.padEnd(18)} ${String(count).padStart(6)}`),
     `  main progression changed at ${report.harmony.mainChanges} of ${report.phrase.boundaries} 32-bar boundaries`,
-    `  key moved ${report.harmony.modulations} times  bars by key: ${Object.entries(report.harmony.barsByKey).map(([place, bars]) => `${place} ${bars}`).join('  ')}`,
+    `  key moved to the dominant ${report.harmony.modulations.dominant} times, to the subdominant ${report.harmony.modulations.subdominant} times`,
+    `  bars by fifths from the initial key: ${Object.entries(report.harmony.barsByFifths).map(([fifths, bars]) => `${fifths} ${bars}`).join('  ')}`,
     `  notes outside the chord: ${report.harmony.outOfChord}  outside the range: ${report.harmony.outOfRange}`,
     `  notes per 2 bars: ${PITCHED_PARTS.map((part) => `${part} ${report.notesPerPair[part].toFixed(2)}`).join('  ')}`,
     '',

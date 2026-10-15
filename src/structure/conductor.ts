@@ -19,7 +19,7 @@ import {
   type MainProgression,
   type TransitionProgression,
 } from './harmony.ts';
-import { DEFAULT_KEY, keyAt, type FifthsFromInitial, type Key } from './key.ts';
+import { AT_INITIAL_KEY, DEFAULT_KEY, keyAt, type FifthsFromInitial, type Key } from './key.ts';
 import {
   BARS_PER_PAIR,
   PAIRS_PER_SECTION,
@@ -201,6 +201,6 @@ function nextCycle(master: Seed, previous: CycleState | undefined, firstSection:
     scenes: cycleScenes(layout),
     firstSection,
     main: cycleMainProgression(previous?.main, seed, m32),
-    fifths: previous === undefined ? 0 : cycleModulation(previous.fifths, seed, m32),
+    fifths: previous === undefined ? AT_INITIAL_KEY : cycleModulation(previous.fifths, seed, m32),
   };
 }
