@@ -110,9 +110,7 @@ export const MAIN_SKELETONS: readonly MainSkeleton[] = [
   ['i', 'VI', 'iv', 'v'],
   ['i', 'i', 'VI', 'VII'],
   ['i', 'III', 'VII', 'VI'],
-  // Passes through the relative major's ii–V–I.
   ['i', 'iv', 'VII', 'III'],
-  // Ends on v, which a borrowed V7 turns into a strong pull back to the i of the next section.
   ['i', 'VI', 'VII', 'v'],
 ];
 
