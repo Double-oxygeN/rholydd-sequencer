@@ -208,6 +208,8 @@ export async function loadInstruments(drumSamplesUrl: string, mixer: MixerSettin
       // response asynchronously, which only leaves the first few tens of milliseconds dry.
       reverb.dispose();
       reverb = createReverb(reverbIn, strips.reverbReturn.input);
+      // Scheduled before the transport starts, so that the first 2 bars, which the transport times at this very
+      // instant, set the values their effects start from after these.
       rest(time);
       gate.gain.cancelScheduledValues(time);
       gate.gain.setValueAtTime(1, time);

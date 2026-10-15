@@ -18,14 +18,19 @@ import { STEPS_PER_PAIR, type NoteEvent, type Step } from '../types.ts';
 export type StepEnd = Brand<number, 'StepEnd'>;
 
 /**
- * Part of an effect that runs longer than 2 bars. Progress counts through the whole effect, so that every 2 bars
- * can be scheduled alone and still join up with the ones before and after.
+ * Part of an effect that runs longer than 2 bars, from the start of the 2 bars, as scenes only change between them.
+ * Progress counts through the whole effect, so that every 2 bars can be scheduled alone and still join up with the
+ * ones before and after.
  */
 export interface FxSpan {
-  readonly from: Step;
   readonly to: StepEnd;
   readonly startProgress: UnitInterval;
   readonly endProgress: UnitInterval;
+}
+
+/** Whether the span starts its effect rather than carrying on from the previous 2 bars. */
+export function startsEffect(span: FxSpan): boolean {
+  return span.startProgress === 0;
 }
 
 export interface RiserSegment {
@@ -116,7 +121,6 @@ function buildPeak(leadIn: DropLeadIn): number {
 
 function spanOf(offset: number, total: number, to: number): FxSpan {
   return {
-    from: 0 as Step,
     to: to as StepEnd,
     startProgress: (offset / total) as UnitInterval,
     endProgress: ((offset + to) / total) as UnitInterval,

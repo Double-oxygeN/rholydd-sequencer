@@ -1,4 +1,4 @@
-import type { FxEvent, FxSpan } from '../generators/fx/index.ts';
+import { startsEffect, type FxEvent, type FxSpan } from '../generators/fx/index.ts';
 import { STEPS_PER_PAIR } from '../generators/types.ts';
 import type { Seconds } from './ducking.ts';
 
@@ -60,8 +60,11 @@ export const lowpassFrequency = (progress: number) => logBetween(LOWPASS.closedH
 export function fxAutomation(events: readonly FxEvent[], pairStart: Seconds, stepSeconds: number): readonly AutomationPoint[] {
   const at = (step: number) => (pairStart + step * stepSeconds) as Seconds;
   const after = (time: Seconds, seconds: number) => (time + seconds) as Seconds;
+  // A span carrying on from the previous 2 bars only ramps on from where those ended. Setting its start value again
+  // would be timed from this pair's own start, which can fall a hair before the previous ramp's end and hold that
+  // whole ramp at its start value.
   const along = (target: AutomationTarget, span: FxSpan, value: (p: number) => number, ramp: Ramp): AutomationPoint[] => [
-    { target, time: at(span.from), value: value(span.startProgress), ramp: 'set' },
+    ...(startsEffect(span) ? [{ target, time: at(0), value: value(0), ramp: 'set' } as const] : []),
     { target, time: at(span.to), value: value(span.endProgress), ramp },
   ];
   return events.flatMap((event): AutomationPoint[] => {
