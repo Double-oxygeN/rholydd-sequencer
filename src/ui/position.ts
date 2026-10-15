@@ -31,8 +31,8 @@ export function createPositionView(): PositionView {
   const clear = () => {
     cycle.clear();
     pairs.set(null);
-    bars.set(null);
-    cycles.set(null);
+    // Nothing has played yet in a session that has not started (F-83).
+    counters.hidden = true;
   };
   clear();
 
@@ -47,6 +47,7 @@ export function createPositionView(): PositionView {
       pairs.set(ctx.pairIn8);
       bars.set(ctx.bar + Math.floor(step / STEPS_PER_BAR) + 1);
       cycles.set(ctx.cycle + 1);
+      counters.hidden = false;
     },
     clear,
   };
@@ -59,8 +60,8 @@ function counter(unit: string) {
   element.append(value, unit);
   return {
     element,
-    set(n: number | null) {
-      value.textContent = n === null ? '–' : String(n);
+    set(n: number) {
+      value.textContent = String(n);
     },
   };
 }

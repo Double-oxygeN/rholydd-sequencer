@@ -236,6 +236,10 @@ button:disabled {
   font-variant-numeric: tabular-nums;
 }
 
+.counters[hidden] {
+  display: none;
+}
+
 .counter strong {
   margin-right: 4px;
   font-size: 1.4rem;
