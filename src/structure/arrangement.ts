@@ -236,22 +236,3 @@ export function opensDrop(ctx: { readonly sceneRole: SceneRole; readonly section
 export function refreshesReference(role: SceneRole): boolean {
   return role.scene === 'intro' || (role.scene === 'drop' && !(role.drop === 'first' && role.phrase === 0));
 }
-
-export const SCENE_LABEL: Readonly<Record<Scene, string>> = {
-  intro: 'イントロ',
-  build: 'ビルド',
-  drop: 'ドロップ',
-  breakdown: 'ブレイクダウン',
-};
-
-export function sceneName(role: SceneRole): string {
-  return role.scene === 'drop' ? `${SCENE_LABEL.drop}${role.drop === 'first' ? 1 : 2}` : SCENE_LABEL[role.scene];
-}
-
-/** Bars from the given bar of the cycle to the start of the next scene, which may be the next cycle's intro. */
-export function barsToNextScene(scenes: readonly SceneRole[], section: SectionInCycle, barInSection: number): number {
-  const current = scenes[section]!.scene;
-  let next = section + 1;
-  while (next < scenes.length && scenes[next]!.scene === current) next++;
-  return (next - section) * BARS_PER_SECTION - barInSection;
-}

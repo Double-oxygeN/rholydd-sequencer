@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { hash } from '../src/random/rng.ts';
 import {
-  barsToNextScene,
   cycleScenes,
   cycleSections,
   DROP_LEAD_INS,
@@ -77,15 +76,6 @@ describe('cycle layout', () => {
       expect([...counts[drop].keys()].sort()).toEqual([...DROP_LEAD_INS].sort());
       for (const count of counts[drop].values()) expect(count / draws).toBeCloseTo(1 / 4, 1);
     }
-  });
-
-  it('counts the bars to the next scene, treating an extended drop as one scene', () => {
-    const scenes = cycleScenes(LAYOUT);
-    const at = (section: number, bar: number) => barsToNextScene(scenes, section as SectionInCycle, bar);
-    expect(at(0, 0)).toBe(24);
-    expect(at(2, 5)).toBe(3);
-    expect(at(4, 0)).toBe(64);
-    expect(at(19, 7)).toBe(1);
   });
 });
 

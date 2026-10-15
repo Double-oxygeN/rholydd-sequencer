@@ -1,66 +1,67 @@
 import { STEPS_PER_BAR, type Step } from '../generators/types.ts';
-import { BARS_PER_PAIR, PAIRS_PER_SECTION, SECTIONS_PER_PHRASE, type SectionIn32 } from '../structure/form.ts';
-import { chordOf, type Context } from '../structure/conductor.ts';
-import { chordName } from '../structure/harmony.ts';
-import { barsToNextScene, cycleScenes, sceneName } from '../structure/arrangement.ts';
-import { keyName } from '../structure/key.ts';
-
-const BARS_PER_SECTION = BARS_PER_PAIR * PAIRS_PER_SECTION;
-const BARS_PER_PHRASE = BARS_PER_SECTION * SECTIONS_PER_PHRASE;
-
-const SECTION_LABEL: Readonly<Record<SectionIn32, string>> = { 0: 'A', 1: "A'", 2: 'B', 3: "A''" };
+import { cycleScenes } from '../structure/arrangement.ts';
+import type { Context } from '../structure/conductor.ts';
+import { PAIRS_PER_SECTION } from '../structure/form.ts';
 
 export interface PositionView {
   readonly element: HTMLElement;
+  /** The counters and the meters, which stay as they are while paused. */
+  readonly counters: HTMLElement;
   show(ctx: Context, step: Step): void;
   clear(): void;
 }
 
+/**
+ * Bars and cycles played so far, and where playback stands within the cycle and its 8 bars. The sequencer already
+ * shows the 2 bars playing, so the meters go no finer than that, and the scene colours stand in for scene names.
+ */
 export function createPositionView(): PositionView {
   const element = document.createElement('div');
   element.className = 'position';
-  const meters = [meter('8bar', BARS_PER_SECTION), meter('32bar', BARS_PER_PHRASE)];
   const cycle = sceneMeter();
-  const total = document.createElement('div');
-  total.className = 'position-total';
-  // Shown apart from the chord because a chord name alone hardly tells that the cycle has changed key.
-  const key = document.createElement('span');
-  key.className = 'position-key';
-  const chord = document.createElement('span');
-  chord.className = 'position-chord';
-  const scene = document.createElement('span');
-  scene.className = 'position-scene';
-  const text = document.createElement('span');
-  total.append(key, chord, scene, text);
-  element.append(...meters.map((m) => m.element), cycle.element, total);
+  const pairs = pairMeter();
+  element.append(cycle.element, pairs.element);
+
+  const counters = document.createElement('div');
+  counters.className = 'counters';
+  const bars = counter('小節');
+  const cycles = counter('サイクル');
+  counters.append(bars.element, cycles.element);
 
   const clear = () => {
-    for (const m of meters) m.set(null);
     cycle.clear();
-    key.textContent = '';
-    chord.textContent = '';
-    scene.textContent = '';
-    text.textContent = '停止中';
+    pairs.set(null);
+    bars.set(null);
+    cycles.set(null);
   };
   clear();
 
   return {
     element,
+    counters,
     show(ctx, step) {
-      const bar = ctx.bar + Math.floor(step / STEPS_PER_BAR);
-      const inSection = bar % BARS_PER_SECTION;
-      const { sectionIn32 } = ctx.sectionRole;
-      const inPhrase = sectionIn32 * BARS_PER_SECTION + inSection;
-      meters[0]!.set(inSection);
-      meters[1]!.set(inPhrase);
-      const scenes = cycleScenes(ctx.layout);
-      cycle.show(scenes.map((role) => role.scene), ctx.sectionInCycle);
-      key.textContent = keyName(ctx.key);
-      chord.textContent = chordName(ctx.key, chordOf(ctx));
-      scene.textContent = `${sceneName(ctx.sceneRole)}（次のシーンまで ${barsToNextScene(scenes, ctx.sectionInCycle, inSection)} 小節）`;
-      text.textContent = `通算 ${bar + 1} 小節目 / 32bar 中 ${inPhrase + 1} 小節目（${SECTION_LABEL[sectionIn32]}） / 8bar 中 ${inSection + 1} 小節目${ctx.isSectionEnd ? '（フィル区間）' : ''}`;
+      cycle.show(
+        cycleScenes(ctx.layout).map((role) => role.scene),
+        ctx.sectionInCycle,
+      );
+      pairs.set(ctx.pairIn8);
+      bars.set(ctx.bar + Math.floor(step / STEPS_PER_BAR) + 1);
+      cycles.set(ctx.cycle + 1);
     },
     clear,
+  };
+}
+
+function counter(unit: string) {
+  const element = document.createElement('span');
+  element.className = 'counter';
+  const value = document.createElement('strong');
+  element.append(value, unit);
+  return {
+    element,
+    set(n: number | null) {
+      value.textContent = n === null ? '–' : String(n);
+    },
   };
 }
 
@@ -68,9 +69,6 @@ export function createPositionView(): PositionView {
 function sceneMeter() {
   const element = document.createElement('div');
   element.className = 'meter scene-meter';
-  const title = document.createElement('span');
-  title.className = 'meter-label';
-  title.textContent = 'cycle';
   let cells: HTMLElement[] = [];
   let shape = '';
   return {
@@ -82,31 +80,28 @@ function sceneMeter() {
         cells = scenes.map((scene) => {
           const cell = document.createElement('span');
           cell.dataset.scene = scene;
-          cell.title = `${BARS_PER_SECTION} 小節`;
           return cell;
         });
-        element.style.gridTemplateColumns = `4em repeat(${cells.length}, 1fr)`;
-        element.replaceChildren(title, ...cells);
+        element.style.gridTemplateColumns = `repeat(${cells.length}, 1fr)`;
+        element.replaceChildren(...cells);
       }
       cells.forEach((cell, i) => cell.classList.toggle('on', i <= current));
     },
     clear() {
       shape = '';
       cells = [];
-      element.replaceChildren(title);
+      element.replaceChildren();
     },
   };
 }
 
-function meter(label: string, bars: number) {
+/** One cell per 2 bars of the 8 bars playing. */
+function pairMeter() {
   const element = document.createElement('div');
   element.className = 'meter';
-  element.style.gridTemplateColumns = `4em repeat(${bars}, 1fr)`;
-  const title = document.createElement('span');
-  title.className = 'meter-label';
-  title.textContent = label;
-  const cells = Array.from({ length: bars }, () => document.createElement('span'));
-  element.append(title, ...cells);
+  element.style.gridTemplateColumns = `repeat(${PAIRS_PER_SECTION}, 1fr)`;
+  const cells = Array.from({ length: PAIRS_PER_SECTION }, () => document.createElement('span'));
+  element.append(...cells);
   return {
     element,
     set(current: number | null) {

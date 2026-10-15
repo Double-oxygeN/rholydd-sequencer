@@ -178,12 +178,7 @@ button:disabled {
   align-items: center;
 }
 
-.meter-label {
-  font-size: 0.8rem;
-  color: var(--muted);
-}
-
-.meter span:not(.meter-label) {
+.meter span {
   height: 10px;
   border-radius: 2px;
   background: var(--cell);
@@ -218,30 +213,19 @@ button:disabled {
   background: var(--ornament);
 }
 
-.position-scene {
-  color: var(--fg);
-  font-weight: 600;
-}
-
-.position-total {
+.counters {
   display: flex;
-  gap: 12px;
+  gap: 16px;
+  margin-left: auto;
   align-items: baseline;
-  font-size: 0.9rem;
   color: var(--muted);
+  font-size: 0.9rem;
   font-variant-numeric: tabular-nums;
 }
 
-.position-key {
-  color: var(--fg);
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.position-chord {
-  min-width: 5em;
-  font-size: 1.2rem;
-  font-weight: 700;
+.counter strong {
+  margin-right: 4px;
+  font-size: 1.4rem;
   color: var(--fg);
 }
 
@@ -276,15 +260,23 @@ button:disabled {
 }
 
 .grid-cell[data-layer='base'] {
-  background: color-mix(in srgb, var(--base) calc(var(--velocity) * 100%), var(--cell));
+  --mark: color-mix(in srgb, var(--base) calc(var(--velocity) * 100%), var(--cell));
+  background: var(--mark);
 }
 
 .grid-cell[data-layer='ornament'] {
-  background: color-mix(in srgb, var(--ornament) calc(var(--velocity) * 100% + 30%), var(--cell));
+  --mark: color-mix(in srgb, var(--ornament) calc(var(--velocity) * 100% + 30%), var(--cell));
+  background: var(--mark);
 }
 
 .grid-cell[data-layer='fill'] {
-  background: color-mix(in srgb, var(--fill) calc(var(--velocity) * 100%), var(--cell));
+  --mark: color-mix(in srgb, var(--fill) calc(var(--velocity) * 100%), var(--cell));
+  background: var(--mark);
+}
+
+/* A ghost is a small dot in the snare's lane, so that the backbeat still reads at a glance. */
+.grid-cell[data-part='ghost'] {
+  background: radial-gradient(circle, var(--mark) 0 42%, var(--cell) 48%);
 }
 
 .grid-cell[data-layer='note'] {

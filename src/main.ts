@@ -23,6 +23,7 @@ async function boot(root: HTMLElement) {
   const controls = createControls(store);
   const panel = createPanel(store);
   const position = createPositionView();
+  controls.element.append(position.counters);
   const grid = createStepGrid();
   const mixerView = createMixerView(store);
 
