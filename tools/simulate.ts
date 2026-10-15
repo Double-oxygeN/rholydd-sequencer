@@ -3,6 +3,7 @@ import { ALL_FILL_KINDS, FILL_LENGTHS, type FillKind, type FillLength } from '..
 import { motifCell, patternsEqual, type Pattern } from '../src/generators/drums/pattern.ts';
 import { slotsOf } from '../src/generators/drums/weights.ts';
 import { createEnsemble } from '../src/generators/ensemble.ts';
+import type { FxEvent } from '../src/generators/fx/index.ts';
 import { PAD_HIGHEST, PAD_LOWEST } from '../src/generators/pad/index.ts';
 import { REESE_HIGHEST, REESE_LOWEST } from '../src/generators/reese/index.ts';
 import { REESE_STYLES, type ReeseStyle } from '../src/generators/reese/styles.ts';
@@ -13,8 +14,21 @@ import { SUB_STYLES, type SubStyle } from '../src/generators/sub/styles.ts';
 import { PARTS, type Layer, type NoteEvent, type Part, type PitchedEvent } from '../src/generators/types.ts';
 import { DEFAULT_LIVE_PARAMS } from '../src/params/store.ts';
 import { parseSeed, type Seed } from '../src/random/rng.ts';
+import {
+  BARS_PER_SECTION,
+  DROP_LEAD_INS,
+  cycleSections,
+  dropLeadIn,
+  plays,
+  playsHit,
+  refreshesReference,
+  type CycleLayout,
+  type DropLeadIn,
+  type DropOrdinal,
+  type Scene,
+} from '../src/structure/arrangement.ts';
 import { chordOf, type Context, type LiveParams } from '../src/structure/conductor.ts';
-import type { SectionIn32 } from '../src/structure/form.ts';
+import { SECTIONS_PER_PHRASE, type SectionIn32 } from '../src/structure/form.ts';
 import {
   MAIN_PROGRESSIONS,
   TRANSITION_PROGRESSIONS,
@@ -24,13 +38,14 @@ import {
   type MainProgression,
 } from '../src/structure/harmony.ts';
 import { DEFAULT_KEY, KEY_NAMES, degreeOf, parseKey, type Key } from '../src/structure/key.ts';
+import { PAD_TIMBRES, REESE_TIMBRES, STAB_TIMBRES, type CycleTimbre } from '../src/structure/timbre.ts';
 import { clampUnit } from '../src/units.ts';
 
 export interface SimulationOptions {
   readonly bars: number;
   readonly seed: Seed;
   readonly live: LiveParams;
-  readonly key?: Key;
+  readonly initialKey?: Key;
 }
 
 const DEGREE_NAMES = ['1', '2', '♭3', '4', '5', '♭6', '♭7'] as const;
@@ -44,7 +59,7 @@ const SECTIONS_IN_32: readonly SectionIn32[] = [0, 1, 2, 3];
 export interface SimulationReport {
   readonly bars: number;
   readonly seed: Seed;
-  readonly key: Key;
+  readonly initialKey: Key;
   readonly live: LiveParams;
   /** Average hits per bar for each part, split by layer. */
   readonly density: PerPart<Record<Layer | 'total', number>>;
@@ -53,6 +68,8 @@ export interface SimulationReport {
   readonly phrase: {
     /** Number of 32-bar boundaries after the first phrase. */
     readonly boundaries: number;
+    /** Number of those boundaries where the scene lets the strong mutation give the drums a new groove. */
+    readonly refreshable: number;
     /** Number of those boundaries where the strong mutation changed the reference pattern. */
     readonly referenceChanges: number;
   };
@@ -77,6 +94,10 @@ export interface SimulationReport {
     readonly transition: Record<string, number>;
     /** Number of 32-bar boundaries where the main progression changed. */
     readonly mainChanges: number;
+    /** Number of cycle starts where the key moved, by the way it moved. */
+    readonly modulations: Record<'dominant' | 'subdominant', number>;
+    /** Bars played in each key, keyed by signed steps round the circle of fifths from the initial key, -5 to +6. */
+    readonly barsByFifths: Record<string, number>;
     /** Notes of any pitched part outside the chord of their 2 bars. The generators should never produce one. */
     readonly outOfChord: number;
     /** Notes of any pitched part outside the part's range. The generators should never produce one. */
@@ -89,19 +110,73 @@ export interface SimulationReport {
   readonly sub: {
     /** Number of phrases using each style for A, A' and A'', and for B. */
     readonly styles: StyleCounts<SubStyle>;
-    /** Share of notes on each scale degree counted from the key's tonic. */
+    /** Share of notes on each scale degree counted from the tonic of the cycle's key. */
     readonly degrees: Record<(typeof DEGREE_NAMES)[number], number>;
     readonly octaveJumps: number;
     readonly notesPerPair: number;
     /** Mean note length in 16th notes. */
     readonly meanLength: number;
   };
+  readonly arrangement: {
+    /** Number of cycles that started, the last one possibly cut short by the end of the simulation. */
+    readonly cycles: number;
+    readonly lengths: Record<CycleBars, number>;
+    /** Number of cycles per pair of intro and breakdown lengths in bars, such as "24/16". */
+    readonly leads: Record<string, number>;
+    readonly extensions: Record<DropExtension, number>;
+    /** Number of builds that led into each drop of a cycle in each way. */
+    readonly leadIns: Record<DropOrdinal, Record<DropLeadIn, number>>;
+    readonly scenes: Record<Scene, SceneStats>;
+    /** Heard events of parts that their scene leaves out, apart from the snare roll ending a breakdown. Always 0. */
+    readonly misplaced: number;
+  };
+  /** For each part with a table of sounds, the cycles that played each sound and the cycle starts that changed it. */
+  readonly timbre: Record<keyof CycleTimbre, { readonly cycles: Record<string, number>; readonly changes: number }>;
+  /** Number of effects of each kind. Risers and sweeps count one segment per 2 bars. */
+  readonly fx: Record<FxEvent['fx'], number>;
   readonly fills: Record<FillKind | 'none', number>;
   readonly fillLengths: Record<FillLength, number>;
   readonly generationMs: { readonly mean: number; readonly max: number };
 }
 
 type PitchedPart = PitchedEvent['instrument'];
+
+const SIGNED_FIFTHS = [-5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6] as const;
+
+/** Steps round the circle of fifths from one key to another, negative towards the subdominant. */
+function fifthsBetween(from: Key, to: Key): (typeof SIGNED_FIFTHS)[number] {
+  // A fifth is 7 semitones, and 7 × 7 ≡ 1 (mod 12), so multiplying the semitones by 7 counts the fifths.
+  const fifths = (((to - from) * 7) % 12 + 12) % 12;
+  return (fifths > 6 ? fifths - 12 : fifths) as (typeof SIGNED_FIFTHS)[number];
+}
+
+// Zero is written ±0 so that it is not an integer-like key, which objects would list before every other key.
+const signed = (n: number) => (n > 0 ? `+${n}` : n === 0 ? '±0' : String(n));
+type CycleBars = 128 | 160 | 192;
+type DropExtension = 'none' | 'first' | 'second' | 'both';
+
+interface SceneStats {
+  readonly bars: number;
+  /** Heard drum hits per bar. */
+  readonly drumHitsPerBar: number;
+  /** Heard notes per 2 bars of each pitched part. A chord counts as one. */
+  readonly notesPerPair: Record<PitchedPart, number>;
+}
+
+const SCENES: readonly Scene[] = ['intro', 'build', 'drop', 'breakdown'];
+const TIMBRE_TABLES: Readonly<Record<keyof CycleTimbre, readonly string[]>> = {
+  reese: REESE_TIMBRES,
+  stab: STAB_TIMBRES,
+  pad: PAD_TIMBRES,
+};
+const TIMBRE_PARTS = Object.keys(TIMBRE_TABLES) as (keyof CycleTimbre)[];
+const FX_KINDS: readonly FxEvent['fx'][] = ['riser', 'sweep', 'impact', 'throw', 'filterReset', 'gap'];
+const LEAD_BARS = [16, 24] as const;
+
+function extensionOf(layout: CycleLayout): DropExtension {
+  if (layout.firstDrop === 2) return layout.secondDrop === 2 ? 'both' : 'first';
+  return layout.secondDrop === 2 ? 'second' : 'none';
+}
 const PITCHED_PARTS: readonly PitchedPart[] = ['sub', 'reese', 'stab', 'pad'];
 const RANGES: Readonly<Record<PitchedPart, readonly [number, number]>> = {
   sub: [LOWEST_PITCH, HIGHEST_PITCH],
@@ -120,8 +195,8 @@ function styleCounts<S extends string>(styles: readonly S[]): StyleCounts<S> {
 const perPart = <T>(make: () => T): PerPart<T> =>
   Object.fromEntries(PARTS.map((part) => [part, make()])) as PerPart<T>;
 
-export function simulate({ bars, seed, live, key = DEFAULT_KEY }: SimulationOptions): SimulationReport {
-  const ensemble = createEnsemble({ seed, key });
+export function simulate({ bars, seed, live, initialKey = DEFAULT_KEY }: SimulationOptions): SimulationReport {
+  const ensemble = createEnsemble({ seed, initialKey });
   const pairs = Math.ceil(bars / 2);
 
   const styles = styleCounts(SUB_STYLES);
@@ -133,6 +208,9 @@ export function simulate({ bars, seed, live, key = DEFAULT_KEY }: SimulationOpti
   const transitionProgressions = Object.fromEntries(TRANSITION_PROGRESSIONS.map((p) => [progressionName(p), 0]));
   let previousMain: MainProgression | undefined;
   let mainChanges = 0;
+  let previousKey: Key | undefined;
+  const modulations = { dominant: 0, subdominant: 0 };
+  const barsByFifths = Object.fromEntries(SIGNED_FIFTHS.map((f) => [signed(f), 0])) as Record<string, number>;
   let outOfChord = 0;
   const degrees = Object.fromEntries(DEGREE_NAMES.map((d) => [d, 0])) as Record<(typeof DEGREE_NAMES)[number], number>;
   let subNotes = 0;
@@ -143,7 +221,27 @@ export function simulate({ bars, seed, live, key = DEFAULT_KEY }: SimulationOpti
   const sectionHits = Object.fromEntries(SECTIONS_IN_32.map((s) => [s, perPart(() => 0)])) as PerSection<PerPart<number>>;
   const sectionBars = Object.fromEntries(SECTIONS_IN_32.map((s) => [s, 0])) as PerSection<number>;
   let phraseBoundaries = 0;
+  let refreshable = 0;
   let referenceChanges = 0;
+  let cycles = 0;
+  const cycleLengths: Record<CycleBars, number> = { 128: 0, 160: 0, 192: 0 };
+  const leads = Object.fromEntries(
+    LEAD_BARS.flatMap((intro) => LEAD_BARS.map((breakdown) => [`${intro}/${breakdown}`, 0])),
+  ) as Record<string, number>;
+  const extensions: Record<DropExtension, number> = { none: 0, first: 0, second: 0, both: 0 };
+  const leadInCounts = () => Object.fromEntries(DROP_LEAD_INS.map((leadIn) => [leadIn, 0])) as Record<DropLeadIn, number>;
+  const leadIns: Record<DropOrdinal, Record<DropLeadIn, number>> = { first: leadInCounts(), second: leadInCounts() };
+  const sceneBars = Object.fromEntries(SCENES.map((scene) => [scene, 0])) as Record<Scene, number>;
+  const sceneDrums = Object.fromEntries(SCENES.map((scene) => [scene, 0])) as Record<Scene, number>;
+  const sceneNotes = Object.fromEntries(
+    SCENES.map((scene) => [scene, { sub: 0, reese: 0, stab: 0, pad: 0 }]),
+  ) as Record<Scene, Record<PitchedPart, number>>;
+  let misplaced = 0;
+  const timbre = Object.fromEntries(
+    TIMBRE_PARTS.map((part) => [part, { cycles: Object.fromEntries(TIMBRE_TABLES[part].map((name) => [name, 0])), changes: 0 }]),
+  ) as Record<keyof CycleTimbre, { cycles: Record<string, number>; changes: number }>;
+  let previousTimbre: CycleTimbre | undefined;
+  const fxCounts = Object.fromEntries(FX_KINDS.map((kind) => [kind, 0])) as Record<FxEvent['fx'], number>;
   let previousReference: Pattern | undefined;
   const changedSections = perPart(() => 0);
   const changedCells = perPart(() => 0);
@@ -160,13 +258,45 @@ export function simulate({ bars, seed, live, key = DEFAULT_KEY }: SimulationOpti
 
   for (let i = 0; i < pairs; i++) {
     const start = performance.now();
-    const { ctx, drumLayers: layers, sub, reese, stab, pad, events } = ensemble.next(live);
+    const { ctx, drumLayers: layers, sub, reese, stab, pad, events, fx } = ensemble.next(live);
     const elapsed = performance.now() - start;
     totalMs += elapsed;
     maxMs = Math.max(maxMs, elapsed);
 
     const { sectionIn32 } = ctx.sectionRole;
     sectionBars[sectionIn32] += 2;
+    if (ctx.sectionInCycle === 0 && ctx.isSectionStart) {
+      cycles++;
+      cycleLengths[(cycleSections(ctx.layout) * BARS_PER_SECTION) as CycleBars]++;
+      leads[`${ctx.layout.intro * BARS_PER_SECTION}/${ctx.layout.breakdown * BARS_PER_SECTION}`]! += 1;
+      extensions[extensionOf(ctx.layout)]++;
+      for (const part of TIMBRE_PARTS) {
+        timbre[part].cycles[ctx.timbre[part]]! += 1;
+        if (previousTimbre !== undefined && previousTimbre[part] !== ctx.timbre[part]) timbre[part].changes++;
+      }
+      previousTimbre = ctx.timbre;
+    }
+    barsByFifths[signed(fifthsBetween(initialKey, ctx.key))]! += 2;
+    if (previousKey !== undefined && previousKey !== ctx.key) {
+      const step = fifthsBetween(previousKey, ctx.key);
+      if (step === 1) modulations.dominant++;
+      else if (step === -1) modulations.subdominant++;
+      else throw new Error(`the key moved ${step} steps round the circle of fifths at bar ${ctx.bar}`);
+    }
+    previousKey = ctx.key;
+    const { scene } = ctx.sceneRole;
+    sceneBars[scene] += 2;
+    for (const event of events) {
+      if (event.instrument === 'drums') sceneDrums[scene]++;
+      else sceneNotes[scene][event.instrument]++;
+      const allowed = event.instrument === 'drums' ? playsHit(ctx.sceneRole, event) : plays(ctx.sceneRole, event.instrument);
+      const announcesDrums = event.instrument === 'drums' && event.part === 'snare' && event.layer === 'fill';
+      if (!allowed && !(scene === 'breakdown' && announcesDrums)) misplaced++;
+    }
+    for (const event of fx) fxCounts[event.fx]++;
+    const leadIn = dropLeadIn(ctx);
+    // The first drop always starts the cycle's second 32 bars, so only the build before it lies in the first.
+    if (leadIn !== null) leadIns[ctx.sectionInCycle < SECTIONS_PER_PHRASE ? 'first' : 'second'][leadIn]++;
     if (ctx.isSectionStart && (ctx.sectionRole.isPhraseStart || ctx.sectionRole.relation === 'transition')) {
       const plan = ctx.sectionRole.relation === 'transition' ? 'transition' : 'main';
       styles[sub.style][plan]++;
@@ -187,13 +317,13 @@ export function simulate({ bars, seed, live, key = DEFAULT_KEY }: SimulationOpti
       pitchedNotes[event.instrument]++;
       const [lowest, highest] = RANGES[event.instrument];
       for (const pitch of 'pitch' in event ? [event.pitch] : event.voicing) {
-        const degree = degreeOf(key, pitch);
+        const degree = degreeOf(ctx.key, pitch);
         if (degree === undefined || !isChordTone(chord, degree)) outOfChord++;
         if (pitch < lowest || pitch > highest) outOfRange++;
       }
     }
     for (const note of sub.notes) {
-      const degree = degreeOf(key, note.pitch);
+      const degree = degreeOf(ctx.key, note.pitch);
       if (degree !== undefined) degrees[DEGREE_NAMES[degree]!]++;
       subNotes++;
       subSteps += note.length;
@@ -207,6 +337,7 @@ export function simulate({ bars, seed, live, key = DEFAULT_KEY }: SimulationOpti
     if (ctx.isSectionStart && ctx.sectionRole.isPhraseStart) {
       if (previousReference !== undefined) {
         phraseBoundaries++;
+        if (refreshesReference(ctx.sceneRole)) refreshable++;
         if (!patternsEqual(previousReference, layers.reference)) referenceChanges++;
       }
       previousReference = layers.reference;
@@ -240,7 +371,7 @@ export function simulate({ bars, seed, live, key = DEFAULT_KEY }: SimulationOpti
   return {
     bars: barCount,
     seed,
-    key,
+    initialKey,
     live,
     density: Object.fromEntries(
       PARTS.map((part) => {
@@ -254,14 +385,14 @@ export function simulate({ bars, seed, live, key = DEFAULT_KEY }: SimulationOpti
         Object.fromEntries(PARTS.map((part) => [part, sectionHits[s][part] / Math.max(1, sectionBars[s])])),
       ]),
     ) as PerSection<PerPart<number>>,
-    phrase: { boundaries: phraseBoundaries, referenceChanges },
+    phrase: { boundaries: phraseBoundaries, refreshable, referenceChanges },
     mutation: { changedSections, changedCells, boundaries },
     repetition: {
       pair: pairs > 1 ? repeatedPairs / (pairs - 1) : 0,
       section: boundaries > 0 ? repeatedSections / boundaries : 0,
       distinctBasePatterns: distinctBases.size,
     },
-    harmony: { main: mainProgressions, transition: transitionProgressions, mainChanges, outOfChord, outOfRange },
+    harmony: { main: mainProgressions, transition: transitionProgressions, mainChanges, modulations, barsByFifths, outOfChord, outOfRange },
     notesPerPair: Object.fromEntries(PITCHED_PARTS.map((part) => [part, pitchedNotes[part] / pairs])) as Record<
       PitchedPart,
       number
@@ -278,6 +409,32 @@ export function simulate({ bars, seed, live, key = DEFAULT_KEY }: SimulationOpti
       notesPerPair: subNotes / pairs,
       meanLength: subSteps / Math.max(1, subNotes),
     },
+    arrangement: {
+      cycles,
+      lengths: cycleLengths,
+      leads,
+      extensions,
+      leadIns,
+      scenes: Object.fromEntries(
+        SCENES.map((scene): [Scene, SceneStats] => {
+          const bars = sceneBars[scene];
+          const notes = sceneNotes[scene];
+          return [
+            scene,
+            {
+              bars,
+              drumHitsPerBar: sceneDrums[scene] / Math.max(1, bars),
+              notesPerPair: Object.fromEntries(
+                PITCHED_PARTS.map((part) => [part, notes[part] / Math.max(1, bars / 2)]),
+              ) as Record<PitchedPart, number>,
+            },
+          ];
+        }),
+      ) as Record<Scene, SceneStats>,
+      misplaced,
+    },
+    timbre,
+    fx: fxCounts,
     fills,
     fillLengths,
     generationMs: { mean: totalMs / pairs, max: maxMs },
@@ -313,7 +470,7 @@ function formatReport(report: SimulationReport): string {
   const num = (x: number) => x.toFixed(2).padStart(6);
   const { live, mutation } = report;
   const lines = [
-    `bars: ${report.bars}  seed: ${report.seed}  key: ${KEY_NAMES[report.key]}m  m2: ${live.m2}  m8: ${live.m8}  m32: ${live.m32}  energyDepth: ${live.energyDepth}  fillIntensity: ${live.fillIntensity}`,
+    `bars: ${report.bars}  seed: ${report.seed}  initial key: ${KEY_NAMES[report.initialKey]}m  m2: ${live.m2}  m8: ${live.m8}  m32: ${live.m32}  energyDepth: ${live.energyDepth}  fillIntensity: ${live.fillIntensity}`,
     '',
     'Density (hits per bar)',
     '  part     total   base ornament   fill',
@@ -328,7 +485,9 @@ function formatReport(report: SimulationReport): string {
       (s) => `  ${SECTION_LABEL[s].padEnd(7)} ${PARTS.map((part) => num(report.densityBySection[s][part])).join(' ')}`,
     ),
     '',
-    `Reference changed at ${report.phrase.referenceChanges} of ${report.phrase.boundaries} 32-bar boundaries`,
+    `Reference changed at ${report.phrase.referenceChanges} of ${report.phrase.refreshable} 32-bar boundaries that allow it (${report.phrase.boundaries} in all)`,
+    '',
+    ...formatArrangement(report),
     '',
     `Mutation at 8-bar boundaries (${mutation.boundaries} boundaries)`,
     '  part    changed sections   changed cells',
@@ -346,6 +505,8 @@ function formatReport(report: SimulationReport): string {
     ...Object.entries(report.harmony.main).map(([name, count]) => `  A/A'/A''  ${name.padEnd(18)} ${String(count).padStart(6)}`),
     ...Object.entries(report.harmony.transition).map(([name, count]) => `  B         ${name.padEnd(18)} ${String(count).padStart(6)}`),
     `  main progression changed at ${report.harmony.mainChanges} of ${report.phrase.boundaries} 32-bar boundaries`,
+    `  key moved to the dominant ${report.harmony.modulations.dominant} times, to the subdominant ${report.harmony.modulations.subdominant} times`,
+    `  bars by fifths from the initial key: ${Object.entries(report.harmony.barsByFifths).map(([fifths, bars]) => `${fifths} ${bars}`).join('  ')}`,
     `  notes outside the chord: ${report.harmony.outOfChord}  outside the range: ${report.harmony.outOfRange}`,
     `  notes per 2 bars: ${PITCHED_PARTS.map((part) => `${part} ${report.notesPerPair[part].toFixed(2)}`).join('  ')}`,
     '',
@@ -373,6 +534,33 @@ function formatReport(report: SimulationReport): string {
   return lines.join('\n');
 }
 
+function formatArrangement({ arrangement, fx, timbre }: SimulationReport): string[] {
+  const num = (x: number) => x.toFixed(2).padStart(6);
+  const count = (x: number) => String(x).padStart(6);
+  return [
+    `Arrangement (${arrangement.cycles} cycles)`,
+    `  length:     ${Object.entries(arrangement.lengths).map(([bars, n]) => `${bars} bars ${n}`).join('  ')}`,
+    `  intro/breakdown bars: ${Object.entries(arrangement.leads).map(([lead, n]) => `${lead} ${n}`).join('  ')}`,
+    `  extended drops: ${Object.entries(arrangement.extensions).map(([which, n]) => `${which} ${n}`).join('  ')}`,
+    ...(['first', 'second'] as const).map(
+      (drop) =>
+        `  lead-ins into the ${drop} drop: ${DROP_LEAD_INS.map((leadIn) => `${leadIn} ${arrangement.leadIns[drop][leadIn]}`).join('  ')}`,
+    ),
+    `  scene        bars  drums/bar ${PITCHED_PARTS.map((part) => part.padStart(6)).join(' ')}  (notes per 2 bars)`,
+    ...SCENES.map((scene) => {
+      const stats = arrangement.scenes[scene];
+      return `  ${scene.padEnd(10)} ${count(stats.bars)} ${num(stats.drumHitsPerBar)}    ${PITCHED_PARTS.map((part) => num(stats.notesPerPair[part])).join(' ')}`;
+    }),
+    `  parts heard outside their scenes: ${arrangement.misplaced}`,
+    `  effects: ${FX_KINDS.map((kind) => `${kind} ${fx[kind]}`).join('  ')}`,
+    `  sounds (cycles each, changes at cycle starts):`,
+    ...TIMBRE_PARTS.map(
+      (part) =>
+        `    ${part.padEnd(6)} ${Object.entries(timbre[part].cycles).map(([name, n]) => `${name} ${n}`).join('  ')}  changed ${timbre[part].changes}`,
+    ),
+  ];
+}
+
 function formatStyles<S extends string>(title: string, styles: StyleCounts<S>): string[] {
   return [
     `${title}`,
@@ -392,7 +580,7 @@ function main() {
       m8: { type: 'string', default: String(DEFAULT_LIVE_PARAMS.m8) },
       m32: { type: 'string', default: String(DEFAULT_LIVE_PARAMS.m32) },
       energy: { type: 'string', default: String(DEFAULT_LIVE_PARAMS.energyDepth) },
-      key: { type: 'string', default: KEY_NAMES[DEFAULT_KEY] },
+      'initial-key': { type: 'string', default: KEY_NAMES[DEFAULT_KEY] },
       fill: { type: 'string', default: String(DEFAULT_LIVE_PARAMS.fillIntensity) },
       json: { type: 'boolean', default: false },
     },
@@ -408,9 +596,11 @@ function main() {
     energyDepth: clampUnit(Number(values.energy)),
     fillIntensity: clampUnit(Number(values.fill)),
   };
-  const key = parseKey(values.key ?? '');
-  if (key === undefined) throw new Error(`--key must be a note name such as F, F# or Bb: ${values.key}`);
-  const report = simulate({ bars, seed, live, key });
+  const initialKey = parseKey(values['initial-key'] ?? '');
+  if (initialKey === undefined) {
+    throw new Error(`--initial-key must be a note name such as F, F# or Bb: ${values['initial-key']}`);
+  }
+  const report = simulate({ bars, seed, live, initialKey });
   console.log(values.json ? JSON.stringify(report, null, 2) : formatReport(report));
 }
 

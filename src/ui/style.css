@@ -162,6 +162,36 @@ button.play.playing {
   background: var(--accent);
 }
 
+/* Upcoming sections stay faint, so the shape of the rest of the cycle shows without hiding where playback is. */
+.scene-meter span[data-scene] {
+  opacity: 0.3;
+}
+
+.scene-meter span[data-scene].on {
+  opacity: 1;
+}
+
+.scene-meter span[data-scene='intro'] {
+  background: var(--base);
+}
+
+.scene-meter span[data-scene='build'] {
+  background: var(--fill);
+}
+
+.scene-meter span[data-scene='drop'] {
+  background: var(--accent);
+}
+
+.scene-meter span[data-scene='breakdown'] {
+  background: var(--ornament);
+}
+
+.position-scene {
+  color: var(--fg);
+  font-weight: 600;
+}
+
 .position-total {
   display: flex;
   gap: 12px;
@@ -169,6 +199,12 @@ button.play.playing {
   font-size: 0.9rem;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
+}
+
+.position-key {
+  color: var(--fg);
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .position-chord {

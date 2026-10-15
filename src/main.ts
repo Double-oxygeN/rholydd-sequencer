@@ -54,9 +54,9 @@ async function boot(root: HTMLElement) {
     } else {
       // Browsers only allow the AudioContext to start from a user gesture.
       await Tone.start();
-      const { bpm, seed, key } = store.get();
+      const { bpm, seed, initialKey } = store.get();
       mixerView.resetLevel();
-      sequencer.start({ bpm, seed, key });
+      sequencer.start({ bpm, seed, initialKey });
     }
     playing = !playing;
     panel.setPlaying(playing);

@@ -1,10 +1,31 @@
 import * as Tone from 'tone';
+import type { FxEvent } from '../generators/fx/index.ts';
 import { PARTS, type Part, type Pitch, type Velocity, type Voicing } from '../generators/types.ts';
 import { CHANNEL_IDS, isSending, type ChannelId, type DuckingSettings, type MixerSettings } from '../params/mixer.ts';
 import { clampUnit, type UnitInterval } from '../units.ts';
 import { CLIP_METER_NAME, type LevelReport } from './clip.ts';
 import clipWorkletUrl from './clip-worklet.ts?worker&url';
+import {
+  AUTOMATION_TARGETS,
+  HIGHPASS,
+  RESTING_VALUE,
+  RISER,
+  fxAutomation,
+  type AutomationPoint,
+  type AutomationTarget,
+} from './automation.ts';
 import { duckPoints, type Dip, type Seconds } from './ducking.ts';
+import {
+  CHORD_POLYPHONY,
+  PAD_PATCHES,
+  REESE_PATCHES,
+  STAB_PATCHES,
+  type ChordPatch,
+  type FatOscillator,
+  type FmOscillator,
+  type ReesePatch,
+} from './patches.ts';
+import type { CycleTimbre, PadTimbre, ReeseTimbre, StabTimbre } from '../structure/timbre.ts';
 
 /** Every sample is mapped to one note and played back at its original pitch. */
 const ROOT_NOTE = 'C3';
@@ -16,10 +37,12 @@ const SOURCE_TRIM_DB: Readonly<Record<Exclude<ChannelId, 'reverbReturn'>, number
   snare: -10,
   hat: -14,
   ghost: -8,
-  sub: 0,
+  // Listening put the sub's fader at -6 dB to sit right against the kick and the reese, so the trim takes it instead.
+  sub: -6,
   reese: -10,
   stab: -13,
   pad: -16,
+  fx: -12,
 };
 
 // A pure sine has no harmonics, so small speakers would lose the bass pitch entirely.
@@ -32,6 +55,9 @@ const SUB_LOWPASS = { frequency: 100, type: 'lowpass', rolloff: -24, Q: 0.7 } as
 const REESE_HIGHPASS_HZ = 120;
 const STAB_LOWPASS_HZ = 3000;
 const PAD_LOWPASS_HZ = 1500;
+// Keeps the impact's boom above the kick and the sub it lands with, so the three never pile up into the limiter.
+const IMPACT_HIGHPASS_HZ = 80;
+const RISER_Q = 2;
 
 /** How deep each ducked part dips relative to the ducking depth. The sub clears the most room for the kick. */
 const DUCK_RATIO: Readonly<Record<DuckedPart, number>> = { sub: 1, reese: 0.7, pad: 0.5 };
@@ -55,8 +81,15 @@ const LOOK_AHEAD_SECONDS = 0.25;
 export interface Instruments {
   drum(part: Part, time: number, velocity: Velocity): void;
   sub(pitch: Pitch, time: number, seconds: number, velocity: Velocity): void;
-  reese(pitch: Pitch, time: number, seconds: number, velocity: Velocity): void;
-  chord(part: 'stab' | 'pad', voicing: Voicing, time: number, seconds: number, velocity: Velocity): void;
+  reese(timbre: ReeseTimbre, pitch: Pitch, time: number, seconds: number, velocity: Velocity): void;
+  chord<P extends ChordPart>(
+    part: P,
+    timbre: CycleTimbre[P],
+    voicing: Voicing,
+    time: number,
+    seconds: number,
+    velocity: Velocity,
+  ): void;
   /** Lets scheduled notes through from the given time on. */
   open(time: number): void;
   /** Cuts every note and the reverb tail, including notes already scheduled ahead of time. */
@@ -65,6 +98,8 @@ export interface Instruments {
   setMixer(mixer: MixerSettings): void;
   /** Dips the sub, the reese and the pad on the given kicks, continuing the dips of the previous call. */
   duck(kicks: readonly Seconds[], ducking: DuckingSettings): void;
+  /** Schedules the effects of the 2 bars starting at the given time. */
+  fx(events: readonly FxEvent[], pairStart: Seconds, stepSeconds: number): void;
   /** Reports the peak and the clipped samples after the limiter about ten times a second. */
   onLevel(listener: (report: LevelReport) => void): void;
 }
@@ -84,7 +119,19 @@ export async function loadInstruments(drumSamplesUrl: string, mixer: MixerSettin
   const clipMeter = context.createAudioWorkletNode(CLIP_METER_NAME, { outputChannelCount: [2] });
   Tone.connect(clipMeter, gate);
   const limiter = new Tone.Limiter(LIMITER_THRESHOLD_DB).connect(clipMeter);
-  const mixBus = new Tone.Gain().chain(new Tone.Compressor(MASTER_BUS), limiter);
+  const masterBus = new Tone.Compressor(MASTER_BUS).connect(limiter);
+  // The mix runs through one of two equal high-passes: the swept one, or one resting open that keeps the low end
+  // shaped as it always is. Their shares come from one signal, so that they always add up to the whole mix.
+  const sweepHighpass = new Tone.Filter({ type: 'highpass', frequency: RESTING_VALUE.highpass, rolloff: -24 });
+  const restingHighpass = new Tone.Filter({ type: 'highpass', frequency: HIGHPASS.openHz, rolloff: -24 });
+  const sweptShare = new Tone.Gain(0).connect(masterBus);
+  const restingShare = new Tone.Gain(0).connect(masterBus);
+  const highpassShare = new Tone.Signal(RESTING_VALUE.highpassShare);
+  highpassShare.connect(sweptShare.gain);
+  highpassShare.chain(new Tone.Negate(), new Tone.Add(1), restingShare.gain);
+  const mixBus = new Tone.Gain().fan(sweepHighpass, restingHighpass);
+  sweepHighpass.connect(sweptShare);
+  restingHighpass.connect(restingShare);
   const drumBus = new Tone.Compressor(DRUM_BUS).connect(mixBus);
   const reverbIn = new Tone.Gain();
 
@@ -104,11 +151,47 @@ export async function loadInstruments(drumSamplesUrl: string, mixer: MixerSettin
     pad: new Tone.Gain(1).connect(strips.pad.input),
   };
   let carried: Record<DuckedPart, Dip | null> = { sub: null, reese: null, pad: null };
+  // One per pitched part, before the channels, so that the intro's sweep also darkens what goes to the reverb.
+  const introLowpass = {
+    sub: lowpassForSweep(),
+    reese: lowpassForSweep(),
+    stab: lowpassForSweep(),
+    pad: lowpassForSweep(),
+  };
+  // Kept apart from the ducking gain so that the gap and the kicks never schedule the same parameter.
+  const padGate = new Tone.Gain(RESTING_VALUE.padGate).connect(ducks.pad);
   const inputs: VoiceInputs = {
-    sub: new Tone.Distortion(SUB_DRIVE).chain(new Tone.Filter(SUB_LOWPASS), ducks.sub),
-    reese: new Tone.Filter(REESE_HIGHPASS_HZ, 'highpass').connect(ducks.reese),
-    stab: new Tone.Filter(STAB_LOWPASS_HZ, 'lowpass').connect(strips.stab.input),
-    pad: new Tone.Filter(PAD_LOWPASS_HZ, 'lowpass').connect(ducks.pad),
+    sub: new Tone.Distortion(SUB_DRIVE).chain(new Tone.Filter(SUB_LOWPASS), introLowpass.sub, ducks.sub),
+    reese: new Tone.Filter(REESE_HIGHPASS_HZ, 'highpass').chain(introLowpass.reese, ducks.reese),
+    stab: new Tone.Filter(STAB_LOWPASS_HZ, 'lowpass').chain(introLowpass.stab, strips.stab.input),
+    pad: new Tone.Filter(PAD_LOWPASS_HZ, 'lowpass').chain(introLowpass.pad, padGate),
+    impact: new Tone.Filter(IMPACT_HIGHPASS_HZ, 'highpass').connect(strips.fx.input),
+  };
+  // Runs for the whole session at zero gain, so that stopping a riser only means cancelling its gain.
+  const riserGain = new Tone.Gain(RESTING_VALUE.riserGain).connect(strips.fx.input);
+  const riserFilter = new Tone.Filter({ type: 'bandpass', frequency: RESTING_VALUE.riserFrequency, Q: RISER_Q }).connect(
+    riserGain,
+  );
+  new Tone.Noise('white').connect(riserFilter).start();
+  // Taken after the snare's trim but before its fader, so a throw never depends on how the snare is mixed.
+  const throwSend = new Tone.Gain(RESTING_VALUE.throwSend).connect(reverbIn);
+  strips.snare.input.connect(throwSend);
+  const automated: Readonly<Record<AutomationTarget, readonly Automatable[]>> = {
+    riserGain: [riserGain.gain],
+    riserFrequency: [riserFilter.frequency],
+    highpass: [sweepHighpass.frequency],
+    highpassShare: [highpassShare],
+    lowpass: Object.values(introLowpass).map((filter) => filter.frequency),
+    throwSend: [throwSend.gain],
+    padGate: [padGate.gain],
+  };
+  const rest = (time: number) => {
+    for (const target of AUTOMATION_TARGETS) {
+      for (const param of automated[target]) {
+        param.cancelScheduledValues(time);
+        param.setValueAtTime(RESTING_VALUE[target], time);
+      }
+    }
   };
   let voices = createVoices(inputs);
   let reverb = createReverb(reverbIn, strips.reverbReturn.input);
@@ -121,11 +204,13 @@ export async function loadInstruments(drumSamplesUrl: string, mixer: MixerSettin
     sub(pitch, time, seconds, velocity) {
       voices.sub.triggerAttackRelease(frequencyOf(pitch), legatoSeconds(seconds), time, velocity);
     },
-    reese(pitch, time, seconds, velocity) {
-      voices.reese.triggerAttackRelease(frequencyOf(pitch), legatoSeconds(seconds), time, velocity);
+    // A change of sound only changes which synth gets the next note, so the previous cycle's tails ring out on the
+    // synth they started on and nothing needs scheduling at the cycle boundary.
+    reese(timbre, pitch, time, seconds, velocity) {
+      voices.reese[timbre].triggerAttackRelease(frequencyOf(pitch), legatoSeconds(seconds), time, velocity);
     },
-    chord(part, voicing, time, seconds, velocity) {
-      voices[part].triggerAttackRelease(voicing.map(frequencyOf), legatoSeconds(seconds), time, velocity);
+    chord(part, timbre, voicing, time, seconds, velocity) {
+      chordSynth(voices, part, timbre).triggerAttackRelease(voicing.map(frequencyOf), legatoSeconds(seconds), time, velocity);
     },
     open(time) {
       // Notes of the previous session stay scheduled on the synths' timelines, and the gate would let them
@@ -136,6 +221,9 @@ export async function loadInstruments(drumSamplesUrl: string, mixer: MixerSettin
       // response asynchronously, which only leaves the first few tens of milliseconds dry.
       reverb.dispose();
       reverb = createReverb(reverbIn, strips.reverbReturn.input);
+      // Scheduled before the transport starts, so that the first 2 bars, which the transport times at this very
+      // instant, set the values their effects start from after these.
+      rest(time);
       gate.gain.cancelScheduledValues(time);
       gate.gain.setValueAtTime(1, time);
     },
@@ -150,16 +238,28 @@ export async function loadInstruments(drumSamplesUrl: string, mixer: MixerSettin
         ducks[part].gain.setValueAtTime(1, now);
       }
       carried = { sub: null, reese: null, pad: null };
+      // A build stopped halfway would otherwise leave the next session high-passed and with the riser up.
+      rest(now);
       voices.sub.triggerRelease(now);
-      voices.reese.triggerRelease(now);
-      voices.stab.releaseAll(now);
-      voices.pad.releaseAll(now);
+      for (const reese of Object.values(voices.reese)) reese.triggerRelease(now);
+      for (const chord of [...Object.values(voices.stab), ...Object.values(voices.pad)]) chord.releaseAll(now);
     },
     setVolume(volume) {
       listening.volume.rampTo(Tone.gainToDb(volume), MIXER_RAMP_SECONDS);
     },
     setMixer(next) {
       for (const id of CHANNEL_IDS) strips[id].apply(next[id]);
+    },
+    fx(events, pairStart, stepSeconds) {
+      for (const point of fxAutomation(events, pairStart, stepSeconds)) {
+        for (const param of automated[point.target]) apply(param, point);
+      }
+      for (const event of events) {
+        if (event.fx !== 'impact') continue;
+        const time = pairStart + event.step * stepSeconds;
+        voices.impactBoom.triggerAttackRelease(IMPACT_BOOM_NOTE, IMPACT_SECONDS, time);
+        voices.impactNoise.triggerAttackRelease(IMPACT_SECONDS, time);
+      }
     },
     onLevel(listener) {
       clipMeter.port.onmessage = (message: MessageEvent<LevelReport>) => listener(message.data);
@@ -179,9 +279,35 @@ export async function loadInstruments(drumSamplesUrl: string, mixer: MixerSettin
   };
 }
 
+/** The scheduling methods shared by Tone's params and signals. */
+interface Automatable {
+  setValueAtTime(value: number, time: number): unknown;
+  linearRampToValueAtTime(value: number, time: number): unknown;
+  exponentialRampToValueAtTime(value: number, time: number): unknown;
+  cancelScheduledValues(time: number): unknown;
+}
+
+function apply(param: Automatable, { time, value, ramp }: AutomationPoint): void {
+  switch (ramp) {
+    case 'set':
+      param.setValueAtTime(value, time);
+      break;
+    case 'linear':
+      param.linearRampToValueAtTime(value, time);
+      break;
+    case 'exponential':
+      param.exponentialRampToValueAtTime(value, time);
+      break;
+  }
+}
+
+function lowpassForSweep(): Tone.Filter {
+  return new Tone.Filter({ type: 'lowpass', frequency: RESTING_VALUE.lowpass, rolloff: -12 });
+}
+
 interface Strip {
   /** Where the source connects, after its trim. */
-  readonly input: Tone.InputNode;
+  readonly input: Tone.ToneAudioNode;
   apply(settings: MixerSettings[ChannelId]): void;
 }
 
@@ -227,14 +353,33 @@ function createReverb(from: Tone.ToneAudioNode, to: Tone.InputNode): Tone.Reverb
   return reverb;
 }
 
+type ChordPart = 'stab' | 'pad';
+
+/** Parts with a table of sounds hold one synth per sound, all feeding the part's input. */
 interface Voices {
   readonly sub: Tone.Synth;
-  readonly reese: Tone.MonoSynth;
-  readonly stab: Tone.PolySynth;
-  readonly pad: Tone.PolySynth;
+  readonly reese: Readonly<Record<ReeseTimbre, Tone.MonoSynth>>;
+  readonly stab: Readonly<Record<StabTimbre, Tone.PolySynth>>;
+  readonly pad: Readonly<Record<PadTimbre, Tone.PolySynth>>;
+  readonly impactBoom: Tone.MembraneSynth;
+  readonly impactNoise: Tone.NoiseSynth;
 }
 
-type VoiceInputs = { readonly [P in keyof Voices]: Tone.InputNode };
+function chordSynth<P extends ChordPart>(voices: Voices, part: P, timbre: CycleTimbre[P]): Tone.PolySynth {
+  // The generic index loses the link between part and timbre, so the two tables are looked up apart.
+  return part === 'stab' ? voices.stab[timbre as StabTimbre] : voices.pad[timbre as PadTimbre];
+}
+
+type VoiceInputs = {
+  readonly [P in Exclude<keyof Voices, 'impactBoom' | 'impactNoise'>]: Tone.InputNode;
+} & { readonly impact: Tone.InputNode };
+
+// Falls from about 98 Hz, and the high-pass keeps it clear of the kick's and the sub's fundamentals.
+const IMPACT_BOOM_NOTE = 'G2';
+const IMPACT_SECONDS = 1.2;
+// Listening wanted the impact a little below the drop it lands with. Set on the synths, as the other per-sound
+// levels are, so that the riser on the same channel keeps its level.
+const IMPACT_VOLUME_DB = -3;
 
 function createVoices(to: VoiceInputs): Voices {
   return {
@@ -242,38 +387,60 @@ function createVoices(to: VoiceInputs): Voices {
       oscillator: { type: 'sine' },
       envelope: { attack: 0.005, decay: 0.05, sustain: 1, release: 0.03 },
     }).connect(to.sub),
-    // Detuned saws beating against each other are what make a reese.
-    reese: new Tone.MonoSynth({
-      oscillator: { type: 'fatsawtooth', count: 3, spread: 25 },
-      envelope: { attack: 0.005, decay: 0.2, sustain: 0.8, release: 0.05 },
-      filter: { type: 'lowpass', Q: 2, rolloff: -24 },
-      filterEnvelope: { attack: 0.01, decay: 0.25, sustain: 0.3, release: 0.1, baseFrequency: 200, octaves: 3 },
-    }).connect(to.reese),
-    // A voice is held from about a look-ahead before its note until the oscillator's ended event reaches the main
-    // thread. Stabs 2 steps apart then overlap three or four deep, and 8 voices for 3-note chords dropped notes.
-    stab: new Tone.PolySynth({
-      maxPolyphony: 12,
-      voice: Tone.Synth,
-      options: {
-        oscillator: { type: 'fatsquare', count: 2, spread: 15 },
-        envelope: { attack: 0.003, decay: 0.12, sustain: 0.15, release: 0.15 },
-      },
-    }).connect(to.stab),
-    // Re-struck every 2 bars while the previous chord still releases, so two 4-note chords overlap, plus slack for
-    // the same early hold and late release as the stabs.
-    pad: new Tone.PolySynth({
-      maxPolyphony: 12,
-      voice: Tone.Synth,
-      options: {
-        oscillator: { type: 'fatsawtooth', count: 3, spread: 30 },
-        envelope: { attack: 0.4, decay: 0.6, sustain: 0.7, release: 1.2 },
-      },
-    }).connect(to.pad),
+    reese: mapValues(REESE_PATCHES, (patch) => buildReeseSynth(patch).connect(to.reese)),
+    stab: mapValues(STAB_PATCHES, (patch) => buildChordSynth(patch).connect(to.stab)),
+    pad: mapValues(PAD_PATCHES, (patch) => buildChordSynth(patch).connect(to.pad)),
+    impactBoom: new Tone.MembraneSynth({
+      pitchDecay: 0.4,
+      octaves: 3,
+      envelope: { attack: 0.002, decay: 1, sustain: 0, release: 0.4 },
+      volume: IMPACT_VOLUME_DB,
+    }).connect(to.impact),
+    impactNoise: new Tone.NoiseSynth({
+      noise: { type: 'white' },
+      envelope: { attack: 0.002, decay: IMPACT_SECONDS, sustain: 0, release: 0.2 },
+      volume: IMPACT_VOLUME_DB,
+    }).connect(to.impact),
   };
 }
 
+function buildReeseSynth(patch: ReesePatch): Tone.MonoSynth {
+  return new Tone.MonoSynth({
+    oscillator: oscillatorOptions(patch.oscillator),
+    envelope: patch.envelope,
+    filter: { type: 'lowpass', Q: patch.filterQ, rolloff: -24 },
+    filterEnvelope: patch.filterEnvelope,
+    volume: patch.gainDb,
+  });
+}
+
+function buildChordSynth(patch: ChordPatch): Tone.PolySynth {
+  return new Tone.PolySynth({
+    maxPolyphony: CHORD_POLYPHONY,
+    voice: Tone.Synth,
+    options: { oscillator: oscillatorOptions(patch.oscillator), envelope: patch.envelope },
+    volume: patch.gainDb,
+  });
+}
+
+function oscillatorOptions(oscillator: FatOscillator<number> | FmOscillator) {
+  return 'count' in oscillator
+    ? { type: oscillator.type, count: oscillator.count, spread: oscillator.spread }
+    : // Tone modulates with a square unless told otherwise, which would make every FM sound harsh.
+      { type: oscillator.type, harmonicity: oscillator.harmonicity, modulationIndex: oscillator.modulationIndex, modulationType: 'sine' as const };
+}
+
+function mapValues<K extends string, A, B>(record: Readonly<Record<K, A>>, f: (value: A) => B): Record<K, B> {
+  return Object.fromEntries(Object.entries<A>(record).map(([key, value]) => [key, f(value)])) as Record<K, B>;
+}
+
 function disposeVoices(voices: Voices): void {
-  for (const voice of Object.values(voices)) voice.dispose();
+  voices.sub.dispose();
+  for (const synth of [...Object.values(voices.reese), ...Object.values(voices.stab), ...Object.values(voices.pad)]) {
+    synth.dispose();
+  }
+  voices.impactBoom.dispose();
+  voices.impactNoise.dispose();
 }
 
 function frequencyOf(pitch: Pitch): number {

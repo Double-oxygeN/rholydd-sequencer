@@ -20,7 +20,7 @@ export interface Params extends LiveParams {
   readonly bpm: Bpm;
   readonly volume: UnitInterval;
   readonly seed: Seed;
-  readonly key: Key;
+  readonly initialKey: Key;
   /** Only shapes the sound and never reaches the ensemble. */
   readonly mixer: MixerSettings;
   /** Read each time 2 bars are scheduled. Never reaches the ensemble either. */
@@ -47,7 +47,7 @@ export function defaultParams(): Params {
     bpm: DEFAULT_BPM,
     volume: clampUnit(0.5),
     seed: randomSeed(),
-    key: DEFAULT_KEY,
+    initialKey: DEFAULT_KEY,
     mixer: DEFAULT_MIXER,
     ducking: DEFAULT_DUCKING,
   };

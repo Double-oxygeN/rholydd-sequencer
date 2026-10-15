@@ -2,7 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { canonicalPattern, initialPattern } from '../src/generators/drums/base.ts';
 import { satisfiesConstraints } from '../src/generators/drums/constraints.ts';
 import { compose } from '../src/generators/drums/compose.ts';
-import { FILL_KINDS, PHRASE_FILL_KINDS, fill, phraseFill, type FillKind } from '../src/generators/drums/fill.ts';
+import {
+  DROP_LEAD_FILL_KINDS,
+  FILL_KINDS,
+  PHRASE_FILL_KINDS,
+  fill,
+  phraseFill,
+  type FillKind,
+} from '../src/generators/drums/fill.ts';
 import { mutate, mutationCount } from '../src/generators/drums/mutate.ts';
 import { ORNAMENT_PARTS, ornament } from '../src/generators/drums/ornament.ts';
 import { cellAt, motifCell, patternsEqual } from '../src/generators/drums/pattern.ts';
@@ -113,15 +120,15 @@ describe('ornament', () => {
 describe('fill', () => {
   it('fires according to the intensity', () => {
     for (let i = 0; i < 50; i++) {
-      expect(fill(hash(i), clampUnit(0))).toBeNull();
-      expect(fill(hash(i), clampUnit(1))).not.toBeNull();
+      expect(fill(hash(i), clampUnit(0), 'chance')).toBeNull();
+      expect(fill(hash(i), clampUnit(1), 'chance')).not.toBeNull();
     }
   });
 
   it('keeps the same template when only the intensity changes', () => {
     for (let i = 0; i < 50; i++) {
-      const strong = fill(hash(i), clampUnit(1));
-      const weak = fill(hash(i), clampUnit(0.5));
+      const strong = fill(hash(i), clampUnit(1), 'chance');
+      const weak = fill(hash(i), clampUnit(0.5), 'chance');
       if (weak !== null) expect(weak).toEqual(strong);
     }
   });
@@ -130,7 +137,7 @@ describe('fill', () => {
     const kinds = new Set<string>();
     const lengths = new Map<number, number>();
     for (let i = 0; i < 4000; i++) {
-      const result = fill(hash(i), clampUnit(1))!;
+      const result = fill(hash(i), clampUnit(1), 'chance')!;
       kinds.add(result.kind);
       lengths.set(result.length, (lengths.get(result.length) ?? 0) + 1);
       expect(result.steps).toEqual(ALL_STEPS.slice(32 - result.length));
@@ -143,11 +150,41 @@ describe('fill', () => {
   });
 });
 
+describe('fill cues', () => {
+  it('always fills a scene change unless the intensity is 0, keeping the drawn kind and length', () => {
+    for (let i = 0; i < 200; i++) {
+      expect(fill(hash(i), clampUnit(0), 'certain')).toBeNull();
+      const certain = fill(hash(i), clampUnit(0.01), 'certain')!;
+      const drawn = fill(hash(i), clampUnit(1), 'chance')!;
+      expect([certain.kind, certain.length]).toEqual([drawn.kind, drawn.length]);
+    }
+  });
+
+  it('rolls the snare at the end of a breakdown with the drawn length', () => {
+    for (let i = 0; i < 200; i++) {
+      const roll = fill(hash(i), clampUnit(0.5), 'drumsReturn')!;
+      expect(roll.kind).toBe('snareRoll');
+      expect(roll.length).toBe(fill(hash(i), clampUnit(1), 'chance')!.length);
+    }
+  });
+
+  it('picks only rolls before a drop, keeping the drawn length', () => {
+    const kinds = new Set<string>();
+    for (let i = 0; i < 500; i++) {
+      const intoDrop = phraseFill(hash(i), clampUnit(1), 'intoDrop')!;
+      kinds.add(intoDrop.kind);
+      expect(intoDrop.length).toBe(phraseFill(hash(i), clampUnit(1), 'free')!.length);
+      expect(phraseFill(hash(i), clampUnit(0), 'intoDrop')).toBeNull();
+    }
+    expect([...kinds].sort()).toEqual([...DROP_LEAD_FILL_KINDS].sort());
+  });
+});
+
 describe('phraseFill', () => {
   it('always plays unless the intensity is 0', () => {
     for (let i = 0; i < 50; i++) {
-      expect(phraseFill(hash(i), clampUnit(0))).toBeNull();
-      expect(phraseFill(hash(i), clampUnit(0.01))).not.toBeNull();
+      expect(phraseFill(hash(i), clampUnit(0), 'free')).toBeNull();
+      expect(phraseFill(hash(i), clampUnit(0.01), 'free')).not.toBeNull();
     }
   });
 
@@ -155,7 +192,7 @@ describe('phraseFill', () => {
     const kinds = new Set<string>();
     const lengths = new Map<number, number>();
     for (let i = 0; i < 2000; i++) {
-      const result = phraseFill(hash(i), clampUnit(1))!;
+      const result = phraseFill(hash(i), clampUnit(1), 'free')!;
       kinds.add(result.kind);
       lengths.set(result.length, (lengths.get(result.length) ?? 0) + 1);
       expect(result.steps).toEqual(ALL_STEPS.slice(32 - result.length));
@@ -166,7 +203,7 @@ describe('phraseFill', () => {
   });
 
   const ofKind = (kind: FillKind) =>
-    Array.from({ length: 400 }, (_, i) => phraseFill(hash(i), clampUnit(1))!).filter((f) => f.kind === kind);
+    Array.from({ length: 400 }, (_, i) => phraseFill(hash(i), clampUnit(1), 'free')!).filter((f) => f.kind === kind);
 
   it('accelerates a snare roll from 8ths to 16ths', () => {
     for (const result of ofKind('accelRoll')) {

@@ -25,6 +25,7 @@ const CHANNEL_LABEL: Readonly<Record<ChannelId, string>> = {
   reese: 'リースベース',
   stab: 'スタブ',
   pad: 'パッド',
+  fx: 'FX',
   reverbReturn: 'リバーブ',
 };
 

@@ -1,6 +1,6 @@
 import { BPM_RANGE, clampBpm, randomSeed, type ParamStore, type Params } from '../params/store.ts';
 import { parseSeed } from '../random/rng.ts';
-import { KEY_NAMES, toKey } from '../structure/key.ts';
+import { KEY_NAMES, keyName, toKey, type Key } from '../structure/key.ts';
 import { clampUnit, type UnitInterval } from '../units.ts';
 
 type UnitKey = 'm2' | 'm8' | 'm32' | 'fillIntensity' | 'energyDepth' | 'volume';
@@ -34,12 +34,12 @@ export function createPanel(store: ParamStore): Panel {
     store.update({ bpm: value });
   });
 
-  const key = document.createElement('select');
-  key.append(...KEY_NAMES.map((name, i) => new Option(`${name} マイナー`, String(i))));
-  key.value = String(store.get().key);
-  key.addEventListener('change', () => {
-    const value = toKey(Number(key.value));
-    if (value !== undefined) store.update({ key: value });
+  const initialKey = document.createElement('select');
+  initialKey.append(...KEY_NAMES.map((name, i) => new Option(keyName(i as Key), String(i))));
+  initialKey.value = String(store.get().initialKey);
+  initialKey.addEventListener('change', () => {
+    const value = toKey(Number(initialKey.value));
+    if (value !== undefined) store.update({ initialKey: value });
   });
 
   const seed = input({ type: 'text', inputMode: 'numeric', spellcheck: false });
@@ -61,7 +61,7 @@ export function createPanel(store: ParamStore): Panel {
   element.append(
     play,
     field('BPM', bpm),
-    field('キー', key),
+    field('初期キー', initialKey),
     ...UNIT_CONTROLS.map(({ key, label }) => field(label, slider(store, key))),
     field('シード', row(seed, dice)),
   );
@@ -72,7 +72,7 @@ export function createPanel(store: ParamStore): Panel {
       play.textContent = playing ? '停止' : '再生';
       play.classList.toggle('playing', playing);
       bpm.disabled = playing;
-      key.disabled = playing;
+      initialKey.disabled = playing;
     },
     onToggle(handler) {
       play.addEventListener('click', handler);

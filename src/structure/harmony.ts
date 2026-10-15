@@ -1,6 +1,14 @@
 import { TAG, createRng, hash, type Seed } from '../random/rng.ts';
 import type { UnitInterval } from '../units.ts';
-import { noteNameIn, pitchClassOf, shiftDegree, type Key, type ScaleDegree } from './key.ts';
+import {
+  noteNameIn,
+  pitchClassOf,
+  shiftDegree,
+  stepFifths,
+  type FifthsFromInitial,
+  type Key,
+  type ScaleDegree,
+} from './key.ts';
 
 /**
  * Position of a chord's root in the natural minor scale. ii (1) is left out: its diminished 5th would let the
@@ -71,35 +79,52 @@ export function chordName(key: Key, chord: Chord): string {
   return `${noteNameIn(key, pitchClassOf(key, rootDegree(chord)))}${SUFFIX[chord.root]}`;
 }
 
-export interface PhraseProgressions {
-  readonly main: MainProgression;
-  readonly transition: TransitionProgression;
-}
+const pick = <T>(list: readonly T[], roll: number): T => list[Math.floor(roll * list.length)] ?? list[0]!;
 
 /**
- * Progressions of a 32-bar phrase. The main one carries over from the previous phrase unless a draw under m32
- * replaces it, so that one knob sets how much each phrase changes, as it does for the drum reference.
+ * Main progression of a cycle. It carries over from the previous cycle unless a draw under m32 replaces it, so
+ * that one knob sets how much each cycle changes, as it does for the drum reference.
  */
-export function phraseProgressions(
+export function cycleMainProgression(
   previousMain: MainProgression | undefined,
-  phraseSeed: Seed,
+  cycleSeed: Seed,
   m32: UnitInterval,
-): PhraseProgressions {
-  const rng = createRng(hash(phraseSeed, TAG.progression));
+): MainProgression {
+  const rng = createRng(hash(cycleSeed, TAG.progression));
   const changeRoll = rng.float();
   const mainRoll = rng.float();
-  const transitionRoll = rng.float();
-  const pick = <T>(list: readonly T[], roll: number): T => list[Math.floor(roll * list.length)] ?? list[0]!;
-  const main =
-    previousMain === undefined
-      ? pick(MAIN_PROGRESSIONS, mainRoll)
-      : changeRoll < m32
-        ? pick(
-            MAIN_PROGRESSIONS.filter((p) => p !== previousMain),
-            mainRoll,
-          )
-        : previousMain;
-  return { main, transition: pick(TRANSITION_PROGRESSIONS, transitionRoll) };
+  if (previousMain === undefined) return pick(MAIN_PROGRESSIONS, mainRoll);
+  return changeRoll < m32
+    ? pick(
+        MAIN_PROGRESSIONS.filter((p) => p !== previousMain),
+        mainRoll,
+      )
+    : previousMain;
+}
+
+// Half of m32, because a new key stands out more than a new progression and feels restless when it comes too often.
+const MODULATION_SHARE = 0.5;
+
+/**
+ * Key of a cycle, as steps from the initial key. Each move goes one step round the circle of fifths from the
+ * previous cycle's key, the keys a DJ can mix into without a clash, with no pull back towards the initial key:
+ * like a DJ set, each track only has to suit the one before it.
+ */
+export function cycleModulation(previous: FifthsFromInitial, cycleSeed: Seed, m32: UnitInterval): FifthsFromInitial {
+  const rng = createRng(hash(cycleSeed, TAG.modulation));
+  const changeRoll = rng.float();
+  const directionRoll = rng.float();
+  if (changeRoll >= m32 * MODULATION_SHARE) return previous;
+  return stepFifths(previous, directionRoll < 0.5 ? 1 : -1);
+}
+
+/** Transition progression of a 32-bar phrase, chosen afresh for every B. */
+export function phraseTransitionProgression(phraseSeed: Seed): TransitionProgression {
+  const rng = createRng(hash(phraseSeed, TAG.progression));
+  // The main progression used to come from the first two draws; skipping them keeps the transitions of phase 2.
+  rng.float();
+  rng.float();
+  return pick(TRANSITION_PROGRESSIONS, rng.float());
 }
 
 const ROMAN: Readonly<Record<ChordRoot, string>> = { 0: 'i', 2: 'III', 3: 'iv', 4: 'v', 5: 'VI', 6: 'VII' };

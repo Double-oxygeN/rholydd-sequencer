@@ -1,4 +1,5 @@
 import * as Tone from 'tone';
+import { heardDrums } from '../generators/arrange.ts';
 import { createEnsemble, type SessionSettings } from '../generators/ensemble.ts';
 import { STEPS_PER_BAR, type NoteEvent, type Step } from '../generators/types.ts';
 import type { Bpm } from '../params/store.ts';
@@ -7,7 +8,7 @@ import type { Context, LiveParams } from '../structure/conductor.ts';
 import type { Instruments } from './audio.ts';
 import type { Seconds } from './ducking.ts';
 
-/** Fixed for the whole session: BPM, seed and key only change between stop and play. */
+/** Fixed for the whole session: BPM, seed and initial key only change between stop and play. */
 export interface PlaybackSettings extends SessionSettings {
   readonly bpm: Bpm;
 }
@@ -38,15 +39,15 @@ export function createSequencer(
   const draw = Tone.getDraw();
 
   return {
-    start({ bpm, seed, key }) {
+    start({ bpm, seed, initialKey }) {
       // A fresh ensemble per session replays the same seed from the very beginning (F-02).
-      const ensemble = createEnsemble({ seed, key });
+      const ensemble = createEnsemble({ seed, initialKey });
       const stepSeconds = 60 / bpm / (STEPS_PER_BAR / 4);
       transport.bpm.value = bpm;
       transport.scheduleRepeat(
         (time) => {
           const { ducking, ...live } = readParams();
-          const { ctx, events } = ensemble.next(liveOnly(live));
+          const { ctx, events, fx } = ensemble.next(liveOnly(live));
           for (const event of events) {
             const at = time + event.step * stepSeconds;
             switch (event.instrument) {
@@ -57,17 +58,22 @@ export function createSequencer(
                 instruments.sub(event.pitch, at, event.length * stepSeconds, event.velocity);
                 break;
               case 'reese':
-                instruments.reese(event.pitch, at, event.length * stepSeconds, event.velocity);
+                instruments.reese(ctx.timbre.reese, event.pitch, at, event.length * stepSeconds, event.velocity);
                 break;
               case 'stab':
+                instruments.chord('stab', ctx.timbre.stab, event.voicing, at, event.length * stepSeconds, event.velocity);
+                break;
               case 'pad':
-                instruments.chord(event.instrument, event.voicing, at, event.length * stepSeconds, event.velocity);
+                instruments.chord('pad', ctx.timbre.pad, event.voicing, at, event.length * stepSeconds, event.velocity);
                 break;
             }
           }
-          // The kicks that actually sound, not the ones a fill replaced: a dropped kick needs no room.
-          const kicks = ctx.drums.hits.filter((hit) => hit.part === 'kick').map((hit) => (time + hit.step * stepSeconds) as Seconds);
+          // The kicks that actually sound, not the ones a fill replaced or the scene left out: a silent kick needs no room.
+          const kicks = heardDrums(events)
+            .filter((hit) => hit.part === 'kick')
+            .map((hit) => (time + hit.step * stepSeconds) as Seconds);
           instruments.duck(kicks, ducking);
+          instruments.fx(fx, time as Seconds, stepSeconds);
           draw.schedule(() => listener.pairStarted(ctx, events), time);
           for (let step = 0; step < STEPS_PER_BAR * 2; step++) {
             draw.schedule(() => listener.stepStarted(ctx, step as Step), time + step * stepSeconds);

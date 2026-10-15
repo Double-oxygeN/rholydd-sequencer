@@ -3,7 +3,7 @@ import { stylePlan } from '../src/generators/line.ts';
 import { HIGHEST_PITCH, LOWEST_PITCH, subPitch } from '../src/generators/sub/pitch.ts';
 import { SUB_STYLES, attackChance } from '../src/generators/sub/styles.ts';
 import { ALL_STEPS, type Step } from '../src/generators/types.ts';
-import { hash } from '../src/random/rng.ts';
+import { TAG, hash } from '../src/random/rng.ts';
 import { ALL_KEYS, KEY_NAMES, TONIC, degreeOf, parseKey, shiftDegree } from '../src/structure/key.ts';
 
 describe('key', () => {
@@ -58,7 +58,7 @@ describe('sub styles', () => {
   it('picks every style for A and a different one for B', () => {
     const mains = new Set<string>();
     for (let i = 0; i < 500; i++) {
-      const plan = stylePlan(hash(i), SUB_STYLES);
+      const plan = stylePlan({ cycle: hash(i), phrase: hash(i, 1) }, TAG.subStyle, SUB_STYLES);
       mains.add(plan.main);
       expect(plan.transition).not.toBe(plan.main);
     }

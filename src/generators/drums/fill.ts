@@ -7,6 +7,8 @@ import { isAnchorStep } from './weights.ts';
 export const FILL_KINDS = ['snareRoll', 'ghostRush', 'dropout', 'kickSolo', 'snareSolo', 'hatSolo'] as const;
 /** Big fills at the end of 32 bars: the solos are left out because they are too sparse to announce a new phrase. */
 export const PHRASE_FILL_KINDS = ['snareRoll', 'ghostRush', 'dropout', 'accelRoll', 'dropRoll'] as const;
+/** Big fills before a drop: a dropout or a ghost rush would not raise the tension before the drop's lead-in. */
+export const DROP_LEAD_FILL_KINDS = ['snareRoll', 'accelRoll', 'dropRoll'] as const;
 export const ALL_FILL_KINDS = [...FILL_KINDS, 'accelRoll', 'dropRoll'] as const;
 export type FillKind = (typeof ALL_FILL_KINDS)[number];
 
@@ -85,19 +87,31 @@ const TEMPLATES: Readonly<Record<FillKind, Template>> = {
   },
 };
 
-export function fill(seed: Seed, intensity: UnitInterval): Fill | null {
+/**
+ * What the scene boundary asks of an 8-bar fill. A scene change always gets one so that it never slips by
+ * unannounced, and the end of a breakdown rolls the snare to announce the drums coming back.
+ */
+export type SectionFillCue = 'chance' | 'certain' | 'drumsReturn';
+
+/** What the scene boundary asks of the big fill at the end of 32 bars. */
+export type PhraseFillCue = 'free' | 'intoDrop';
+
+export function fill(seed: Seed, intensity: UnitInterval, cue: SectionFillCue): Fill | null {
   const rng = createRng(seed);
-  // All draws happen before the decision so that changing the intensity only switches the fill on or off.
-  const fires = rng.float() < intensity;
-  const kind = FILL_KINDS[rng.int(FILL_KINDS.length)] ?? 'snareRoll';
+  // All draws happen before the decision so that changing the intensity or the cue never shifts the stream.
+  const roll = rng.float();
+  const drawnKind = FILL_KINDS[rng.int(FILL_KINDS.length)] ?? 'snareRoll';
   const length = LENGTH_CHANCES[pickWeighted(rng, LENGTH_CHANCES.map(([, chance]) => chance)) ?? 0]?.[0] ?? 4;
-  return fires ? buildFill(kind, length) : null;
+  const fires = cue === 'chance' ? roll < intensity : intensity > 0;
+  return fires ? buildFill(cue === 'drumsReturn' ? 'snareRoll' : drawnKind, length) : null;
 }
 
 /** The big fill at the end of 32 bars always plays unless fills are turned off, so the phrase boundary stays audible. */
-export function phraseFill(seed: Seed, intensity: UnitInterval): Fill | null {
+export function phraseFill(seed: Seed, intensity: UnitInterval, cue: PhraseFillCue): Fill | null {
   const rng = createRng(seed);
-  const kind = PHRASE_FILL_KINDS[rng.int(PHRASE_FILL_KINDS.length)] ?? 'snareRoll';
+  const kinds = cue === 'intoDrop' ? DROP_LEAD_FILL_KINDS : PHRASE_FILL_KINDS;
+  // int draws one number whatever the list's length, so the length below stays the same for both cues.
+  const kind = kinds[rng.int(kinds.length)] ?? 'snareRoll';
   const length =
     PHRASE_LENGTH_CHANCES[pickWeighted(rng, PHRASE_LENGTH_CHANCES.map(([, chance]) => chance)) ?? 0]?.[0] ?? 16;
   return intensity > 0 ? buildFill(kind, length) : null;

@@ -1,4 +1,4 @@
-import { TAG, createRng, hash } from '../../random/rng.ts';
+import { TAG, createRng } from '../../random/rng.ts';
 import { chordOf } from '../../structure/conductor.ts';
 import { chordDegrees } from '../../structure/harmony.ts';
 import { pitchClassOf } from '../../structure/key.ts';
@@ -35,7 +35,7 @@ export function createStabGenerator(): StabGenerator {
 }
 
 export function stabLine(ctx: ContextWithDrums): StabLine {
-  const style = styleOf(ctx, stylePlan(hash(ctx.seeds.phrase, TAG.stabStyle), STAB_STYLES));
+  const style = styleOf(ctx, stylePlan(ctx.seeds, TAG.stabStyle, STAB_STYLES));
   const rhythm = createRng(motifSeed(ctx, TAG.stabRhythm));
   const rolls = ALL_STEPS.map(() => rhythm.float());
   const end = playableEnd(ctx);

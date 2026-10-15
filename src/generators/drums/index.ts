@@ -1,4 +1,6 @@
 import { TAG, hash } from '../../random/rng.ts';
+import { changesScene, leadsIntoDrop, refreshesReference } from '../../structure/arrangement.ts';
+import type { UnitInterval } from '../../units.ts';
 import type { Context } from '../../structure/conductor.ts';
 import { ALL_STEPS, type DrumHit, type DrumOutcome, type Generator } from '../types.ts';
 import { initialPattern } from './base.ts';
@@ -52,9 +54,7 @@ export function createDrumGenerator(): DrumGenerator {
       sectionBase,
       base,
       ornaments: ornament(base, ctx.seeds.ornament, ctx.params.m2, ctx.energy),
-      fill: ctx.isSectionEnd
-        ? (ctx.sectionRole.isPhraseEnd ? phraseFill : fill)(ctx.seeds.fill, ctx.fillIntensity)
-        : null,
+      fill: ctx.isSectionEnd ? closingFill(ctx, ctx.fillIntensity) : null,
     };
   }
 
@@ -64,9 +64,17 @@ export function createDrumGenerator(): DrumGenerator {
   };
 }
 
+function closingFill(ctx: Context, intensity: UnitInterval): Fill | null {
+  if (ctx.sectionRole.isPhraseEnd) return phraseFill(ctx.seeds.fill, intensity, leadsIntoDrop(ctx) ? 'intoDrop' : 'free');
+  const cue = !changesScene(ctx) ? 'chance' : ctx.sceneRole.scene === 'breakdown' ? 'drumsReturn' : 'certain';
+  return fill(ctx.seeds.fill, intensity, cue);
+}
+
 function nextReference(previous: Pattern | undefined, ctx: Context): Pattern {
   if (previous === undefined) return initialPattern(hash(ctx.seeds.phrase, TAG.base));
-  return ctx.sectionRole.isPhraseStart ? mutate(previous, ctx.seeds.phrase, ctx.params.m32, 'strong') : previous;
+  return ctx.sectionRole.isPhraseStart && refreshesReference(ctx.sceneRole)
+    ? mutate(previous, ctx.seeds.phrase, ctx.params.m32, 'strong')
+    : previous;
 }
 
 // Variants and transitions start from the reference every time instead of accumulating,

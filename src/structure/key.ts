@@ -13,9 +13,36 @@ export const KEY_NAMES = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭
 export const ALL_KEYS: readonly Key[] = KEY_NAMES.map((_, i) => i as Key);
 export const DEFAULT_KEY = 5 as Key;
 
+/**
+ * Steps up the circle of fifths from the initial key: integer in [0, 11], where 12 steps come back round.
+ * Kept apart from the key itself so that the same seed moves by the same steps whatever key it starts in.
+ */
+export type FifthsFromInitial = Brand<number, 'FifthsFromInitial'>;
+
+export const AT_INITIAL_KEY = 0 as FifthsFromInitial;
+
+/** One modulation: -1 to the subdominant minor, 1 to the dominant minor. */
+export type FifthStep = -1 | 1;
+
+const FIFTHS_PER_CIRCLE = 12;
+const SEMITONES_PER_FIFTH = 7;
+
+export function stepFifths(fifths: FifthsFromInitial, step: FifthStep): FifthsFromInitial {
+  return ((((fifths + step) % FIFTHS_PER_CIRCLE) + FIFTHS_PER_CIRCLE) % FIFTHS_PER_CIRCLE) as FifthsFromInitial;
+}
+
+export function keyAt(initialKey: Key, fifths: FifthsFromInitial): Key {
+  return ((initialKey + SEMITONES_PER_FIFTH * fifths) % 12) as Key;
+}
+
 const NATURAL_MINOR = [0, 2, 3, 5, 7, 8, 10] as const;
 export const DEGREES_PER_OCTAVE = NATURAL_MINOR.length;
 export const TONIC = 0 as ScaleDegree;
+
+/** Name such as F マイナー, shared by the initial key control and the current key in the position display. */
+export function keyName(key: Key): string {
+  return `${KEY_NAMES[key]} マイナー`;
+}
 
 export function toKey(n: number): Key | undefined {
   return Number.isInteger(n) && n >= 0 && n < KEY_NAMES.length ? (n as Key) : undefined;

@@ -1,4 +1,4 @@
-import { TAG, createRng, hash } from '../../random/rng.ts';
+import { TAG, createRng } from '../../random/rng.ts';
 import { ALL_STEPS, type ContextWithDrums, type Generator, type SubNote, type Velocity } from '../types.ts';
 import { chordRoot, chordTone, legato, motifSeed, playableEnd, styleOf, stylePlan } from '../line.ts';
 import { OCTAVE_JUMP_CHANCE, SUB_TONE_WEIGHTS, subPitch } from './pitch.ts';
@@ -20,7 +20,7 @@ export function createSubGenerator(): SubGenerator {
 }
 
 export function subLine(ctx: ContextWithDrums): SubLine {
-  const style = styleOf(ctx, stylePlan(hash(ctx.seeds.phrase, TAG.subStyle), SUB_STYLES));
+  const style = styleOf(ctx, stylePlan(ctx.seeds, TAG.subStyle, SUB_STYLES));
   const rhythm = createRng(motifSeed(ctx, TAG.subRhythm));
   const pitch = createRng(motifSeed(ctx, TAG.subPitch));
   // Every step draws the same number of times whether or not a note starts there.
