@@ -7,16 +7,18 @@ export const SEGMENT_DB = 3;
 /** Matches the floor of the master peak meter. */
 export const FLOOR_DB = -SEGMENTS * SEGMENT_DB;
 /**
- * The analyser's Blackman window leaves a full-scale sine at about −13.6 dB (measured −13.6 to −14.1 dB between
- * bins), so this much is added for a full-scale sine to light the top segment.
+ * The analyser's Blackman window leaves a full-scale sine at about −13.6 dB in its loudest bin (measured −13.6 to
+ * −14.1 dB), and its main lobe adds about 2.4 dB over the neighbouring bins, so this much is added for a
+ * full-scale sine to light the top segment.
  */
-const WINDOW_LOSS_DB = 13.5;
+const WINDOW_LOSS_DB = 11.2;
 const HOLD_SECONDS = 1;
 const FALL_DB_PER_SECOND = 24;
 
 /**
- * Level of each band in dBFS: the loudest bin between the band's edges, a quarter octave either side of its centre.
- * The lowest bands hold only a bin or two, where an average would jump about.
+ * Level of each band in dBFS: the power of the bins between the band's edges, a quarter octave either side of its
+ * centre, added up. Taking only the loudest bin hid the hats: their noise spreads thinly over hundreds of bins, none
+ * of which reached the floor.
  */
 export function bandLevels({ bins, sampleRate }: Spectrum): readonly number[] {
   const binHz = sampleRate / (2 * bins.length);
@@ -25,9 +27,9 @@ export function bandLevels({ bins, sampleRate }: Spectrum): readonly number[] {
     const from = Math.ceil((center * 2 ** -0.25) / binHz);
     const below = Math.ceil((center * 2 ** 0.25) / binHz) - 1;
     const to = below >= from ? below : Math.round(center / binHz);
-    let level = -Infinity;
-    for (let i = Math.min(from, to); i <= to && i < bins.length; i++) level = Math.max(level, bins[i] ?? -Infinity);
-    return level + WINDOW_LOSS_DB;
+    let power = 0;
+    for (let i = Math.min(from, to); i <= to && i < bins.length; i++) power += 10 ** ((bins[i] ?? -Infinity) / 10);
+    return 10 * Math.log10(power) + WINDOW_LOSS_DB;
   });
 }
 
