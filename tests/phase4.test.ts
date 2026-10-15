@@ -390,9 +390,13 @@ describe('phase 4 acceptance: spectrum analyser', () => {
     expect(BAND_CENTERS[0]).toBeCloseTo(31.5);
     expect(BAND_CENTERS.at(-1)).toBeCloseTo(16128);
     const bandOf = (hz: number) => BAND_CENTERS.findIndex((c) => hz >= c * 2 ** -0.25 && hz < c * 2 ** 0.25);
-    // A full-scale sine reads about −13.6 dB in its loudest bin on the analyser and lights its band to the top.
-    const sine = bandLevels(spectrumWith({ 45: -13.6 }));
-    expect(litSegments(sine[bandOf(45)]!)).toBe(SEGMENTS);
+    // A full-scale sine reads about −13.6 dB in its loudest bin on the analyser, its Blackman main lobe 4.5 dB and
+    // 20.4 dB lower in the bins either side, and lights its band to the top.
+    const lobe = SAMPLE_RATE / (2 * BINS);
+    const sine = bandLevels(
+      spectrumWith({ [1000 - 2 * lobe]: -34, [1000 - lobe]: -18.1, 1000: -13.6, [1000 + lobe]: -18.1, [1000 + 2 * lobe]: -34 }),
+    );
+    expect(litSegments(sine[bandOf(1000)]!)).toBe(SEGMENTS);
     expect(sine.filter((level) => litSegments(level) > 0)).toHaveLength(1);
     // Hats spread thinly over many bins, each below the floor, and still light their band.
     const noise: Record<number, number> = {};
@@ -406,7 +410,8 @@ describe('phase 4 acceptance: spectrum analyser', () => {
     expect(litSegments(-Infinity)).toBe(0);
     expect(litSegments(FLOOR_DB)).toBe(0);
     expect(litSegments(FLOOR_DB + 0.1)).toBe(1);
-    expect(litSegments(-3)).toBe(SEGMENTS - 1);
+    expect(litSegments(-3)).toBe(SEGMENTS - 3);
+    expect(litSegments(-2.5)).toBe(SEGMENTS - 2);
     expect(litSegments(0)).toBe(SEGMENTS);
     expect(litSegments(6)).toBe(SEGMENTS);
   });

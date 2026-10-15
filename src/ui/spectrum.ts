@@ -2,8 +2,11 @@ import type { Spectrum } from '../engine/audio.ts';
 
 /** Half-octave bands from 31.5 Hz to 16 kHz: the kick and the sub land in bands of their own, the hats at the top. */
 export const BAND_CENTERS: readonly number[] = Array.from({ length: 19 }, (_, k) => 31.5 * Math.SQRT2 ** k);
-export const SEGMENTS = 16;
-export const SEGMENT_DB = 3;
+export const SEGMENTS = 48;
+export const SEGMENT_DB = 1;
+// Segments at and above these levels warn that the mix is nearing full scale.
+const WARN_DB = -6;
+const NEAR_DB = -12;
 /** Matches the floor of the master peak meter. */
 export const FLOOR_DB = -SEGMENTS * SEGMENT_DB;
 /**
@@ -90,16 +93,17 @@ export function createSpectrumView(): SpectrumView {
     const color = (name: string) => style.getPropertyValue(name).trim();
     const [off, low, mid, high] = [color('--cell'), color('--base'), color('--fill'), color('--accent')];
     const gap = 3;
+    const rowGap = 1;
     const columnWidth = (width - gap * (BAND_CENTERS.length - 1)) / BAND_CENTERS.length;
-    const segmentHeight = (height - gap * (SEGMENTS - 1)) / SEGMENTS;
+    const segmentHeight = (height - rowGap * (SEGMENTS - 1)) / SEGMENTS;
     BAND_CENTERS.forEach((_, band) => {
       const x = band * (columnWidth + gap);
       const peak = Math.round(peaks[band]?.segment ?? 0);
       for (let segment = 0; segment < SEGMENTS; segment++) {
-        const y = height - (segment + 1) * segmentHeight - segment * gap;
+        const y = height - (segment + 1) * segmentHeight - segment * rowGap;
         const on = segment < (lit[band] ?? 0) || segment === peak - 1;
-        // The top two segments (−6 dB and up) warn, the next two get near.
-        g.fillStyle = !on ? off : segment >= SEGMENTS - 2 ? high : segment >= SEGMENTS - 4 ? mid : low;
+        const top = FLOOR_DB + (segment + 1) * SEGMENT_DB;
+        g.fillStyle = !on ? off : top > WARN_DB ? high : top > NEAR_DB ? mid : low;
         g.fillRect(x, y, columnWidth, segmentHeight);
       }
     });
