@@ -1,5 +1,5 @@
 import { STEPS_PER_BAR, type Step } from '../generators/types.ts';
-import { cycleScenes } from '../structure/arrangement.ts';
+import { cycleScenes, type CycleLayout } from '../structure/arrangement.ts';
 import type { Context } from '../structure/conductor.ts';
 import { PAIRS_PER_SECTION } from '../structure/form.ts';
 
@@ -66,32 +66,46 @@ function counter(unit: string) {
   };
 }
 
+/**
+ * What the cycle meter shows before playback: a 128-bar cycle, all of it still to come, so the meter has its shape
+ * from the start. The lead-ins do not show on the meter.
+ */
+const PREVIEW_LAYOUT: CycleLayout = {
+  intro: 2,
+  breakdown: 2,
+  firstDrop: 1,
+  secondDrop: 1,
+  leadIns: { first: 'silence', second: 'straight' },
+};
+
 /** One cell per 8 bars of the cycle, coloured by scene, so that the next drop can be seen coming. */
 function sceneMeter() {
   const element = document.createElement('div');
   element.className = 'meter scene-meter';
   let cells: HTMLElement[] = [];
   let shape = '';
+  const show = (scenes: readonly string[], current: number) => {
+    // Rebuilt only when a new cycle brings a different layout.
+    if (scenes.join() !== shape) {
+      shape = scenes.join();
+      cells = scenes.map((scene) => {
+        const cell = document.createElement('span');
+        cell.dataset.scene = scene;
+        return cell;
+      });
+      element.style.gridTemplateColumns = `repeat(${cells.length}, 1fr)`;
+      element.replaceChildren(...cells);
+    }
+    cells.forEach((cell, i) => cell.classList.toggle('on', i <= current));
+  };
   return {
     element,
-    show(scenes: readonly string[], current: number) {
-      // Rebuilt only when a new cycle brings a different layout.
-      if (scenes.join() !== shape) {
-        shape = scenes.join();
-        cells = scenes.map((scene) => {
-          const cell = document.createElement('span');
-          cell.dataset.scene = scene;
-          return cell;
-        });
-        element.style.gridTemplateColumns = `repeat(${cells.length}, 1fr)`;
-        element.replaceChildren(...cells);
-      }
-      cells.forEach((cell, i) => cell.classList.toggle('on', i <= current));
-    },
+    show,
     clear() {
-      shape = '';
-      cells = [];
-      element.replaceChildren();
+      show(
+        cycleScenes(PREVIEW_LAYOUT).map((role) => role.scene),
+        -1,
+      );
     },
   };
 }
