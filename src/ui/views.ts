@@ -1,8 +1,14 @@
+import { AudioLines, LayoutGrid, type IconNode } from 'lucide';
+import { iconButton } from './icons.ts';
+
 /** What fills the main area: the step grid or the spectrum, never both, to keep the screen to one picture. */
 export const VIEWS = ['sequencer', 'spectrum'] as const;
 export type View = (typeof VIEWS)[number];
 
-const VIEW_LABEL: Readonly<Record<View, string>> = { sequencer: 'シーケンサー', spectrum: 'スペクトラム' };
+const VIEW_BUTTON: Readonly<Record<View, readonly [IconNode, string]>> = {
+  sequencer: [LayoutGrid, 'シーケンサー'],
+  spectrum: [AudioLines, 'スペクトラム'],
+};
 
 export interface Views {
   readonly element: HTMLElement;
@@ -19,9 +25,7 @@ export function createViews(panes: Readonly<Record<View, HTMLElement>>): Views {
   let current: View = 'sequencer';
   const handlers: ((view: View) => void)[] = [];
   const buttons = VIEWS.map((view) => {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.textContent = VIEW_LABEL[view];
+    const button = iconButton(...VIEW_BUTTON[view]);
     button.setAttribute('role', 'tab');
     button.addEventListener('click', () => select(view));
     return button;

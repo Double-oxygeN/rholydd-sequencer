@@ -1,4 +1,6 @@
+import { Dices } from 'lucide';
 import type { PlaybackState } from './controls.ts';
+import { iconButton } from './icons.ts';
 import { BPM_RANGE, clampBpm, randomSeed, type ParamStore, type Params } from '../params/store.ts';
 import { parseSeed } from '../random/rng.ts';
 import { KEY_NAMES, keyName, toKey, type Key } from '../structure/key.ts';
@@ -47,8 +49,7 @@ export function createPanel(store: ParamStore): Panel {
     seed.setCustomValidity(value === undefined ? '0〜4294967295 の整数を入力してください' : '');
     if (value !== undefined) store.update({ seed: value });
   });
-  const dice = button('ランダム', 'dice');
-  dice.type = 'button';
+  const dice = iconButton(Dices, 'シードを振り直す', 'dice');
   dice.addEventListener('click', () => {
     const value = randomSeed();
     seed.value = String(value);
@@ -105,13 +106,6 @@ function row(...children: HTMLElement[]): HTMLElement {
   div.className = 'row';
   div.append(...children);
   return div;
-}
-
-function button(text: string, className: string): HTMLButtonElement {
-  const el = document.createElement('button');
-  el.textContent = text;
-  el.className = className;
-  return el;
 }
 
 type InputProps = Partial<Pick<HTMLInputElement, 'type' | 'min' | 'max' | 'step' | 'inputMode' | 'spellcheck'>>;
