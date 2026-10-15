@@ -43,11 +43,10 @@ export function createStepGrid(): StepGrid {
     }
   }
 
-  const paint = (row: Row, step: number, layer: string, velocity: number, title = '', part = '') => {
+  const paint = (row: Row, step: number, layer: string, velocity: number, title = '') => {
     const cell = cells.get(`${row}:${step}`);
     if (cell === undefined) return;
     cell.dataset.layer = layer;
-    cell.dataset.part = part;
     cell.style.setProperty('--velocity', String(velocity));
     cell.title = title;
   };
@@ -58,7 +57,6 @@ export function createStepGrid(): StepGrid {
     show(events) {
       for (const cell of cells.values()) {
         cell.dataset.layer = '';
-        cell.dataset.part = '';
         cell.style.removeProperty('--velocity');
         cell.title = '';
       }
@@ -66,8 +64,10 @@ export function createStepGrid(): StepGrid {
       const ordered = [...events].sort((a, b) => Number(isGhost(b)) - Number(isGhost(a)));
       for (const event of ordered) {
         switch (event.instrument) {
+          // Every hit looks alike whether pattern, ornament or fill; only its velocity shades it, so ghosts read
+          // as the soft snare strokes they are.
           case 'drums':
-            paint(ROW_OF[event.part], event.step, event.layer, event.velocity, event.part === 'ghost' ? 'Ghost' : '', event.part);
+            paint(ROW_OF[event.part], event.step, 'hit', event.velocity, event.part === 'ghost' ? 'Ghost' : '');
             break;
           case 'sub':
           case 'reese':

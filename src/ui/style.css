@@ -368,24 +368,8 @@ button:disabled {
   box-shadow: inset 3px 0 0 var(--muted);
 }
 
-.grid-cell[data-layer='base'] {
-  --mark: color-mix(in srgb, var(--base) calc(var(--velocity) * 100%), var(--cell));
-  background: var(--mark);
-}
-
-.grid-cell[data-layer='ornament'] {
-  --mark: color-mix(in srgb, var(--ornament) calc(var(--velocity) * 100% + 30%), var(--cell));
-  background: var(--mark);
-}
-
-.grid-cell[data-layer='fill'] {
-  --mark: color-mix(in srgb, var(--fill) calc(var(--velocity) * 100%), var(--cell));
-  background: var(--mark);
-}
-
-/* A ghost is a small dot in the snare's lane, so that the backbeat still reads at a glance. */
-.grid-cell[data-part='ghost'] {
-  background: radial-gradient(circle, var(--mark) 0 42%, var(--cell) 48%);
+.grid-cell[data-layer='hit'] {
+  background: color-mix(in srgb, var(--base) calc(var(--velocity) * 100%), var(--cell));
 }
 
 .grid-cell[data-layer='note'] {
