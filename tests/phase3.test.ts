@@ -25,6 +25,15 @@ import {
   type FifthsFromInitial,
   type Key,
 } from '../src/structure/key.ts';
+import { PAD_TIMBRES, REESE_TIMBRES, STAB_TIMBRES } from '../src/structure/timbre.ts';
+import { GATE_REOPEN_SECONDS } from '../src/engine/automation.ts';
+import {
+  PAD_MAX_RELEASE,
+  PAD_PATCHES,
+  REESE_PATCHES,
+  STAB_MAX_RELEASE,
+  STAB_PATCHES,
+} from '../src/engine/patches.ts';
 import { clampUnit } from '../src/units.ts';
 import { DEFAULT_LIVE, PARAM_SETS, SEEDS, liveParams, run, type GeneratedPair } from './helpers.ts';
 
@@ -463,6 +472,65 @@ describe('phase 3 acceptance: modulation', () => {
             );
           expect(classes(pair.heard, initialKey - DEFAULT_KEY)).toEqual(classes(inF[i]!.heard, 0));
         });
+      }
+    }
+  });
+});
+
+describe('phase 3 acceptance: sounds per cycle', () => {
+  const parts = ['reese', 'stab', 'pad'] as const;
+
+  it('changes the sound of a part only at the start of a cycle, always to another one, and never when m32 is 0', () => {
+    for (const { params, pairs } of runs) {
+      let changes = 0;
+      for (let i = 1; i < pairs.length; i++) {
+        for (const part of parts) {
+          if (pairs[i]!.ctx.timbre[part] === pairs[i - 1]!.ctx.timbre[part]) continue;
+          changes++;
+          expect(pairs[i]!.ctx.sectionInCycle === 0 && pairs[i]!.ctx.isSectionStart).toBe(true);
+        }
+      }
+      if (params.m32 === 0) expect(changes).toBe(0);
+      else expect(changes).toBeGreaterThan(0);
+    }
+  });
+
+  it('plays every sound of every table over long runs', () => {
+    const heard = { reese: new Set<string>(), stab: new Set<string>(), pad: new Set<string>() };
+    for (const seed of SEEDS) {
+      for (const { ctx } of run(seed, 8192)) for (const part of parts) heard[part].add(ctx.timbre[part]);
+    }
+    expect([...heard.reese].sort()).toEqual([...REESE_TIMBRES].sort());
+    expect([...heard.stab].sort()).toEqual([...STAB_TIMBRES].sort());
+    expect([...heard.pad].sort()).toEqual([...PAD_TIMBRES].sort());
+  });
+
+  it('picks the same sounds whatever the initial key', () => {
+    for (const seed of SEEDS) {
+      const inF = run(seed, BARS).map(({ ctx }) => ctx.timbre);
+      for (const initialKey of ALL_KEYS) {
+        expect(run(seed, BARS, () => DEFAULT_LIVE, initialKey).map(({ ctx }) => ctx.timbre)).toEqual(inF);
+      }
+    }
+  });
+
+  it('keeps every sound within the envelopes the pad gate and the polyphony were worked out for', () => {
+    for (const patch of Object.values(PAD_PATCHES)) {
+      expect(patch.envelope.attack).toBeGreaterThanOrEqual(GATE_REOPEN_SECONDS);
+      expect(patch.envelope.release).toBeLessThanOrEqual(PAD_MAX_RELEASE);
+    }
+    for (const patch of Object.values(STAB_PATCHES)) {
+      expect(patch.envelope.release).toBeLessThanOrEqual(STAB_MAX_RELEASE);
+    }
+  });
+
+  it('only ever turns a sound down, and keeps the FM ratios whole so that no part sounds an octave down', () => {
+    const patches = [...Object.values(REESE_PATCHES), ...Object.values(STAB_PATCHES), ...Object.values(PAD_PATCHES)];
+    for (const patch of patches) {
+      expect(patch.gainDb).toBeLessThanOrEqual(0);
+      if ('harmonicity' in patch.oscillator) {
+        expect(Number.isInteger(patch.oscillator.harmonicity)).toBe(true);
+        expect(patch.oscillator.harmonicity).toBeGreaterThanOrEqual(1);
       }
     }
   });

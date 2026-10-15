@@ -14,6 +14,17 @@ import {
   type AutomationTarget,
 } from './automation.ts';
 import { duckPoints, type Dip, type Seconds } from './ducking.ts';
+import {
+  CHORD_POLYPHONY,
+  PAD_PATCHES,
+  REESE_PATCHES,
+  STAB_PATCHES,
+  type ChordPatch,
+  type FatOscillator,
+  type FmOscillator,
+  type ReesePatch,
+} from './patches.ts';
+import type { CycleTimbre, PadTimbre, ReeseTimbre, StabTimbre } from '../structure/timbre.ts';
 
 /** Every sample is mapped to one note and played back at its original pitch. */
 const ROOT_NOTE = 'C3';
@@ -69,8 +80,15 @@ const LOOK_AHEAD_SECONDS = 0.25;
 export interface Instruments {
   drum(part: Part, time: number, velocity: Velocity): void;
   sub(pitch: Pitch, time: number, seconds: number, velocity: Velocity): void;
-  reese(pitch: Pitch, time: number, seconds: number, velocity: Velocity): void;
-  chord(part: 'stab' | 'pad', voicing: Voicing, time: number, seconds: number, velocity: Velocity): void;
+  reese(timbre: ReeseTimbre, pitch: Pitch, time: number, seconds: number, velocity: Velocity): void;
+  chord<P extends ChordPart>(
+    part: P,
+    timbre: CycleTimbre[P],
+    voicing: Voicing,
+    time: number,
+    seconds: number,
+    velocity: Velocity,
+  ): void;
   /** Lets scheduled notes through from the given time on. */
   open(time: number): void;
   /** Cuts every note and the reverb tail, including notes already scheduled ahead of time. */
@@ -173,11 +191,13 @@ export async function loadInstruments(drumSamplesUrl: string, mixer: MixerSettin
     sub(pitch, time, seconds, velocity) {
       voices.sub.triggerAttackRelease(frequencyOf(pitch), legatoSeconds(seconds), time, velocity);
     },
-    reese(pitch, time, seconds, velocity) {
-      voices.reese.triggerAttackRelease(frequencyOf(pitch), legatoSeconds(seconds), time, velocity);
+    // A change of sound only changes which synth gets the next note, so the previous cycle's tails ring out on the
+    // synth they started on and nothing needs scheduling at the cycle boundary.
+    reese(timbre, pitch, time, seconds, velocity) {
+      voices.reese[timbre].triggerAttackRelease(frequencyOf(pitch), legatoSeconds(seconds), time, velocity);
     },
-    chord(part, voicing, time, seconds, velocity) {
-      voices[part].triggerAttackRelease(voicing.map(frequencyOf), legatoSeconds(seconds), time, velocity);
+    chord(part, timbre, voicing, time, seconds, velocity) {
+      chordSynth(voices, part, timbre).triggerAttackRelease(voicing.map(frequencyOf), legatoSeconds(seconds), time, velocity);
     },
     open(time) {
       // Notes of the previous session stay scheduled on the synths' timelines, and the gate would let them
@@ -206,9 +226,8 @@ export async function loadInstruments(drumSamplesUrl: string, mixer: MixerSettin
       // A build stopped halfway would otherwise leave the next session high-passed and with the riser up.
       rest(now);
       voices.sub.triggerRelease(now);
-      voices.reese.triggerRelease(now);
-      voices.stab.releaseAll(now);
-      voices.pad.releaseAll(now);
+      for (const reese of Object.values(voices.reese)) reese.triggerRelease(now);
+      for (const chord of [...Object.values(voices.stab), ...Object.values(voices.pad)]) chord.releaseAll(now);
     },
     setVolume(volume) {
       listening.volume.rampTo(Tone.gainToDb(volume), MIXER_RAMP_SECONDS);
@@ -319,13 +338,21 @@ function createReverb(from: Tone.ToneAudioNode, to: Tone.InputNode): Tone.Reverb
   return reverb;
 }
 
+type ChordPart = 'stab' | 'pad';
+
+/** Parts with a table of sounds hold one synth per sound, all feeding the part's input. */
 interface Voices {
   readonly sub: Tone.Synth;
-  readonly reese: Tone.MonoSynth;
-  readonly stab: Tone.PolySynth;
-  readonly pad: Tone.PolySynth;
+  readonly reese: Readonly<Record<ReeseTimbre, Tone.MonoSynth>>;
+  readonly stab: Readonly<Record<StabTimbre, Tone.PolySynth>>;
+  readonly pad: Readonly<Record<PadTimbre, Tone.PolySynth>>;
   readonly impactBoom: Tone.MembraneSynth;
   readonly impactNoise: Tone.NoiseSynth;
+}
+
+function chordSynth<P extends ChordPart>(voices: Voices, part: P, timbre: CycleTimbre[P]): Tone.PolySynth {
+  // The generic index loses the link between part and timbre, so the two tables are looked up apart.
+  return part === 'stab' ? voices.stab[timbre as StabTimbre] : voices.pad[timbre as PadTimbre];
 }
 
 type VoiceInputs = {
@@ -342,33 +369,9 @@ function createVoices(to: VoiceInputs): Voices {
       oscillator: { type: 'sine' },
       envelope: { attack: 0.005, decay: 0.05, sustain: 1, release: 0.03 },
     }).connect(to.sub),
-    // Detuned saws beating against each other are what make a reese.
-    reese: new Tone.MonoSynth({
-      oscillator: { type: 'fatsawtooth', count: 3, spread: 25 },
-      envelope: { attack: 0.005, decay: 0.2, sustain: 0.8, release: 0.05 },
-      filter: { type: 'lowpass', Q: 2, rolloff: -24 },
-      filterEnvelope: { attack: 0.01, decay: 0.25, sustain: 0.3, release: 0.1, baseFrequency: 200, octaves: 3 },
-    }).connect(to.reese),
-    // A voice is held from about a look-ahead before its note until the oscillator's ended event reaches the main
-    // thread. Stabs 2 steps apart then overlap three or four deep, and 8 voices for 3-note chords dropped notes.
-    stab: new Tone.PolySynth({
-      maxPolyphony: 12,
-      voice: Tone.Synth,
-      options: {
-        oscillator: { type: 'fatsquare', count: 2, spread: 15 },
-        envelope: { attack: 0.003, decay: 0.12, sustain: 0.15, release: 0.15 },
-      },
-    }).connect(to.stab),
-    // Re-struck every 2 bars while the previous chord still releases, so two 4-note chords overlap, plus slack for
-    // the same early hold and late release as the stabs.
-    pad: new Tone.PolySynth({
-      maxPolyphony: 12,
-      voice: Tone.Synth,
-      options: {
-        oscillator: { type: 'fatsawtooth', count: 3, spread: 30 },
-        envelope: { attack: 0.4, decay: 0.6, sustain: 0.7, release: 1.2 },
-      },
-    }).connect(to.pad),
+    reese: mapValues(REESE_PATCHES, (patch) => buildReeseSynth(patch).connect(to.reese)),
+    stab: mapValues(STAB_PATCHES, (patch) => buildChordSynth(patch).connect(to.stab)),
+    pad: mapValues(PAD_PATCHES, (patch) => buildChordSynth(patch).connect(to.pad)),
     impactBoom: new Tone.MembraneSynth({
       pitchDecay: 0.4,
       octaves: 3,
@@ -381,8 +384,43 @@ function createVoices(to: VoiceInputs): Voices {
   };
 }
 
+function buildReeseSynth(patch: ReesePatch): Tone.MonoSynth {
+  return new Tone.MonoSynth({
+    oscillator: oscillatorOptions(patch.oscillator),
+    envelope: patch.envelope,
+    filter: { type: 'lowpass', Q: patch.filterQ, rolloff: -24 },
+    filterEnvelope: patch.filterEnvelope,
+    volume: patch.gainDb,
+  });
+}
+
+function buildChordSynth(patch: ChordPatch): Tone.PolySynth {
+  return new Tone.PolySynth({
+    maxPolyphony: CHORD_POLYPHONY,
+    voice: Tone.Synth,
+    options: { oscillator: oscillatorOptions(patch.oscillator), envelope: patch.envelope },
+    volume: patch.gainDb,
+  });
+}
+
+function oscillatorOptions(oscillator: FatOscillator<number> | FmOscillator) {
+  return 'count' in oscillator
+    ? { type: oscillator.type, count: oscillator.count, spread: oscillator.spread }
+    : // Tone modulates with a square unless told otherwise, which would make every FM sound harsh.
+      { type: oscillator.type, harmonicity: oscillator.harmonicity, modulationIndex: oscillator.modulationIndex, modulationType: 'sine' as const };
+}
+
+function mapValues<K extends string, A, B>(record: Readonly<Record<K, A>>, f: (value: A) => B): Record<K, B> {
+  return Object.fromEntries(Object.entries<A>(record).map(([key, value]) => [key, f(value)])) as Record<K, B>;
+}
+
 function disposeVoices(voices: Voices): void {
-  for (const voice of Object.values(voices)) voice.dispose();
+  voices.sub.dispose();
+  for (const synth of [...Object.values(voices.reese), ...Object.values(voices.stab), ...Object.values(voices.pad)]) {
+    synth.dispose();
+  }
+  voices.impactBoom.dispose();
+  voices.impactNoise.dispose();
 }
 
 function frequencyOf(pitch: Pitch): number {

@@ -48,6 +48,7 @@ export const TAG = {
   cycle: 19,
   layout: 20,
   modulation: 21,
+  timbre: 22,
 } as const;
 export const REL = { repeat: 1, variant: 2 } as const;
 

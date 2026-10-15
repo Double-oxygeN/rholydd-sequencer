@@ -38,8 +38,9 @@ const RISER_CUT_SECONDS = 0.01;
 const THROW_LEAD_SECONDS = 0.005;
 const THROW_HOLD_SECONDS = 0.12;
 const GAP_FADE_SECONDS = 0.03;
-// Matches the pad's attack, so the tail of the chord cut by the gap does not come back when the gate reopens.
-const GATE_REOPEN_SECONDS = 0.4;
+// Slow enough that the tail of the chord cut by the gap does not come back, and no slower than any pad's attack
+// (checked against the sound table), so the gate never blunts the first chord of the drop.
+export const GATE_REOPEN_SECONDS = 0.4;
 
 /** Rises slowly at first and steeply at the end, as the build tightens towards the gap. */
 export function riserGain(progress: number): number {

@@ -58,11 +58,13 @@ export function createSequencer(
                 instruments.sub(event.pitch, at, event.length * stepSeconds, event.velocity);
                 break;
               case 'reese':
-                instruments.reese(event.pitch, at, event.length * stepSeconds, event.velocity);
+                instruments.reese(ctx.timbre.reese, event.pitch, at, event.length * stepSeconds, event.velocity);
                 break;
               case 'stab':
+                instruments.chord('stab', ctx.timbre.stab, event.voicing, at, event.length * stepSeconds, event.velocity);
+                break;
               case 'pad':
-                instruments.chord(event.instrument, event.voicing, at, event.length * stepSeconds, event.velocity);
+                instruments.chord('pad', ctx.timbre.pad, event.voicing, at, event.length * stepSeconds, event.velocity);
                 break;
             }
           }

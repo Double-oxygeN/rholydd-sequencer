@@ -20,6 +20,7 @@ import {
   type TransitionProgression,
 } from './harmony.ts';
 import { AT_INITIAL_KEY, DEFAULT_KEY, keyAt, type FifthsFromInitial, type Key } from './key.ts';
+import { cycleTimbre, type CycleTimbre } from './timbre.ts';
 import {
   BARS_PER_PAIR,
   PAIRS_PER_SECTION,
@@ -92,6 +93,8 @@ export type Context = PairRole &
   readonly energy: UnitInterval;
   /** Key of the cycle. Only transposes pitches and never feeds a seed, so another initial key keeps the same piece. */
   readonly key: Key;
+  /** Sounds of the cycle. Playback picks the synths from it; the generators never read it. */
+  readonly timbre: CycleTimbre;
   readonly cycle: CycleIndex;
   readonly layout: CycleLayout;
   readonly sectionInCycle: SectionInCycle;
@@ -124,6 +127,7 @@ interface CycleState {
   readonly firstSection: number;
   readonly main: MainProgression;
   readonly fifths: FifthsFromInitial;
+  readonly timbre: CycleTimbre;
 }
 
 export interface Conductor {
@@ -170,6 +174,7 @@ export function createConductor(master: Seed, initialKey: Key = DEFAULT_KEY): Co
         ...sectionHarmony(inPhrase, cycle.main, transition),
         energy,
         key: keyAt(initialKey, cycle.fifths),
+        timbre: cycle.timbre,
         cycle: cycle.index,
         layout: cycle.layout,
         sectionInCycle,
@@ -202,5 +207,6 @@ function nextCycle(master: Seed, previous: CycleState | undefined, firstSection:
     firstSection,
     main: cycleMainProgression(previous?.main, seed, m32),
     fifths: previous === undefined ? AT_INITIAL_KEY : cycleModulation(previous.fifths, seed, m32),
+    timbre: cycleTimbre(previous?.timbre, seed, m32),
   };
 }

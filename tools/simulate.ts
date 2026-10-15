@@ -34,6 +34,7 @@ import {
   type MainProgression,
 } from '../src/structure/harmony.ts';
 import { DEFAULT_KEY, KEY_NAMES, degreeOf, parseKey, type Key } from '../src/structure/key.ts';
+import { PAD_TIMBRES, REESE_TIMBRES, STAB_TIMBRES, type CycleTimbre } from '../src/structure/timbre.ts';
 import { clampUnit } from '../src/units.ts';
 
 export interface SimulationOptions {
@@ -123,6 +124,8 @@ export interface SimulationReport {
     /** Heard events of parts that their scene leaves out, apart from the snare roll ending a breakdown. Always 0. */
     readonly misplaced: number;
   };
+  /** For each part with a table of sounds, the cycles that played each sound and the cycle starts that changed it. */
+  readonly timbre: Record<keyof CycleTimbre, { readonly cycles: Record<string, number>; readonly changes: number }>;
   /** Number of effects of each kind. Risers and sweeps count one segment per 2 bars. */
   readonly fx: Record<FxEvent['fx'], number>;
   readonly fills: Record<FillKind | 'none', number>;
@@ -155,6 +158,12 @@ interface SceneStats {
 }
 
 const SCENES: readonly Scene[] = ['intro', 'build', 'drop', 'breakdown'];
+const TIMBRE_TABLES: Readonly<Record<keyof CycleTimbre, readonly string[]>> = {
+  reese: REESE_TIMBRES,
+  stab: STAB_TIMBRES,
+  pad: PAD_TIMBRES,
+};
+const TIMBRE_PARTS = Object.keys(TIMBRE_TABLES) as (keyof CycleTimbre)[];
 const FX_KINDS: readonly FxEvent['fx'][] = ['riser', 'sweep', 'impact', 'throw', 'filterReset', 'gap'];
 const LEAD_BARS = [16, 24] as const;
 
@@ -220,6 +229,10 @@ export function simulate({ bars, seed, live, initialKey = DEFAULT_KEY }: Simulat
     SCENES.map((scene) => [scene, { sub: 0, reese: 0, stab: 0, pad: 0 }]),
   ) as Record<Scene, Record<PitchedPart, number>>;
   let misplaced = 0;
+  const timbre = Object.fromEntries(
+    TIMBRE_PARTS.map((part) => [part, { cycles: Object.fromEntries(TIMBRE_TABLES[part].map((name) => [name, 0])), changes: 0 }]),
+  ) as Record<keyof CycleTimbre, { cycles: Record<string, number>; changes: number }>;
+  let previousTimbre: CycleTimbre | undefined;
   const fxCounts = Object.fromEntries(FX_KINDS.map((kind) => [kind, 0])) as Record<FxEvent['fx'], number>;
   let previousReference: Pattern | undefined;
   const changedSections = perPart(() => 0);
@@ -249,6 +262,11 @@ export function simulate({ bars, seed, live, initialKey = DEFAULT_KEY }: Simulat
       cycleLengths[(cycleSections(ctx.layout) * BARS_PER_SECTION) as CycleBars]++;
       leads[`${ctx.layout.intro * BARS_PER_SECTION}/${ctx.layout.breakdown * BARS_PER_SECTION}`]! += 1;
       extensions[extensionOf(ctx.layout)]++;
+      for (const part of TIMBRE_PARTS) {
+        timbre[part].cycles[ctx.timbre[part]]! += 1;
+        if (previousTimbre !== undefined && previousTimbre[part] !== ctx.timbre[part]) timbre[part].changes++;
+      }
+      previousTimbre = ctx.timbre;
     }
     barsByFifths[signed(fifthsBetween(initialKey, ctx.key))]! += 2;
     if (previousKey !== undefined && previousKey !== ctx.key) {
@@ -403,6 +421,7 @@ export function simulate({ bars, seed, live, initialKey = DEFAULT_KEY }: Simulat
       ) as Record<Scene, SceneStats>,
       misplaced,
     },
+    timbre,
     fx: fxCounts,
     fills,
     fillLengths,
@@ -503,7 +522,7 @@ function formatReport(report: SimulationReport): string {
   return lines.join('\n');
 }
 
-function formatArrangement({ arrangement, fx }: SimulationReport): string[] {
+function formatArrangement({ arrangement, fx, timbre }: SimulationReport): string[] {
   const num = (x: number) => x.toFixed(2).padStart(6);
   const count = (x: number) => String(x).padStart(6);
   return [
@@ -518,6 +537,11 @@ function formatArrangement({ arrangement, fx }: SimulationReport): string[] {
     }),
     `  parts heard outside their scenes: ${arrangement.misplaced}`,
     `  effects: ${FX_KINDS.map((kind) => `${kind} ${fx[kind]}`).join('  ')}`,
+    `  sounds (cycles each, changes at cycle starts):`,
+    ...TIMBRE_PARTS.map(
+      (part) =>
+        `    ${part.padEnd(6)} ${Object.entries(timbre[part].cycles).map(([name, n]) => `${name} ${n}`).join('  ')}  changed ${timbre[part].changes}`,
+    ),
   ];
 }
 
