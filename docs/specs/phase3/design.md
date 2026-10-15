@@ -373,7 +373,7 @@ function phraseFill(seed, intensity, cue: PhraseFillCue): Fill | null;
 `fxEvents(ctx)` は乱数を使わず、`Context` とドラムの確定結果だけから決めます。
 
 ```ts
-interface FxSpan { from: Step; to: StepEnd; startProgress: UnitInterval; endProgress: UnitInterval }
+interface FxSpan { to: StepEnd; startProgress: UnitInterval; endProgress: UnitInterval }   // 2bar の頭から
 type StepEnd = Brand<number, 'StepEnd'>;   // 1〜32。区間の終わり（その位置は含まない）
 
 type FxEvent =
@@ -424,13 +424,15 @@ function fxAutomation(events: readonly FxEvent[], pairStart: Seconds, stepSecond
 
 | FX | 点 |
 | --- | --- |
-| ライザー | 区間の頭で開始時の値に `set`、終わりで終了時の値へ。音量は `linear`（0 に向けた指数ランプは使えないため）、周波数は `exponential`。`endProgress` が1なら、10 ms 後に音量を0へ `linear` |
-| スイープ | 区間の頭で開始時の周波数に `set`、終わりへ `exponential` |
+| ライザー | 効果の始まる2bar（`startProgress` が0）だけ、2bar の頭で開始時の値に `set`。区間の終わりで終了時の値へ。音量は `linear`（0 に向けた指数ランプは使えないため）、周波数は `exponential`。`endProgress` が1なら、10 ms 後に音量を0へ `linear` |
+| スイープ | 効果の始まる2bar だけ、2bar の頭で開始時の周波数に `set`。区間の終わりへ `exponential` |
 | フィルターのリセット | 2bar の終わりで、ハイパスとローパスを開いた周波数に `set`。同じ瞬間に終わるハイパスのランプより後に予約する（同時刻の点は予約した順に効くため） |
 | リバーブスロー | 打音の 5 ms 前に送り量を `set`、120 ms 後に0へ `set` |
 | 溜め | `pad` が `cut` のとき、開始で1に `set`、30 ms でパッドのゲートを0へ `linear`。2bar の終わりで0に `set` し、0.4 秒（パッドのアタック）で1へ `linear`。すぐに1に戻すと、溜めで切ったパッドのリリースがドロップの頭で聞こえ直すため。`held` のときは点を作らない |
 
 インパクトは点ではなく発音なので、エンジンが直接鳴らします。
+
+2bar ごとの開始時刻はトランスポートが別々に求めるので、前の2bar の終わり（`at(32)`）と次の2bar の頭は、浮動小数の誤差で僅かに前後します。次の2bar の頭の点が前の2bar のランプの終わりより前に入ると、Web Audio はそのランプの起点をその点とみなし、ランプ全体が崩れます。そのため、2bar の境界をまたいで続く効果は、続きの2bar で値を `set` し直さずランプだけを足し、境界で値を変える点（フィルターのリセット）は、境界で終わるランプと同じ2bar から求めます。
 
 | 定数 | 値 |
 | --- | --- |

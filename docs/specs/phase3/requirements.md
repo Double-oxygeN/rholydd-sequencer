@@ -426,7 +426,7 @@ interface CycleTimbre {
 type StepEnd = Brand<number, 'StepEnd'>;   // 区間の終わり（その位置は含まない）。1〜32
 
 // 2bar 内の区間。progress はシーン内の進み具合（0〜1）
-interface FxSpan { from: Step; to: StepEnd; startProgress: UnitInterval; endProgress: UnitInterval }
+interface FxSpan { to: StepEnd; startProgress: UnitInterval; endProgress: UnitInterval }   // 2bar の頭から
 
 interface RiserSegment { fx: 'riser'; span: FxSpan }
 interface Impact       { fx: 'impact'; step: Step }
