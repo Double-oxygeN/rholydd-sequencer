@@ -20,19 +20,21 @@ tools/simulate ──▶ generators/ensemble          （Tone.js に依存しな
 | `src/structure/arrangement.ts` | サイクルのレイアウト、8bar ごとのシーン、シーンのエネルギー、シーンごとに鳴らすパート、シーンの境界の判定 | なし |
 | `src/structure/key.ts` | 初期キーから五度圏を何歩進んだかを表す型と、1歩動かす関数、そこからキーを求める関数 | なし |
 | `src/structure/harmony.ts` | 主進行の選択をサイクル単位に、転換進行の選択を32bar 単位に分ける。サイクルの頭での移調を決める | なし |
-| `src/structure/conductor.ts` | サイクルを数え、`Context` にサイクル・シーン・次のシーンを加え、キーをサイクルごとに求める | なし |
+| `src/structure/conductor.ts` | サイクルを数え、`Context` にサイクル・シーン・次のシーンを加え、キーと音色をサイクルごとに求める | なし |
+| `src/structure/timbre.ts` | パートごとの音色の名前の表と、サイクルの頭での音色の選択 | なし |
 | `src/generators/line.ts` | 型とモチーフのシードを A 系はサイクルから、B は32bar から派生させる | なし |
 | `src/generators/drums/*` | 強い変異のタイミング、シーンの境界に応じたフィルの種類と有無 | なし |
 | `src/generators/arrange.ts` | 生成したイベントから、シーンで鳴らすパートだけを残し、溜めを空ける | なし |
 | `src/generators/fx/index.ts` | 2bar ごとの FX のイベント | なし |
 | `src/generators/ensemble.ts` | 生成 → 選別 → FX の順に2bar を作る | なし |
 | `src/engine/automation.ts` | FX のイベントから、パラメーターごとのオートメーションの点列を求める | なし |
-| `src/engine/audio.ts` | FX の音源とチャンネル、スイープ用フィルター、スロー用センド、パッドのゲート | あり |
-| `src/engine/transport.ts` | 鳴る側のイベントと FX を2bar ごとに予約する | あり |
+| `src/engine/patches.ts` | 音色の名前ごとのシンセの設定（波形、エンベロープ、フィルター、音量の補正）と、その制約の定数 | なし |
+| `src/engine/audio.ts` | FX の音源とチャンネル、スイープ用フィルター、スロー用センド、パッドのゲート。リース・スタブ・パッドは音色ごとにシンセを1台ずつ持つ | あり |
+| `src/engine/transport.ts` | 鳴る側のイベントと FX を2bar ごとに予約する。ノートを `ctx.timbre` の音色のシンセに送る | あり |
 | `src/ui/position.ts` | シーン名、サイクルのメーター、次のシーンまでの小節数、現在のキー | なし |
 | `src/ui/panel.ts`、`src/params/store.ts` | キーのパラメーターを初期キー（`initialKey`）に改める | なし |
 
-オートメーションの点列を Tone.js から切り離すのは、ダッキングと同じく、FX の値とタイミングを Node.js 上の単体テストで検証するためです。
+オートメーションの点列を Tone.js から切り離すのは、ダッキングと同じく、FX の値とタイミングを Node.js 上の単体テストで検証するためです。音色の表（`engine/patches.ts`）を Tone.js から切り離すのも、同じく制約を Node.js 上で検証するためです。
 
 ## 型
 
@@ -48,6 +50,9 @@ tools/simulate ──▶ generators/ensemble          （Tone.js に依存しな
 | `FxEvent` | FX の判別共用体（下記） | |
 | `FifthsFromInitial` | number | 初期キーから五度圏を属調の向きに何歩進んだか。0〜11 の整数で、12歩で 0 に戻る |
 | `FifthStep` | `-1 \| 1` | 1回の移調の向き。下属調 −1、属調 1。2歩以上の移調を表現できない |
+| `ReeseTimbre`・`StabTimbre`・`PadTimbre` | 音色の名前の共用体 | 表にない音色を表現できない |
+| `CycleTimbre` | `{ reese, stab, pad }` | サイクルの途中では変わらない |
+| `ReesePatch`・`ChordPatch` | シンセの設定（下記） | 重ねるオシレーターの数の上限を型で表す |
 
 ```ts
 type LeadPosition  = { sections: 2; index: 0 | 1 } | { sections: 3; index: 0 | 1 | 2 };
@@ -75,6 +80,8 @@ type Context = PairRole & SectionHarmony & {
   readonly seeds: Seeds & { readonly cycle: Seed };
   /** そのサイクルのキー。フェーズ2までのセッション固定のキーを置き換える */
   readonly key: Key;
+  /** そのサイクルの音色 */
+  readonly timbre: CycleTimbre;
 };
 ```
 
@@ -167,6 +174,133 @@ type Context = PairRole & SectionHarmony & {
 ### ドラムの基準パターン
 
 `nextReference` で強い変異をかける条件を、「32bar の頭」から「32bar の頭で `refreshesReference(ctx.sceneRole)` が真」に改めます。最初のサイクルのイントロの頭は、これまでどおり初期生成です。
+
+## 音色
+
+### 選択（`structure/timbre.ts`）
+
+```ts
+const REESE_TIMBRES = ['classic', 'wide', 'hollow', 'growl'] as const;
+const STAB_TIMBRES = ['square', 'pluck', 'bell'] as const;
+const PAD_TIMBRES = ['saw', 'warm', 'glass'] as const;
+type ReeseTimbre = (typeof REESE_TIMBRES)[number];
+type StabTimbre = (typeof STAB_TIMBRES)[number];
+type PadTimbre = (typeof PAD_TIMBRES)[number];
+interface CycleTimbre { readonly reese: ReeseTimbre; readonly stab: StabTimbre; readonly pad: PadTimbre }
+
+function cycleTimbre(previous: CycleTimbre | undefined, cycleSeed: Seed, m32: UnitInterval): CycleTimbre;
+```
+
+`cycleTimbre` は `hash(cycleSeed, TAG.timbre)`（`TAG.timbre = 22`）から、リース・スタブ・パッドの順に、パートごとに2つの float を引きます。
+
+| 乱数 | 使い方 |
+| --- | --- |
+| 1つ目 | 替えるかの判定。`previous` があり、`m32` 未満なら替える。最初のサイクルでは引いて捨てる |
+| 2つ目 | 音色。最初のサイクルは表全体から、替えるときは `previous` の音色を除いた残りから `floor(x × 候補の数)` 番目を選ぶ。替えないときは引いて捨てる |
+
+コンダクターは `CycleState` に `timbre: CycleTimbre` を持ち、`nextCycle` で `cycleTimbre(previous?.timbre, seed, m32)` とします（`m32` は主進行・移調と同じく、32bar の頭でラッチした値）。音色の名前の表を `structure` に置き、シンセの中身を `engine` に置くのは、生成側が Tone.js の設定を知らずに済むようにするためです。
+
+### 音色の表（`engine/patches.ts`）
+
+各表の先頭の音色（`classic`・`square`・`saw`）は、フェーズ2の音色をそのまま移したものです。`createVoices` に直書きしていた設定はなくし、シンセはすべてこの表から作ります。表と生成コードを二重に持つと、制約のテストが実際に鳴る音を検証しなくなるためです。
+
+```ts
+// Seconds は engine/ducking.ts のものを使う
+interface Envelope { attack: Seconds; decay: Seconds; sustain: UnitInterval; release: Seconds }
+
+// fat 系と FM 系を判別共用体にし、重ねる数と FM の比を同時に持てないようにする
+type FatOscillator<C extends number> = { type: 'fatsawtooth' | 'fatsquare' | 'fattriangle'; count: C; spread: number };
+type FmOscillator = { type: 'fmsine' | 'fmsawtooth'; harmonicity: number; modulationIndex: number };
+
+// リースは1音ずつなので5つまで、和音を鳴らすスタブとパッドは1音あたり3つまで重ねる（N-12）
+interface ReesePatch {
+  oscillator: FatOscillator<2 | 3 | 4 | 5> | FmOscillator;
+  envelope: Envelope;
+  filterQ: number;
+  filterEnvelope: Envelope & { baseFrequency: number; octaves: number };
+  gainDb: number;
+}
+interface ChordPatch {
+  oscillator: FatOscillator<2 | 3> | FmOscillator;
+  envelope: Envelope;
+  gainDb: number;
+}
+
+const REESE_PATCHES: Readonly<Record<ReeseTimbre, ReesePatch>>;
+const STAB_PATCHES: Readonly<Record<StabTimbre, ChordPatch>>;
+const PAD_PATCHES: Readonly<Record<PadTimbre, ChordPatch>>;
+```
+
+`Record<名前, 設定>` にするので、名前の表に音色を足して設定を書き忘れると型エラーになります。
+
+**リースベース**（`Tone.MonoSynth`、ローパスはシンセ内。後段のハイパス 120 Hz は共通）
+
+| 名前 | オシレーター | フィルター Q | フィルターのエンベロープ（A / D / S / R、基準、オクターブ） | アンプ（A / D / S / R） | 補正 | ねらい |
+| --- | --- | --- | --- | --- | --- | --- |
+| `classic` | fatsawtooth、3本、25 セント | 2 | 0.01 / 0.25 / 0.3 / 0.1、200 Hz、3 | 0.005 / 0.2 / 0.8 / 0.05 | 0 dB | フェーズ2の音。うなりのある標準的なリース |
+| `wide` | fatsawtooth、5本、40 セント | 1 | 0.02 / 0.4 / 0.5 / 0.1、300 Hz、2.5 | 0.005 / 0.3 / 0.9 / 0.05 | −3 dB | 本数とデチューンを増やした、広く滑らかなリース |
+| `hollow` | fatsquare、3本、20 セント | 4 | 0.01 / 0.2 / 0.2 / 0.1、250 Hz、2 | 0.005 / 0.15 / 0.8 / 0.05 | −2 dB | 矩形波の奇数倍音とレゾナンスで、鼻にかかったニューロ寄りの音 |
+| `growl` | fmsawtooth、比 1、変調指数 2 | 6 | 0.005 / 0.35 / 0.1 / 0.1、150 Hz、4 | 0.005 / 0.25 / 0.8 / 0.05 | −2 dB | FM の歪んだ倍音と、深いフィルターのエンベロープで唸る音 |
+
+**スタブ**（`Tone.PolySynth` の `Tone.Synth`、後段のローパス 3 kHz は共通）
+
+| 名前 | オシレーター | アンプ（A / D / S / R） | 補正 | ねらい |
+| --- | --- | --- | --- | --- |
+| `square` | fatsquare、2本、15 セント | 0.003 / 0.12 / 0.15 / 0.15 | 0 dB | フェーズ2の音 |
+| `pluck` | fatsawtooth、2本、10 セント | 0.002 / 0.08 / 0 / 0.1 | 0 dB | サステインのない、弾いたような短い音 |
+| `bell` | fmsine、比 3、変調指数 4 | 0.002 / 0.25 / 0.05 / 0.15 | −2 dB | FM の高い倍音で、鐘のように明るく抜ける音 |
+
+**パッド**（`Tone.PolySynth` の `Tone.Synth`、後段のローパス 1.5 kHz は共通）
+
+| 名前 | オシレーター | アンプ（A / D / S / R） | 補正 | ねらい |
+| --- | --- | --- | --- | --- |
+| `saw` | fatsawtooth、3本、30 セント | 0.4 / 0.6 / 0.7 / 1.2 | 0 dB | フェーズ2の音 |
+| `warm` | fattriangle、3本、20 セント | 0.5 / 0.8 / 0.8 / 1.2 | 0 dB | 倍音の少ない三角波で、丸く柔らかい音 |
+| `glass` | fmsine、比 2、変調指数 1.5 | 0.6 / 1.0 / 0.6 / 1.0 | −1 dB | FM の澄んだ倍音で、ガラスのように薄く光る音 |
+
+- **FM の比**: リースとパッドの比は1以上の整数にします。1未満や非整数にすると、側波帯が基音の下や倍音列の外に出て、音高が1オクターブ下に聞こえたり、和音が濁ったりするためです。リースの音高がサブベースの帯域に聞こえると、ハイパスで分けた意味がなくなります。スタブの `bell` も、和音の音程感を保つため整数の比にします
+- **音量の補正**: 補正は 0 dB 以下だけにし、パートの中で最も大きく聞こえる音色を 0 dB の基準とします。今のトリム（`SOURCE_TRIM_DB`）とリミッターの余裕は、フェーズ2の音色で測ったものです。補正をプラスにすると、クリップしない保証（N-10・N-13）が崩れるためです。フェーズ2の音色より小さく聞こえる音色は 0 dB に留めます。表の補正は波形の倍音の量と重ねる数からの見積もりで、試聴で確定します。補正はシンセ自身の `volume` にかけ、ミキサーのトリムとフェーダーには触れません
+- 音色の数（4・3・3）と中身は初期案です。数を変えても `Record` の型と選択の関数はそのまま使えます
+
+**制約の定数**: 次の定数を `patches.ts` に置き、全音色がこれを満たすことを単体テストで確かめます。
+
+| 制約 | 値 | 根拠 |
+| --- | --- | --- |
+| パッドのアタック | `GATE_REOPEN_SECONDS`（0.4 秒）以上 | 溜めの後、パッドのゲートは 0.4 秒かけて開く。アタックがそれより短いと、ドロップの頭の和音の立ち上がりがゲートのランプで鈍る。`engine/automation.ts` の `GATE_REOPEN_SECONDS` を export して参照する |
+| パッドのリリース | 1.2 秒以下 | 2bar ごとに鳴らし直す4音の和音が、前の和音のリリースと2つ重なる見積もりで、シンセ1台の `maxPolyphony`（12）を決めている |
+| スタブのリリース | 0.15 秒以下 | 2ステップ間隔のスタブが3〜4つ重なる見積もりで、シンセ1台の `maxPolyphony`（12）を決めている |
+| 重ねるオシレーターの数 | リース5本、スタブ・パッド3本まで | 型（`FatOscillator<C>`）で表す。FM 系は1音あたりオシレーター2つ |
+
+発音数の見積もりはシンセ1台ごとのものです。音色ごとにシンセを分けるので、サイクルをまたいで鳴る前の音色の余韻が、新しい音色のシンセの発音数を使うことはありません。
+
+### 切り替え（`engine/audio.ts`、`engine/transport.ts`）
+
+リース・スタブ・パッドは、音色ごとにシンセを1台ずつ持ちます（リース4台、スタブ3台、パッド3台）。同じパートのシンセは、どれもそのパートの入力（リースのハイパス、スタブとパッドのローパス）に並べてつなぎます。
+
+```ts
+interface Voices {
+  readonly sub: Tone.Synth;
+  readonly reese: Readonly<Record<ReeseTimbre, Tone.MonoSynth>>;
+  readonly stab: Readonly<Record<StabTimbre, Tone.PolySynth>>;
+  readonly pad: Readonly<Record<PadTimbre, Tone.PolySynth>>;
+  // インパクトはフェーズ3のまま
+}
+
+interface Instruments {
+  reese(timbre: ReeseTimbre, pitch: Pitch, time: number, seconds: number, velocity: Velocity): void;
+  chord<P extends 'stab' | 'pad'>(part: P, timbre: CycleTimbre[P], voicing: Voicing, time: number, seconds: number, velocity: Velocity): void;
+  // ほかはフェーズ3のまま
+}
+```
+
+トランスポートは、2bar のノートを予約するときに `ctx.timbre` の音色を渡します。切り替えは「次のノートをどのシンセに送るか」が変わるだけなので、音色を切り替えるための予約はありません。サイクルの最初の2bar のノートから新しい音色のシンセで鳴り、前のサイクルのノートは前の音色のシンセでリリースまで鳴りきります（F-72）。イントロのローパス・ダッキング・パッドのゲート・チャンネルはパートの入力より後ろにあるので、どの音色のシンセにも同じようにかかります（F-73）。
+
+**採らなかった方式**
+
+- **鳴っているシンセの設定を書き換える**（`set()`）: `Tone.PolySynth` の `set()` はリリース中の声にもかかるので、前のサイクルの余韻の音色が途中で変わる。オシレーターの種類を替えるとオシレーターが作り直され、クリックも出る
+- **シンセを2台持って交互に使う**: 切り替えのたびに、使っていない側を再生中に作り直すことになり、どちらを捨てるかの管理も要る。全音色を持っても合計10台なので、再生中にノードを作らず、送り先を選ぶだけで済む方を採る
+
+鳴っていないシンセはオシレーターを止めているので、処理の負荷はほとんど増えません。増えるのはノードの数とメモリだけです。
 
 ## シーンの境界のフィル（`generators/drums/fill.ts`）
 
@@ -277,9 +411,9 @@ function fxAutomation(events: readonly FxEvent[], pairStart: Seconds, stepSecond
 
 ```
 sub   ─▶ Distortion ─▶ LPF(100) ─▶ [イントロ LPF] ─▶ [ダッキング] ─▶ ch
-reese ─▶ HPF(120) ─▶ [イントロ LPF] ─▶ [ダッキング] ─▶ ch
-stab  ─▶ LPF(3k) ─▶ [イントロ LPF] ─▶ ch
-pad   ─▶ LPF(1.5k) ─▶ [イントロ LPF] ─▶ [パッドのゲート] ─▶ [ダッキング] ─▶ ch
+reese（音色ごとに1台。classic, wide, hollow, growl）─▶ HPF(120) ─▶ [イントロ LPF] ─▶ [ダッキング] ─▶ ch
+stab（音色ごとに1台。square, pluck, bell）─▶ LPF(3k) ─▶ [イントロ LPF] ─▶ ch
+pad（音色ごとに1台。saw, warm, glass）─▶ LPF(1.5k) ─▶ [イントロ LPF] ─▶ [パッドのゲート] ─▶ [ダッキング] ─▶ ch
 riser: Noise(white) ─▶ BPF ─▶ Gain ─▶ fx ch
 impact: MembraneSynth + NoiseSynth ─▶ HPF(80) ─▶ fx ch
 snare のトリム ─▶ [スロー用 Gain] ─▶ リバーブ
@@ -307,6 +441,7 @@ snare のトリム ─▶ [スロー用 Gain] ─▶ リバーブ
 
 - オートメーションの全ターゲットで予約を取り消し、初期値（ライザー 0、ハイパス 20 Hz、ローパス 18 kHz、スロー 0、パッドのゲート 1）に戻す
 - インパクトのシンセは `open()` でボイスと一緒に作り直す
+- `silence()` はリース・スタブ・パッドの全音色のシンセを解放し、`open()` は全音色のシンセを作り直す。前の再生で鳴っていた音色のシンセにも、予約済みのノードが残っているため
 
 ### 定数の既定値（ミキサー）
 
@@ -334,6 +469,7 @@ snare のトリム ─▶ [スロー用 Gain] ─▶ リバーブ
 - FX の種類ごとの出現数
 - シーンで鳴らさないパートの鳴る側のイベント数（0になるはず）
 - 移調の回数と、初期キーから五度圏で何歩離れたキーか（−5〜+6。負は下属調の向き）ごとの小節数
+- パートごとの、音色ごとのサイクル数と、音色が替わった回数
 
 音度やコードトーンの判定（サブベースの音度の分布、コード外の音の数、反復率）は、セッションのキーではなく `ctx.key` で数えます。
 
@@ -353,6 +489,8 @@ snare のトリム ─▶ [スロー用 Gain] ─▶ リバーブ
 | 移調 | `ctx.key` が変わるのはサイクルの頭だけ。最初のサイクルは初期キー。変わるときは前のキーとの差（半音、mod 12）が 5 か 7。`m32 = 0` で変わらない。8192bar・複数シードで、差 5 と 7 の移調がどちらも現れ、初期キーとの差が 0・5・7 以外のキーが現れる |
 | 音階 | 音程のある全パートの音が `ctx.key` のナチュラルマイナーに含まれる（フェーズ1・2の音階のテストを `ctx.key` で数えるように改める） |
 | 初期キーと移調 | 同じシードで初期キーだけを変えた2回の生成で、全サイクルの `ctx.key − initialKey` が一致する（フェーズ1・2の移調のテストがそのまま通る） |
+| 音色の選択 | `ctx.timbre` の各パートが変わるのはサイクルの頭だけで、変わるときは前と異なる。`m32 = 0` で変わらない。8192bar・複数シードで各表の全音色が現れる。初期キーだけを変えた2回の生成で `ctx.timbre` が一致する |
+| 音色の制約 | `PAD_PATCHES` の全音色のアタックが `GATE_REOPEN_SECONDS` 以上でリリースが 1.2 秒以下、`STAB_PATCHES` の全音色のリリースが 0.15 秒以下、全音色の補正が 0 dB 以下、リースとパッドの FM の比が1以上の整数 |
 | ドロップ間の主題 | 同じサイクルのドロップの32bar の A 系で、進行と、大きなフィル区間より前のリース・スタブ・パッドのイベント列が一致 |
 | B の型 | 転換の8bar の型がサイクルの A の型と異なる |
 | 基準パターン | 基準が変わる2bar が、サイクルの頭か、ドロップ1の最初を除くドロップの32bar の頭 |
