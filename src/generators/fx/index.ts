@@ -51,10 +51,13 @@ export interface ReverbThrow {
   readonly step: Step;
 }
 
-/** Opens both sweep filters again as the drop lands. */
+/**
+ * Opens both sweep filters again at the end of the 2 bars, as the drop lands. It belongs to the build rather than
+ * to the drop so that it is timed from the same start as the high-pass ramp ending there: the next 2 bars start at
+ * a time of their own, which can fall a hair before the ramp's end and leave the high-pass closed through the drop.
+ */
 export interface FilterReset {
   readonly fx: 'filterReset';
-  readonly step: Step;
 }
 
 /**
@@ -86,7 +89,9 @@ export function fxEvents(ctx: Context, heard: readonly NoteEvent[]): readonly Fx
     const total = (role.sections - 1) * PAIRS_PER_SECTION * STEPS_PER_PAIR;
     events.push({ fx: 'sweep', filter: 'lowpass', span: spanOf(offset, total, STEPS_PER_PAIR) });
   }
-  if (opensDrop(ctx)) events.push({ fx: 'impact', step: 0 as Step }, { fx: 'filterReset', step: 0 as Step });
+  // After the build's sweep, so that playback schedules the reset after a ramp ending at the same instant.
+  if (leadsIntoDrop(ctx)) events.push({ fx: 'filterReset' });
+  if (opensDrop(ctx)) events.push({ fx: 'impact', step: 0 as Step });
   const leadIn = dropLeadIn(ctx);
   if (leadIn !== null && hasGap(leadIn)) {
     events.push({ fx: 'gap', from: GAP_START as Step, pad: silencesGap(leadIn) ? 'cut' : 'held' });

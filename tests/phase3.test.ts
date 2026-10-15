@@ -180,14 +180,14 @@ describe('phase 3 acceptance: effects', () => {
   const ofKind = <K extends FxEvent['fx']>(pair: GeneratedPair, kind: K) =>
     pair.fx.filter((event): event is Extract<FxEvent, { fx: K }> => event.fx === kind);
 
-  it('lands an impact and opens the filters on step 0 of every drop that follows a build, and nowhere else', () => {
+  it('lands an impact on step 0 of every drop that follows a build, and opens the filters as the build ends, and nowhere else', () => {
     for (const { pairs } of runs) {
       for (const pair of pairs) {
         const { ctx } = pair;
         const follows =
           ctx.sceneRole.scene === 'drop' && ctx.sceneRole.phrase === 0 && ctx.sectionRole.isPhraseStart && ctx.pairIn8 === 0;
         expect(ofKind(pair, 'impact')).toEqual(follows ? [{ fx: 'impact', step: 0 }] : []);
-        expect(ofKind(pair, 'filterReset')).toEqual(follows ? [{ fx: 'filterReset', step: 0 }] : []);
+        expect(ofKind(pair, 'filterReset')).toEqual(leadsIntoDrop(ctx) ? [{ fx: 'filterReset' }] : []);
       }
     }
   });

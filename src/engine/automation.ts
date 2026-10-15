@@ -81,8 +81,8 @@ export function fxAutomation(events: readonly FxEvent[], pairStart: Seconds, ste
           : along('lowpass', event.span, lowpassFrequency, 'exponential');
       case 'filterReset':
         return [
-          { target: 'highpass', time: at(event.step), value: HIGHPASS.openHz, ramp: 'set' },
-          { target: 'lowpass', time: at(event.step), value: LOWPASS.openHz, ramp: 'set' },
+          { target: 'highpass', time: at(STEPS_PER_PAIR), value: HIGHPASS.openHz, ramp: 'set' },
+          { target: 'lowpass', time: at(STEPS_PER_PAIR), value: LOWPASS.openHz, ramp: 'set' },
         ];
       case 'throw': {
         const hit = at(event.step);

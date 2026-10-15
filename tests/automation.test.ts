@@ -49,16 +49,26 @@ describe('fx automation', () => {
     expect(builds).toBeGreaterThan(5);
   });
 
-  it('closes the high-pass through each build and opens both filters as the drop lands', () => {
+  it('closes the high-pass through each build and opens both filters after it as the drop lands', () => {
+    let builds = 0;
     for (const { pair, points } of automate(7, 2048)) {
-      const highpass = of(points, 'highpass');
-      if (leadsIntoDrop(pair.ctx)) expect(highpass.at(-1)!.value).toBeCloseTo(HIGHPASS.closedHz);
-      if (pair.fx.some((event) => event.fx === 'filterReset')) {
-        expect(highpass).toEqual([{ target: 'highpass', time: pair.ctx.pair * 32 * STEP, value: HIGHPASS.openHz, ramp: 'set' }]);
-        expect(of(points, 'lowpass')).toEqual([
-          { target: 'lowpass', time: pair.ctx.pair * 32 * STEP, value: LOWPASS.openHz, ramp: 'set' },
-        ]);
-      }
+      if (!leadsIntoDrop(pair.ctx)) continue;
+      builds++;
+      const end = pair.ctx.pair * 32 * STEP + 32 * STEP;
+      const [, closing, reset] = of(points, 'highpass');
+      expect(closing!.value).toBeCloseTo(HIGHPASS.closedHz);
+      expect(closing!.time).toBeLessThanOrEqual(end);
+      expect(reset).toEqual({ target: 'highpass', time: end, value: HIGHPASS.openHz, ramp: 'set' });
+      // Scheduled in this order, a reset on the very instant the ramp ends still wins.
+      expect(points.indexOf(reset!)).toBeGreaterThan(points.indexOf(closing!));
+      expect(of(points, 'lowpass')).toEqual([{ target: 'lowpass', time: end, value: LOWPASS.openHz, ramp: 'set' }]);
+    }
+    expect(builds).toBeGreaterThan(5);
+  });
+
+  it('leaves the high-pass alone in the drop, whose start can fall a hair before the end of the build\'s ramp', () => {
+    for (const { pair, points } of automate(7, 2048)) {
+      if (pair.ctx.sceneRole.scene !== 'build') expect(of(points, 'highpass')).toEqual([]);
     }
   });
 
