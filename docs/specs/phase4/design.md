@@ -53,7 +53,7 @@ tools/simulate ──▶ generators/ensemble
 | `ChordTone` | `'root' \| 'third' \| 'fifth' \| 'seventh'` | ベースが選ぶ構成音 |
 | `MainProgression`・`TransitionProgression` | 骨組みと色付けしたコードの組（下記） | 色付けしたコードは、骨組みの同じ位置のコードか、その借用和音 |
 | `PlaybackSession` | 再生中と一時停止中の判別共用体（下記） | 停止中のセッションは存在しない |
-| `ResumePoint` | `{ pairs, step }` | `pairs` は空でない。`step` は 0〜31 |
+| `ResumePoint` | `{ pending, step }` | `pending` が空なら `step` は 0。`step` は 0〜31 |
 | `SoloableId` | `Exclude<ChannelId, 'reverbReturn'>` | リバーブのリターンにソロを持たせない |
 
 ## 和声（`structure/harmony.ts`）
@@ -217,6 +217,8 @@ function chordRoot(): ChordTone;   // 'root'
 
 構成音のピッチクラスを、テンションがなければ ルート・3度・5度・7度、あれば ルート・3度・7度・テンション にして、フェーズ3の `closeVoicings` と声部連結の選び方にそのまま渡します。
 
+テンションのあるコードは、基本形で最大17半音に広がるので、音域（F3〜E5）に基本形が収まらないことがあります（全キー・全コード・全テンションの264組のうち45組）。セクションの最初のコードは基本形を優先し、収まらないときだけほかの転回形から選びます。どの組でも少なくとも1つの転回形は収まります。テンションのないコードは常に基本形が収まるので、フェーズ3のボイシングは変わりません。
+
 転回形はこの4音の巡回で作ります。そのため、隣り合う声部は (ルート, 3度)・(3度, 7度)・(7度, テンション)・(テンション, ルート) のいずれかです。表のどのコードとテンションの組でも、これらの上行の間隔は短2度になりません（最小は短3度、最大は長7度）。単体テストで全組を確かめます。
 
 `closeVoicings` に「短2度を含む候補を除く」条件は加えません。テンションのない maj7 の転回形では、7度とルートが短2度で隣り合います。条件を加えると、フェーズ3のパッドのボイシングまで変わってしまうためです。
@@ -255,12 +257,13 @@ interface ScheduledPair {
   readonly start: Seconds;
   readonly pair: EnsemblePair;
 }
-interface ResumePoint {
-  /** 再開する2bar と、その後に生成済みの2bar。先頭から順に鳴らす */
-  readonly pairs: readonly [EnsemblePair, ...EnsemblePair[]];
-  readonly step: Step;
-}
+// 再開する2bar と、その後に生成済みの2bar。先頭から順に鳴らす。空なら次に生成する2bar の頭から
+type ResumePoint =
+  | { readonly pending: readonly []; readonly step: Step & 0 }
+  | { readonly pending: readonly [EnsemblePair, ...EnsemblePair[]]; readonly step: Step };
 function locate(scheduled: readonly ScheduledPair[], cutTime: Seconds, stepSeconds: number): ResumePoint;
+// 保留の2bar を先に、使い切ったら generate で生成した2bar を返す
+function pairSource(pending: readonly EnsemblePair[], generate: () => EnsemblePair): () => EnsemblePair;
 ```
 
 トランスポートは、予約した2bar を `ScheduledPair` の列に足します。鳴り終わってから1つ分の2bar より古いものは捨てます。列が際限なく伸びないようにするためです（N-04）。
@@ -270,18 +273,21 @@ function locate(scheduled: readonly ScheduledPair[], cutTime: Seconds, stepSecon
 - `cutTime` を含む2bar で、`step = ceil((cutTime − start) / stepSeconds)` を求める
 - `step` が32なら、次の2bar のステップ0にする
 - `cutTime` が最初の2bar の開始より前なら（再生してすぐに一時停止したとき）、最初の2bar のステップ0にする
-- 返す `pairs` は、その2bar と、列でそれより後ろにある生成済みの2bar
+- 返す `pending` は、その2bar と、列でそれより後ろにある生成済みの2bar
+- 予約済みの2bar がすべて鳴り終わっていれば、`pending` は空（次に生成する2bar の頭から）
 
 `cutTime` には `Tone.immediate()`（先読みを含まない今の時刻）を使います。出力の遅延（数十 ms）は考えません。1ステップ（174 BPM で約 86 ms）より短く、ずれても高々1ステップのためです。
 
 ### 再開の流れ（`engine/transport.ts`）
 
-開始と再開を同じ関数 `run(source, from: ResumePoint)` で扱います。開始は「生成済みの2bar がなく、ステップ0から」の再開です。
+開始と再開を同じ関数 `play(settings, generate, from: ResumePoint)` で扱います。開始は「生成済みの2bar がなく、ステップ0から」の再開です。
 
 1. `time = Tone.now()` を再開の時刻とする
-2. `instruments.open(time, fxStateAt(first.fx, step))` で、新しいシンセとリバーブを用意し、再開位置の値からオートメーションを始める
+2. `instruments.open(time, { events: first.fx, step, stepSeconds })` で、新しいシンセ・サンプラー・リバーブを用意し、再開位置の値からオートメーションを始める
 3. 最初の2bar を、仮想の開始時刻 `time − step × stepSeconds` で予約する。イベントは `eventsFrom(first.events, step)`、FX は `fxAutomation(first.fx, 仮想の開始時刻, stepSeconds, step)`、ダッキングは `eventsFrom` の後のキック、描画の呼び出しはステップ `step` 以降
-4. Transport を `time` から始め、`(32 − step) × stepSeconds` 後から2bar ごとに繰り返す。繰り返しのたびに、`from.pairs` の残りを先頭から使い、使い切ったら `ensemble.next()` で生成する
+4. Transport を `time` から始め、`(32 − step) × stepSeconds` 後から2bar ごとに繰り返す。繰り返しのたびに `pairSource(from.pending, generate)` から次の2bar を取る
+
+再開するセッションの `generate` には、一時停止したセッションの取り出し元（`pairSource`）をそのまま渡します。前の一時停止で保留したまま、まだ予約していない2bar が残っていることがあるためです。
 
 一時停止は次のように行います。
 
@@ -311,9 +317,9 @@ function eventsFrom(events: readonly NoteEvent[], from: Step): readonly NoteEven
 ### 再開位置の値（`engine/automation.ts`）
 
 ```ts
-type FxState = Readonly<Record<AutomationTarget, number>>;
-function fxStateAt(events: readonly FxEvent[], step: Step): FxState;
-function fxAutomation(events, pairStart, stepSeconds, from: Step = 0): readonly AutomationPoint[];
+type AutomationValues = Readonly<Record<AutomationTarget, number>>;
+function fxStateAt(events: readonly FxEvent[], step: Step, stepSeconds: number, fx: FxTuning): AutomationValues;
+function fxAutomation(events, pairStart, stepSeconds, fx: FxTuning, from: Step = 0): readonly AutomationPoint[];
 ```
 
 `fxStateAt` は、その2bar の FX のイベントだけから、一時停止しなかった場合にステップ `step` の時刻で各パラメーターが取る値を返します。前の2bar の点列を参照しなくても済むのは、続いている効果（ライザー、スイープ）が、どの2bar にも開始と終了の進み具合を持つ区間のイベントとして出ているためです（フェーズ3の F-65）。
@@ -323,11 +329,13 @@ function fxAutomation(events, pairStart, stepSeconds, from: Step = 0): readonly 
 | ライザーの音量 | 区間内（`step < to`）なら、区間の両端の値 `riserGain(startProgress)` と `riserGain(endProgress)` を `step / to` で直線補間する。Web Audio の直線のランプと同じ形にするため、進み具合から `riserGain` を直接は求めない。区間の後で `endProgress = 1` なら 0 |
 | ライザーの周波数、ハイパス、ローパス | 区間内なら、両端の周波数を `step / to` で対数補間する（指数のランプと同じ形）。区間の後は終わりの値 |
 | ハイパス側の割合 | ハイパスのスイープの区間がある2bar では 1、ない2bar では 0 |
-| リバーブスローの送り量 | ステップ `step` にスローがあれば 1、なければ 0 |
-| パッドのゲート | `cut` の溜めで `step ≥ from` なら 0、それ以外は 1 |
+| リバーブスローの送り量 | スローの打音の 5 ms 前から 120 ms 後までにステップ `step` の頭があれば送り量、なければ 0。開いている時間が1ステップより長いので、1ステップの秒数を受け取る |
+| パッドのゲート | `cut` の溜めで `step > from` なら 0、それ以外は 1（`step = from` では、閉じ始める前の 1） |
 | ほか | `restingValue(sound.fx)`（フェーズ3の `RESTING_VALUE`。設定ファイルの周波数の範囲から求める） |
 
 `fxAutomation` に `from` を加えます。`from > 0` のときは、効果の始まりの点を作らず、時刻が `at(from)` より前の点を除きます。残るランプは、`open` が再開の時刻に `set` した値から、一時停止しなかった場合と同じ終点に向かうので、曲線も一致します。
+
+**溜めの直後のパッドのゲート**: 止めずに鳴らすと、溜めの後のドロップの頭では、ゲートが 0.4 秒かけて開きます。この0.4秒の間で再開した場合は、ゲートを開いた状態から始めます。ゆっくり開くのは、溜めで切ったパッドの余韻がドロップの頭で聞こえ直さないようにするためで、再開した時点ではその余韻がないためです。
 
 **ハイパスの受け渡し**: ビルドの途中で再開するときは、ハイパス側の割合を 5 ms のランプを使わずに再開の時刻で 1 に `set` します。ゲートが開く前でまだ何も鳴っていないので、受け渡しのランプ（フェーズ3）が防いでいた低域の衝撃は起きないためです。
 
@@ -336,7 +344,7 @@ function fxAutomation(events, pairStart, stepSeconds, from: Step = 0): readonly 
 | メソッド | 変更 |
 | --- | --- |
 | `silence(time: Seconds)` | 時刻を引数で受け取る。停止はこれまでどおり `Tone.now()`、一時停止は `Tone.immediate()` を渡す。ゲートを 10 ms で閉じる（N-17）のはフェーズ3のまま |
-| `open(time, state: FxState = restingValue(sound.fx))` | `rest(time)` の後に、`state` の値を同じ時刻に `set` する。同時刻の値は後に予約したものが効く。ゲートは一気に開けず、10 ms のランプで開く。ビルドの途中で再開すると、ライザーのノイズが途中の音量で鳴っていて、無音から一気に立ち上がるとクリックになるため（N-17） |
+| `open(time, resumed?: { events, step, stepSeconds })` | `rest(time)` の後に、`resumed` があれば `fxStateAt` の値を同じ時刻に `set` する。同時刻の値は後に予約したものが効く。ゲートは一気に開けず、10 ms のランプで開く。ビルドの途中で再開すると、ライザーのノイズが途中の音量で鳴っていて、無音から一気に立ち上がるとクリックになるため（N-17） |
 | `open` で作り直すもの | フェーズ3のシンセ・インパクト・リバーブに加えて、ドラムのサンプラーも、読み込み済みのバッファから作り直す（読み込み直さない） |
 
 **サンプラーを作り直す理由**: 一時停止→再開は、停止→再生と違い、同じ2bar の残り（174 BPM で最大約 2.7 秒）のうちに押されるのが普通です。`Tone.Sampler.releaseAll` は、まだ始まっていない予約済みの打音を、Tone.js の内部のタイマー（`context.setTimeout`）から止めます。そのため、止まるかどうかはタイマーが予約の時刻より前に動くかどうかに左右されます。止まらないと、一時停止の前に予約した打音がゲートを開いた後に鳴り、再開後の打音と二重になります。シンセと同じく、作り直して古い予約ごと捨てれば、タイマーの都合によらず確実に消せます。
@@ -478,10 +486,10 @@ const DEFAULT_CONFIG: Config;
 | 値 | 渡し先 | 渡し方 |
 | --- | --- | --- |
 | `params`・`mixer`・`ducking` | パラメーターのストアの初期値 | `initialParams(config, seed)` が `Params` を作る |
-| `generation` | アンサンブル | `SessionSettings` に `tuning` を加え、コンダクターが `Context` の `tuning` に入れる。生成器は `ctx.tuning` を読み、`sceneEnergy`・`cycleModulation`・`colorMain`・`drawLayout`・`fill` などの関数は引数で受け取る |
+| `generation` | アンサンブル | `SessionSettings` に `tuning` を加える。コンダクターは構造の数値（`harmony`・`energy`・`layout`）を、各生成器はパートの数値（`fill`・`lines`）を、作るときに受け取る。`sceneEnergy`・`cycleModulation`・`colorMain`・`drawLayout`・`fill` などの関数は引数で受け取る |
 | `sound` | エンジン | `loadInstruments(url, mixer, sound)`。`fxAutomation` と `fxStateAt` は `sound.fx` を引数で受け取り、`RESTING_VALUE` は `restingValue(sound.fx)` にする |
 
-生成の数値を `Context` に入れるのは、生成器がすでに `Context` だけを読む形になっていて、引数を増やさずに済むためです。値はセッションの間は変わらないので、ラッチは要りません。`sound` はアンサンブルに渡しません。音の数値を変えても展開は変わりません（N-11 と同じ考え方）。
+生成の数値を `Context` に入れず、作るときに渡すのは、`Context` を定義する `structure` が、パートの数値の型（`Velocity` など、`generators` の型）に依存せずに済むようにするためです。構造の数値の型は `structure/tuning.ts` に、パートの数値の型と両者をまとめた `GenerationTuning` は `generators/tuning.ts` に置きます。値はセッションの間は変わらないので、ラッチは要りません。`sound` はアンサンブルに渡しません。音の数値を変えても展開は変わりません（N-11 と同じ考え方）。
 
 ### キーと検証
 
@@ -496,7 +504,9 @@ const DEFAULT_CONFIG: Config;
 | `initialKey` | キーの名前（`parseKey` が読める文字列。`F`、`F#`、`B♭` など） | `"F"` |
 | `seed` | 0〜4294967295 の整数 | なし（乱数） |
 
-**`mixer`**: チャンネルの名前（`kick` … `fx`、`reverbReturn`）ごとに `level`（−40〜6。整数に丸める）、`pan`（−1〜1。0.01 刻みに丸める）、`send`（0〜1）、`muted`、`soloed`（真偽値）。パンとセンドのないチャンネル（キック・サブベース）にそのキーを書いたとき、`reverbReturn` に `soloed` を書いたときは、知らないキーとして無視します。`ducking` は `depth`（0〜1）と `release`（30〜300 の整数 ms）です。
+**`mixer`**: チャンネルの名前（`kick` … `fx`、`reverbReturn`）ごとに `level`（−40〜6。整数に丸める）、`pan`（−1〜1。0.01 刻みに丸める）、`send`（0〜1）、`muted`、`soloed`（真偽値）。パンとセンドのないチャンネル（キック・サブベース）にそのキーを書いたとき、`reverbReturn` に `soloed` を書いたときは、知らないキーとして無視します。
+
+**`ducking`**: `depth`（0〜1）と `release`（30〜300 の整数 ms）です。`Config` の形とそろえて、`mixer` の中ではなくトップレベルに置きます。
 
 **`generation`**
 
@@ -583,6 +593,7 @@ async function loadConfig(url: string): Promise<Decoded<Config>>;
 - コード外の音の数（`outOfChord`）は、色付けしたコードの構成音とテンションで数える。0 になるはず
 - 借用和音のない2bar で、ナチュラルマイナーの外の音の数（0 になるはず）
 - サブベースの音度の分布に「音階外」を加える（借用和音の構成音）
+- 2bar の反復率は、ベースを構成音の番号で、スタブとパッドを位置と長さだけで比べる（F-40 の改訂と同じ理由）
 
 ## 受け入れ基準とテストの対応
 
