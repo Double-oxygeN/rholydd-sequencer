@@ -57,17 +57,63 @@ h1 {
   letter-spacing: 0.04em;
 }
 
-.menu > summary {
-  width: fit-content;
-  padding: 4px 0;
-  font-weight: 600;
-  color: var(--muted);
-  cursor: pointer;
+.menu-toggle {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  /* Above the menu, so that the same spot that opened it closes it. */
+  z-index: 20;
+  background: var(--panel);
 }
 
-.menu[open] > summary {
-  margin-bottom: 8px;
-  color: var(--fg);
+.offcanvas {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
+  width: min(640px, 100vw);
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 12px;
+  padding: 16px 16px 24px;
+  background: var(--bg);
+  border-left: 1px solid var(--line);
+  box-shadow: -8px 0 24px rgb(0 0 0 / 0.25);
+  transform: translateX(100%);
+  visibility: hidden;
+  transition:
+    transform 0.2s ease,
+    visibility 0s linear 0.2s;
+}
+
+.offcanvas.open {
+  transform: none;
+  visibility: visible;
+  transition: transform 0.2s ease;
+}
+
+/* Where the screen has room beside the menu, the page moves aside instead of hiding under it. */
+@media (min-width: 1100px) {
+  body.menu-open #app {
+    margin-right: min(640px, 100vw);
+  }
+}
+
+.menu-tabs {
+  display: flex;
+  gap: 4px;
+  /* Leaves the corner to the close button. */
+  padding-right: 54px;
+}
+
+.menu-body {
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.menu-body > [hidden] {
+  display: none;
 }
 
 .panel {
@@ -99,6 +145,8 @@ h1 {
 
 .row input[type='range'] {
   flex: 1;
+  /* Browsers give ranges a minimum width that would push the values out of narrow columns. */
+  min-width: 0;
   accent-color: var(--accent);
 }
 
@@ -265,6 +313,7 @@ button:disabled {
   gap: 4px;
 }
 
+.menu-tabs button[aria-selected='true'],
 .view-tabs button[aria-selected='true'] {
   background: var(--fg);
   border-color: var(--fg);
@@ -363,8 +412,8 @@ button:disabled {
 
 .mixer-table {
   display: grid;
-  grid-template-columns: 7em repeat(3, minmax(0, 1fr)) auto auto;
-  gap: 6px 12px;
+  grid-template-columns: 6em repeat(3, minmax(0, 1fr)) auto auto;
+  gap: 6px 10px;
   align-items: center;
 }
 
@@ -379,8 +428,13 @@ button:disabled {
 }
 
 .mixer .row output {
+  width: 3.4em;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.mixer-ducking .row output {
   width: 4.5em;
-  font-size: 0.85rem;
 }
 
 .mixer-ducking {
