@@ -1,4 +1,4 @@
-import { pitchClassOf, type Key, type ScaleDegree } from '../../structure/key.ts';
+import type { PitchClass } from '../../structure/key.ts';
 import { foldPitch, octaveUp } from '../pitch.ts';
 import type { Pitch } from '../types.ts';
 
@@ -6,7 +6,7 @@ import type { Pitch } from '../types.ts';
 export const LOWEST_PITCH = 29 as Pitch;
 export const HIGHEST_PITCH = (LOWEST_PITCH + 23) as Pitch;
 
-export function subPitch(key: Key, degree: ScaleDegree, jump: boolean): Pitch {
-  const pitch = foldPitch(LOWEST_PITCH, pitchClassOf(key, degree));
+export function subPitch(pitchClass: PitchClass, jump: boolean): Pitch {
+  const pitch = foldPitch(LOWEST_PITCH, pitchClass);
   return jump ? octaveUp(pitch) : pitch;
 }

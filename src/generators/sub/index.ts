@@ -1,6 +1,8 @@
 import { TAG, createRng } from '../../random/rng.ts';
 import { ALL_STEPS, type ContextWithDrums, type Generator, type SubNote } from '../types.ts';
-import { chordRoot, chordTone, legato, motifSeed, playableEnd, styleOf, stylePlan } from '../line.ts';
+import { chordOf } from '../../structure/conductor.ts';
+import { chordToneClass } from '../../structure/harmony.ts';
+import { chordTone, legato, motifSeed, playableEnd, styleOf, stylePlan } from '../line.ts';
 import type { LineTuning } from '../tuning.ts';
 import { subPitch } from './pitch.ts';
 import { SUB_STYLES, attackChance, type SubStyle } from './styles.ts';
@@ -35,12 +37,12 @@ export function subLine(ctx: ContextWithDrums, tuning: LineTuning): SubLine {
   const notes = legato(starts, end).map(({ step, length }, i): SubNote => {
     const first = i === 0;
     const rolls = pitchRolls[step]!;
-    const degree = first ? chordRoot(ctx) : chordTone(ctx, rolls.degree, tuning.subToneWeights);
+    const tone = first ? 'root' : chordTone(rolls.degree, tuning.subToneWeights);
     return {
       instrument: 'sub',
       step,
       length,
-      pitch: subPitch(ctx.key, degree, !first && rolls.octave < tuning.subOctaveJumpChance),
+      pitch: subPitch(chordToneClass(ctx.key, chordOf(ctx), tone), !first && rolls.octave < tuning.subOctaveJumpChance),
       velocity: tuning.velocity.sub,
     };
   });

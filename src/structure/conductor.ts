@@ -15,7 +15,7 @@ import {
   cycleMainProgression,
   cycleModulation,
   phraseTransitionProgression,
-  type Chord,
+  type ColoredChord,
   type MainProgression,
   type TransitionProgression,
 } from './harmony.ts';
@@ -108,8 +108,8 @@ export type Context = PairRole &
 };
 
 /** Chord of the 2 bars. Derived rather than stored so that it can never disagree with the progression. */
-export function chordOf(ctx: PairRole & SectionHarmony): Chord {
-  return ctx.progression[ctx.pairIn8];
+export function chordOf(ctx: PairRole & SectionHarmony): ColoredChord {
+  return ctx.progression.chords[ctx.pairIn8];
 }
 
 function sectionHarmony(role: SectionRole, main: MainProgression, transition: TransitionProgression): SectionHarmony {
@@ -160,7 +160,7 @@ export function createConductor({ seed: master, initialKey, tuning }: ConductorS
       const phraseStarts = role.isSectionStart && inPhrase.isPhraseStart;
       if (phraseStarts || phraseParams === undefined || transition === undefined) {
         phraseParams = { m32: live.m32 };
-        transition = phraseTransitionProgression(phraseSeed);
+        transition = phraseTransitionProgression(phraseSeed, tuning.harmony);
       }
       // Cycles always start on a 32-bar boundary, after m32 has been latched for the phrase.
       if (cycle === undefined || section === cycle.firstSection + cycleSections(cycle.layout)) {
@@ -219,7 +219,7 @@ function nextCycle(
     layout,
     scenes: cycleScenes(layout),
     firstSection,
-    main: cycleMainProgression(previous?.main, seed, m32),
+    main: cycleMainProgression(previous?.main, seed, m32, tuning.harmony),
     fifths: previous === undefined ? AT_INITIAL_KEY : cycleModulation(previous.fifths, seed, m32, tuning.harmony.modulationShare),
     timbre: cycleTimbre(previous?.timbre, seed, m32),
   };

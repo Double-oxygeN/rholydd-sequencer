@@ -1,7 +1,6 @@
 import { REL, createRng, hash, weightedIndex, type Seed } from '../random/rng.ts';
-import { chordOf, type Seeds } from '../structure/conductor.ts';
-import { CHORD_TONES, CHORD_TONE_STEPS, rootDegree } from '../structure/harmony.ts';
-import { shiftDegree, type ScaleDegree } from '../structure/key.ts';
+import type { Seeds } from '../structure/conductor.ts';
+import { CHORD_TONES, type ChordTone } from '../structure/harmony.ts';
 import type { ToneWeights } from './tuning.ts';
 import { STEPS_PER_PAIR, type ContextWithDrums, type Step, type StepLength } from './types.ts';
 
@@ -50,13 +49,8 @@ export function playableEnd(ctx: ContextWithDrums): number {
 }
 
 /** A chord tone of the 2 bars, picked from a roll drawn beforehand. */
-export function chordTone(ctx: ContextWithDrums, roll: number, weights: ToneWeights): ScaleDegree {
-  const steps = CHORD_TONE_STEPS[weightedIndex(roll, CHORD_TONES.map((tone) => weights[tone])) ?? 0] ?? 0;
-  return shiftDegree(rootDegree(chordOf(ctx)), steps);
-}
-
-export function chordRoot(ctx: ContextWithDrums): ScaleDegree {
-  return rootDegree(chordOf(ctx));
+export function chordTone(roll: number, weights: ToneWeights): ChordTone {
+  return CHORD_TONES[weightedIndex(roll, CHORD_TONES.map((tone) => weights[tone])) ?? 0] ?? 'root';
 }
 
 /** Each note holds until the next one starts, the last one until the end. */

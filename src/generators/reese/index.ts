@@ -1,6 +1,7 @@
 import { TAG, createRng } from '../../random/rng.ts';
-import { pitchClassOf } from '../../structure/key.ts';
-import { chordRoot, chordTone, legato, motifSeed, playableEnd, styleOf, stylePlan } from '../line.ts';
+import { chordOf } from '../../structure/conductor.ts';
+import { chordToneClass } from '../../structure/harmony.ts';
+import { chordTone, legato, motifSeed, playableEnd, styleOf, stylePlan } from '../line.ts';
 import { foldPitch } from '../pitch.ts';
 import type { LineTuning } from '../tuning.ts';
 import { ALL_STEPS, type ContextWithDrums, type Generator, type Pitch, type ReeseNote } from '../types.ts';
@@ -32,12 +33,12 @@ export function reeseLine(ctx: ContextWithDrums, tuning: LineTuning): ReeseLine 
   const end = playableEnd(ctx);
   const starts = ALL_STEPS.filter((step) => step < end && (attackRolls[step] ?? 1) < reeseChance(style, step, ctx.energy));
   const notes = legato(starts, end).map(({ step, length }, i): ReeseNote => {
-    const degree = i === 0 ? chordRoot(ctx) : chordTone(ctx, pitchRolls[step] ?? 0, tuning.reeseToneWeights);
+    const tone = i === 0 ? 'root' : chordTone(pitchRolls[step] ?? 0, tuning.reeseToneWeights);
     return {
       instrument: 'reese',
       step,
       length,
-      pitch: foldPitch(REESE_LOWEST, pitchClassOf(ctx.key, degree)),
+      pitch: foldPitch(REESE_LOWEST, chordToneClass(ctx.key, chordOf(ctx), tone)),
       velocity: tuning.velocity.reese,
     };
   });

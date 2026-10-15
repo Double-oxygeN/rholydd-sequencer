@@ -10,8 +10,8 @@ import type { ContextWithDrums, DrumHit, NoteEvent, PadChord, PitchedEvent } fro
 import { DEFAULT_LIVE_PARAMS } from '../src/params/store.ts';
 import { toSeed } from '../src/random/rng.ts';
 import { chordOf, type LiveParams } from '../src/structure/conductor.ts';
-import { rootDegree } from '../src/structure/harmony.ts';
-import { DEFAULT_KEY, degreeOf, type Key } from '../src/structure/key.ts';
+import { CHORD_TONES, chordToneClass } from '../src/structure/harmony.ts';
+import { DEFAULT_KEY, type Key } from '../src/structure/key.ts';
 import { clampUnit } from '../src/units.ts';
 
 export function liveParams(
@@ -82,14 +82,12 @@ export const PARAM_SETS: readonly LiveParams[] = [
   liveParams(1, 0.5, 1, 0.5, 0.5),
 ];
 
-/** Position, length and scale steps above the chord root of each note: what repeat units must share. */
+/**
+ * Position, length and chord tone of each bass note: what repeat units must share. The upper parts compare by
+ * position and length only, since a tension in one chord and not the next changes which tones they sound.
+ */
 export function relativeShape(ctx: ContextWithDrums, events: readonly PitchedEvent[]): unknown[] {
-  const root = rootDegree(chordOf(ctx));
-  const steps = (pitch: number) => (((degreeOf(ctx.key, pitch) ?? NaN) - root) % 7 + 7) % 7;
-  return events.map((e) => [
-    e.step,
-    e.length,
-    // Voice leading may change the inversion of a chord, so chords compare as sets of tones.
-    'pitch' in e ? steps(e.pitch) : [...new Set(e.voicing.map(steps))].sort(),
-  ]);
+  const chord = chordOf(ctx);
+  const toneOf = (pitch: number) => CHORD_TONES.find((tone) => chordToneClass(ctx.key, chord, tone) === pitch % 12) ?? null;
+  return events.map((e) => ('pitch' in e ? [e.step, e.length, toneOf(e.pitch)] : [e.step, e.length]));
 }

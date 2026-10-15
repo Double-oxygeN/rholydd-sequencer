@@ -37,6 +37,8 @@ import {
   STAB_PATCHES,
 } from '../src/engine/patches.ts';
 import { SECTIONS_PER_PHRASE } from '../src/structure/form.ts';
+import { chordOf } from '../src/structure/conductor.ts';
+import { isBorrowed } from '../src/structure/harmony.ts';
 import { clampUnit } from '../src/units.ts';
 import { DEFAULT_LIVE, PARAM_SETS, PICKUP, SEEDS, TUNING, liveParams, run, type GeneratedPair } from './helpers.ts';
 
@@ -487,11 +489,13 @@ describe('phase 3 acceptance: modulation', () => {
     expect([...shifts].some((shift) => ![0, 5, 7].includes(shift))).toBe(true);
   });
 
-  it("plays every pitched note in the natural minor of the cycle's key", () => {
+  // Borrowed chords (phase 4) bring their own tones from outside the scale.
+  it("plays every pitched note in the natural minor of the cycle's key, apart from borrowed chords", () => {
     let modulated = 0;
     for (const { pairs } of runs) {
       for (const pair of pairs) {
         if (shiftOf(pair, DEFAULT_KEY) !== 0) modulated++;
+        if (isBorrowed(chordOf(pair.ctx))) continue;
         for (const event of pair.heard) {
           if (event.instrument === 'drums') continue;
           for (const pitch of 'pitch' in event ? [event.pitch] : event.voicing) {

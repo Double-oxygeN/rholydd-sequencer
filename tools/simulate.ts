@@ -31,12 +31,18 @@ import {
 import { chordOf, type Context, type LiveParams } from '../src/structure/conductor.ts';
 import { SECTIONS_PER_PHRASE, type SectionIn32 } from '../src/structure/form.ts';
 import {
-  MAIN_PROGRESSIONS,
-  TRANSITION_PROGRESSIONS,
-  isChordTone,
-  progressionName,
-  rootDegree,
+  BORROWED_SYMBOLS,
+  CHORD_TONES,
+  MAIN_SKELETONS,
+  TRANSITION_SKELETONS,
+  chordClasses,
+  chordToneClass,
+  isBorrowed,
+  romanName,
+  skeletonName,
+  type BorrowedSymbol,
   type MainProgression,
+  type Tension,
 } from '../src/structure/harmony.ts';
 import { DEFAULT_KEY, KEY_NAMES, degreeOf, parseKey, type Key } from '../src/structure/key.ts';
 import { PAD_TIMBRES, REESE_TIMBRES, STAB_TIMBRES, type CycleTimbre } from '../src/structure/timbre.ts';
@@ -51,6 +57,10 @@ export interface SimulationOptions {
 }
 
 const DEGREE_NAMES = ['1', '2', '♭3', '4', '5', '♭6', '♭7'] as const;
+/** Sub notes outside the key's natural minor: tones of borrowed chords. */
+const OUTSIDE = 'outside';
+type DegreeName = (typeof DEGREE_NAMES)[number] | typeof OUTSIDE;
+const TENSIONS: readonly Tension[] = ['ninth', 'flatNinth', 'eleventh', 'sharpEleventh', 'thirteenth'];
 
 type PerPart<T> = Record<Part, T>;
 type PerSection<T> = Record<SectionIn32, T>;
@@ -100,8 +110,19 @@ export interface SimulationReport {
     readonly modulations: Record<'dominant' | 'subdominant', number>;
     /** Bars played in each key, keyed by signed steps round the circle of fifths from the initial key, -5 to +6. */
     readonly barsByFifths: Record<string, number>;
-    /** Notes of any pitched part outside the chord of their 2 bars. The generators should never produce one. */
+    /** 2-bar units playing each chord, named by degree with its tension, such as VI(♯11). */
+    readonly chords: Record<string, number>;
+    /** 2-bar units playing each borrowed chord. */
+    readonly borrowed: Record<BorrowedSymbol, number>;
+    /** 2-bar units whose chord carries each tension. */
+    readonly tensions: Record<Tension, number>;
+    /**
+     * Notes outside the chord of their 2 bars: outside its four tones for the basses, outside its tones and tension
+     * for the upper parts. The generators should never produce one.
+     */
     readonly outOfChord: number;
+    /** Notes outside the key's natural minor on 2 bars without a borrowed chord. The generators should never produce one. */
+    readonly outOfScale: number;
     /** Notes of any pitched part outside the part's range. The generators should never produce one. */
     readonly outOfRange: number;
   };
@@ -112,8 +133,8 @@ export interface SimulationReport {
   readonly sub: {
     /** Number of phrases using each style for A, A' and A'', and for B. */
     readonly styles: StyleCounts<SubStyle>;
-    /** Share of notes on each scale degree counted from the tonic of the cycle's key. */
-    readonly degrees: Record<(typeof DEGREE_NAMES)[number], number>;
+    /** Share of notes on each scale degree counted from the tonic of the cycle's key, and outside the scale. */
+    readonly degrees: Record<DegreeName, number>;
     readonly octaveJumps: number;
     readonly notesPerPair: number;
     /** Mean note length in 16th notes. */
@@ -212,15 +233,19 @@ export function simulate({
   const stabStyles = styleCounts(STAB_STYLES);
   const pitchedNotes: Record<PitchedPart, number> = { sub: 0, reese: 0, stab: 0, pad: 0 };
   let outOfRange = 0;
-  const mainProgressions = Object.fromEntries(MAIN_PROGRESSIONS.map((p) => [progressionName(p), 0]));
-  const transitionProgressions = Object.fromEntries(TRANSITION_PROGRESSIONS.map((p) => [progressionName(p), 0]));
+  const mainProgressions = Object.fromEntries(MAIN_SKELETONS.map((p) => [skeletonName(p), 0]));
+  const transitionProgressions = Object.fromEntries(TRANSITION_SKELETONS.map((p) => [skeletonName(p), 0]));
+  const chords: Record<string, number> = {};
+  const borrowed = Object.fromEntries(BORROWED_SYMBOLS.map((s) => [s, 0])) as Record<BorrowedSymbol, number>;
+  const tensions = Object.fromEntries(TENSIONS.map((t) => [t, 0])) as Record<Tension, number>;
+  let outOfScale = 0;
   let previousMain: MainProgression | undefined;
   let mainChanges = 0;
   let previousKey: Key | undefined;
   const modulations = { dominant: 0, subdominant: 0 };
   const barsByFifths = Object.fromEntries(SIGNED_FIFTHS.map((f) => [signed(f), 0])) as Record<string, number>;
   let outOfChord = 0;
-  const degrees = Object.fromEntries(DEGREE_NAMES.map((d) => [d, 0])) as Record<(typeof DEGREE_NAMES)[number], number>;
+  const degrees = Object.fromEntries([...DEGREE_NAMES, OUTSIDE].map((d) => [d, 0])) as Record<DegreeName, number>;
   let subNotes = 0;
   let octaveJumps = 0;
   let subSteps = 0;
@@ -313,26 +338,33 @@ export function simulate({
     }
     if (ctx.isSectionStart && ctx.sectionRole.isPhraseStart) {
       const main = ctx.progression as MainProgression;
-      mainProgressions[progressionName(main)]! += 1;
+      mainProgressions[skeletonName(main.skeleton)]! += 1;
       if (previousMain !== undefined && previousMain !== main) mainChanges++;
       previousMain = main;
     }
     if (ctx.isSectionStart && ctx.sectionRole.relation === 'transition') {
-      transitionProgressions[progressionName(ctx.progression)]! += 1;
+      transitionProgressions[skeletonName(ctx.progression.skeleton)]! += 1;
     }
     const chord = chordOf(ctx);
+    const name = romanName(chord);
+    chords[name] = (chords[name] ?? 0) + 1;
+    if (isBorrowed(chord)) borrowed[chord.symbol as BorrowedSymbol]++;
+    if (chord.tension !== null) tensions[chord.tension]++;
+    const bassTones: readonly number[] = CHORD_TONES.map((tone) => chordToneClass(ctx.key, chord, tone));
+    const upperTones: readonly number[] = chordClasses(ctx.key, chord);
     for (const event of [...sub.notes, ...reese.notes, ...stab.hits, pad]) {
       pitchedNotes[event.instrument]++;
       const [lowest, highest] = RANGES[event.instrument];
+      const allowed = 'pitch' in event ? bassTones : upperTones;
       for (const pitch of 'pitch' in event ? [event.pitch] : event.voicing) {
-        const degree = degreeOf(ctx.key, pitch);
-        if (degree === undefined || !isChordTone(chord, degree)) outOfChord++;
+        if (!allowed.includes(pitch % 12)) outOfChord++;
+        if (!isBorrowed(chord) && degreeOf(ctx.key, pitch) === undefined) outOfScale++;
         if (pitch < lowest || pitch > highest) outOfRange++;
       }
     }
     for (const note of sub.notes) {
       const degree = degreeOf(ctx.key, note.pitch);
-      if (degree !== undefined) degrees[DEGREE_NAMES[degree]!]++;
+      degrees[degree === undefined ? OUTSIDE : DEGREE_NAMES[degree]!]++;
       subNotes++;
       subSteps += note.length;
       if (note.pitch >= LOWEST_PITCH + 12) octaveJumps++;
@@ -400,7 +432,19 @@ export function simulate({
       section: boundaries > 0 ? repeatedSections / boundaries : 0,
       distinctBasePatterns: distinctBases.size,
     },
-    harmony: { main: mainProgressions, transition: transitionProgressions, mainChanges, modulations, barsByFifths, outOfChord, outOfRange },
+    harmony: {
+      main: mainProgressions,
+      transition: transitionProgressions,
+      mainChanges,
+      modulations,
+      barsByFifths,
+      chords,
+      borrowed,
+      tensions,
+      outOfChord,
+      outOfScale,
+      outOfRange,
+    },
     notesPerPair: Object.fromEntries(PITCHED_PARTS.map((part) => [part, pitchedNotes[part] / pairs])) as Record<
       PitchedPart,
       number
@@ -409,10 +453,9 @@ export function simulate({
     stab: { styles: stabStyles },
     sub: {
       styles,
-      degrees: Object.fromEntries(DEGREE_NAMES.map((d) => [d, degrees[d] / Math.max(1, subNotes)])) as Record<
-        (typeof DEGREE_NAMES)[number],
-        number
-      >,
+      degrees: Object.fromEntries(
+        ([...DEGREE_NAMES, OUTSIDE] as const).map((d) => [d, degrees[d] / Math.max(1, subNotes)]),
+      ) as Record<DegreeName, number>,
       octaveJumps: octaveJumps / Math.max(1, subNotes),
       notesPerPair: subNotes / pairs,
       meanLength: subSteps / Math.max(1, subNotes),
@@ -450,13 +493,13 @@ export function simulate({
 }
 
 /**
- * What a 2-bar unit sounds like apart from the chord it is played on. Layers do not change what is heard, and
- * pitches count from the chord root, so that repeat units on different chords count as repeats. Chords count as
- * sets of tones because voice leading changes their inversion from one chord to the next.
+ * What a 2-bar unit sounds like apart from the chord it is played on. Layers do not change what is heard, and bass
+ * pitches count as tones of the chord, so that repeat units on different chords count as repeats. The stab and the
+ * pad count by position only: a tension on one chord and not the next changes which tones they sound.
  */
 function heardShape(ctx: Context, events: readonly NoteEvent[]): string {
-  const root = rootDegree(chordOf(ctx));
-  const fromRoot = (pitch: number) => ((((degreeOf(ctx.key, pitch) ?? NaN) - root) % 7) + 7) % 7;
+  const chord = chordOf(ctx);
+  const fromRoot = (pitch: number) => CHORD_TONES.find((tone) => chordToneClass(ctx.key, chord, tone) === pitch % 12);
   return events
     .map((e) => {
       switch (e.instrument) {
@@ -467,7 +510,7 @@ function heardShape(ctx: Context, events: readonly NoteEvent[]): string {
           return `${e.instrument}${e.step}:${e.length}:${fromRoot(e.pitch)}`;
         case 'stab':
         case 'pad':
-          return `${e.instrument}${e.step}:${e.length}:${[...new Set(e.voicing.map(fromRoot))].sort().join(',')}`;
+          return `${e.instrument}${e.step}:${e.length}`;
       }
     })
     .join(' ');
@@ -515,7 +558,10 @@ function formatReport(report: SimulationReport): string {
     `  main progression changed at ${report.harmony.mainChanges} of ${report.phrase.boundaries} 32-bar boundaries`,
     `  key moved to the dominant ${report.harmony.modulations.dominant} times, to the subdominant ${report.harmony.modulations.subdominant} times`,
     `  bars by fifths from the initial key: ${Object.entries(report.harmony.barsByFifths).map(([fifths, bars]) => `${fifths} ${bars}`).join('  ')}`,
-    `  notes outside the chord: ${report.harmony.outOfChord}  outside the range: ${report.harmony.outOfRange}`,
+    `  chords (2 bars each): ${Object.entries(report.harmony.chords).sort(([a], [b]) => a.localeCompare(b)).map(([name, n]) => `${name} ${n}`).join('  ')}`,
+    `  borrowed chords: ${BORROWED_SYMBOLS.map((s) => `${s} ${report.harmony.borrowed[s]}`).join('  ')}`,
+    `  tensions: ${TENSIONS.map((t) => `${t} ${report.harmony.tensions[t]}`).join('  ')}`,
+    `  notes outside the chord: ${report.harmony.outOfChord}  outside the scale without a borrowed chord: ${report.harmony.outOfScale}  outside the range: ${report.harmony.outOfRange}`,
     `  notes per 2 bars: ${PITCHED_PARTS.map((part) => `${part} ${report.notesPerPair[part].toFixed(2)}`).join('  ')}`,
     '',
     'Sub bass',
@@ -525,7 +571,7 @@ function formatReport(report: SimulationReport): string {
       (style) =>
         `  ${style.padEnd(12)} ${String(report.sub.styles[style].main).padStart(8)} ${String(report.sub.styles[style].transition).padStart(6)}`,
     ),
-    `  degrees: ${DEGREE_NAMES.map((d) => `${d} ${pct(report.sub.degrees[d])}`).join('  ')}`,
+    `  degrees: ${([...DEGREE_NAMES, OUTSIDE] as const).map((d) => `${d} ${pct(report.sub.degrees[d])}`).join('  ')}`,
     '',
     ...formatStyles('Reese', report.reese.styles),
     '',

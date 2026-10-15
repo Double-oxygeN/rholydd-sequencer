@@ -6,6 +6,8 @@ import { slotOf, slotsOf } from '../src/generators/drums/weights.ts';
 import { PARTS, type Step } from '../src/generators/types.ts';
 import { sectionEnergy } from '../src/structure/energy.ts';
 import { ALL_KEYS, DEFAULT_KEY, degreeOf } from '../src/structure/key.ts';
+import { chordOf } from '../src/structure/conductor.ts';
+import { isBorrowed } from '../src/structure/harmony.ts';
 import { clampUnit } from '../src/units.ts';
 import { DEFAULT_LIVE, PARAM_SETS, SEEDS, TUNING, liveParams, relativeShape, run, type GeneratedPair } from './helpers.ts';
 
@@ -140,7 +142,8 @@ describe('phase 1 acceptance: bass', () => {
     for (const initialKey of ALL_KEYS) {
       for (const { ctx, sub } of run(42, 256, () => DEFAULT_LIVE, initialKey)) {
         for (const note of sub.notes) {
-          expect(degreeOf(ctx.key, note.pitch)).toBeDefined();
+          // Borrowed chords (phase 4) may leave the scale; the bass stays on the chord's own tones.
+          if (!isBorrowed(chordOf(ctx))) expect(degreeOf(ctx.key, note.pitch)).toBeDefined();
           expect(note.pitch).toBeGreaterThanOrEqual(29);
           expect(note.pitch).toBeLessThanOrEqual(52);
         }
