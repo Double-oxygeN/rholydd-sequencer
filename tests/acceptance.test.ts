@@ -9,7 +9,7 @@ import { DEFAULT_LIVE, PARAM_SETS, SEEDS, eventsAt, liveParams, run } from './he
 // Automated acceptance criteria from docs/specs/mvp/requirements.md.
 
 function generateBars(seed: number, bars: number): (readonly NoteEvent[])[] {
-  const ensemble = createEnsemble({ seed: toSeed(seed), key: DEFAULT_KEY });
+  const ensemble = createEnsemble({ seed: toSeed(seed), initialKey: DEFAULT_KEY });
   return Array.from({ length: bars / 2 }, () => ensemble.next(DEFAULT_LIVE).events);
 }
 
@@ -135,7 +135,7 @@ describe('MVP acceptance', () => {
   });
 
   it('generates 2 bars of every part in 5 ms or less on average', () => {
-    const ensemble = createEnsemble({ seed: toSeed(42), key: DEFAULT_KEY });
+    const ensemble = createEnsemble({ seed: toSeed(42), initialKey: DEFAULT_KEY });
     const pairs = 2048;
     const start = performance.now();
     for (let i = 0; i < pairs; i++) ensemble.next(liveParams(1, 1, 1, 1, 1));

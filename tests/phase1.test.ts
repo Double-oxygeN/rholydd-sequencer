@@ -136,11 +136,11 @@ describe('phase 1 acceptance: bass', () => {
   const cutFrom = ({ ctx }: GeneratedPair) =>
     ctx.isSectionEnd && ctx.sectionRole.isPhraseEnd ? (ctx.drums.fill?.from ?? 32) : 32;
 
-  it('keeps every note in the natural minor of the key between F1 and E3, starting each 2 bars between F1 and E2', () => {
-    for (const key of ALL_KEYS) {
-      for (const { sub } of run(42, 256, () => DEFAULT_LIVE, key)) {
+  it("keeps every note in the natural minor of the cycle's key between F1 and E3, starting each 2 bars between F1 and E2", () => {
+    for (const initialKey of ALL_KEYS) {
+      for (const { ctx, sub } of run(42, 256, () => DEFAULT_LIVE, initialKey)) {
         for (const note of sub.notes) {
-          expect(degreeOf(key, note.pitch)).toBeDefined();
+          expect(degreeOf(ctx.key, note.pitch)).toBeDefined();
           expect(note.pitch).toBeGreaterThanOrEqual(29);
           expect(note.pitch).toBeLessThanOrEqual(52);
         }
@@ -212,7 +212,7 @@ describe('phase 1 acceptance: bass', () => {
     }
   });
 
-  it('only transposes the bass when the key changes, leaving the drums and the rhythm as they were', () => {
+  it('only transposes the bass when the initial key changes, leaving the drums and the rhythm as they were', () => {
     for (const seed of SEEDS) {
       const inF = run(seed, 512, () => DEFAULT_LIVE, DEFAULT_KEY);
       for (const key of ALL_KEYS) {

@@ -13,9 +13,26 @@ export const KEY_NAMES = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭
 export const ALL_KEYS: readonly Key[] = KEY_NAMES.map((_, i) => i as Key);
 export const DEFAULT_KEY = 5 as Key;
 
+/**
+ * Steps around the circle of fifths from the initial key: -1 is the subdominant minor, 1 the dominant minor.
+ * Nothing further away can be written, so the key cannot wander off from the initial key over a long session.
+ */
+export type FifthsFromInitial = -1 | 0 | 1;
+
+const SEMITONES_PER_FIFTH = 7;
+
+export function keyAt(initialKey: Key, fifths: FifthsFromInitial): Key {
+  return ((((initialKey + SEMITONES_PER_FIFTH * fifths) % 12) + 12) % 12) as Key;
+}
+
 const NATURAL_MINOR = [0, 2, 3, 5, 7, 8, 10] as const;
 export const DEGREES_PER_OCTAVE = NATURAL_MINOR.length;
 export const TONIC = 0 as ScaleDegree;
+
+/** Name such as F マイナー, shared by the initial key control and the current key in the position display. */
+export function keyName(key: Key): string {
+  return `${KEY_NAMES[key]} マイナー`;
+}
 
 export function toKey(n: number): Key | undefined {
   return Number.isInteger(n) && n >= 0 && n < KEY_NAMES.length ? (n as Key) : undefined;

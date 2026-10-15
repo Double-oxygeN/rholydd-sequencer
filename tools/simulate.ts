@@ -33,14 +33,14 @@ import {
   rootDegree,
   type MainProgression,
 } from '../src/structure/harmony.ts';
-import { DEFAULT_KEY, KEY_NAMES, degreeOf, parseKey, type Key } from '../src/structure/key.ts';
+import { DEFAULT_KEY, KEY_NAMES, degreeOf, keyAt, parseKey, type FifthsFromInitial, type Key } from '../src/structure/key.ts';
 import { clampUnit } from '../src/units.ts';
 
 export interface SimulationOptions {
   readonly bars: number;
   readonly seed: Seed;
   readonly live: LiveParams;
-  readonly key?: Key;
+  readonly initialKey?: Key;
 }
 
 const DEGREE_NAMES = ['1', '2', '♭3', '4', '5', '♭6', '♭7'] as const;
@@ -54,7 +54,7 @@ const SECTIONS_IN_32: readonly SectionIn32[] = [0, 1, 2, 3];
 export interface SimulationReport {
   readonly bars: number;
   readonly seed: Seed;
-  readonly key: Key;
+  readonly initialKey: Key;
   readonly live: LiveParams;
   /** Average hits per bar for each part, split by layer. */
   readonly density: PerPart<Record<Layer | 'total', number>>;
@@ -89,6 +89,10 @@ export interface SimulationReport {
     readonly transition: Record<string, number>;
     /** Number of 32-bar boundaries where the main progression changed. */
     readonly mainChanges: number;
+    /** Number of cycle starts where the key moved. */
+    readonly modulations: number;
+    /** Bars played in each key, named by its place relative to the initial key. */
+    readonly barsByKey: Record<KeyPlace, number>;
     /** Notes of any pitched part outside the chord of their 2 bars. The generators should never produce one. */
     readonly outOfChord: number;
     /** Notes of any pitched part outside the part's range. The generators should never produce one. */
@@ -101,7 +105,7 @@ export interface SimulationReport {
   readonly sub: {
     /** Number of phrases using each style for A, A' and A'', and for B. */
     readonly styles: StyleCounts<SubStyle>;
-    /** Share of notes on each scale degree counted from the key's tonic. */
+    /** Share of notes on each scale degree counted from the tonic of the cycle's key. */
     readonly degrees: Record<(typeof DEGREE_NAMES)[number], number>;
     readonly octaveJumps: number;
     readonly notesPerPair: number;
@@ -127,6 +131,16 @@ export interface SimulationReport {
 }
 
 type PitchedPart = PitchedEvent['instrument'];
+type KeyPlace = 'subdominant' | 'initial' | 'dominant';
+
+const KEY_PLACES: Readonly<Record<FifthsFromInitial, KeyPlace>> = { [-1]: 'subdominant', 0: 'initial', 1: 'dominant' };
+const ALL_FIFTHS: readonly FifthsFromInitial[] = [-1, 0, 1];
+
+/** Where a key lies relative to the initial key, or undefined for a key the conductor should never reach. */
+function keyPlace(initialKey: Key, key: Key): KeyPlace | undefined {
+  const fifths = ALL_FIFTHS.find((f) => keyAt(initialKey, f) === key);
+  return fifths === undefined ? undefined : KEY_PLACES[fifths];
+}
 type CycleBars = 128 | 160 | 192;
 type DropExtension = 'none' | 'first' | 'second' | 'both';
 
@@ -164,8 +178,8 @@ function styleCounts<S extends string>(styles: readonly S[]): StyleCounts<S> {
 const perPart = <T>(make: () => T): PerPart<T> =>
   Object.fromEntries(PARTS.map((part) => [part, make()])) as PerPart<T>;
 
-export function simulate({ bars, seed, live, key = DEFAULT_KEY }: SimulationOptions): SimulationReport {
-  const ensemble = createEnsemble({ seed, key });
+export function simulate({ bars, seed, live, initialKey = DEFAULT_KEY }: SimulationOptions): SimulationReport {
+  const ensemble = createEnsemble({ seed, initialKey });
   const pairs = Math.ceil(bars / 2);
 
   const styles = styleCounts(SUB_STYLES);
@@ -177,6 +191,9 @@ export function simulate({ bars, seed, live, key = DEFAULT_KEY }: SimulationOpti
   const transitionProgressions = Object.fromEntries(TRANSITION_PROGRESSIONS.map((p) => [progressionName(p), 0]));
   let previousMain: MainProgression | undefined;
   let mainChanges = 0;
+  let previousKey: Key | undefined;
+  let modulations = 0;
+  const barsByKey: Record<KeyPlace, number> = { subdominant: 0, initial: 0, dominant: 0 };
   let outOfChord = 0;
   const degrees = Object.fromEntries(DEGREE_NAMES.map((d) => [d, 0])) as Record<(typeof DEGREE_NAMES)[number], number>;
   let subNotes = 0;
@@ -231,6 +248,11 @@ export function simulate({ bars, seed, live, key = DEFAULT_KEY }: SimulationOpti
       leads[`${ctx.layout.intro * BARS_PER_SECTION}/${ctx.layout.breakdown * BARS_PER_SECTION}`]! += 1;
       extensions[extensionOf(ctx.layout)]++;
     }
+    const place = keyPlace(initialKey, ctx.key);
+    if (place === undefined) throw new Error(`key ${KEY_NAMES[ctx.key]} is not next to the initial key ${KEY_NAMES[initialKey]}`);
+    barsByKey[place] += 2;
+    if (previousKey !== undefined && previousKey !== ctx.key) modulations++;
+    previousKey = ctx.key;
     const { scene } = ctx.sceneRole;
     sceneBars[scene] += 2;
     for (const event of events) {
@@ -261,13 +283,13 @@ export function simulate({ bars, seed, live, key = DEFAULT_KEY }: SimulationOpti
       pitchedNotes[event.instrument]++;
       const [lowest, highest] = RANGES[event.instrument];
       for (const pitch of 'pitch' in event ? [event.pitch] : event.voicing) {
-        const degree = degreeOf(key, pitch);
+        const degree = degreeOf(ctx.key, pitch);
         if (degree === undefined || !isChordTone(chord, degree)) outOfChord++;
         if (pitch < lowest || pitch > highest) outOfRange++;
       }
     }
     for (const note of sub.notes) {
-      const degree = degreeOf(key, note.pitch);
+      const degree = degreeOf(ctx.key, note.pitch);
       if (degree !== undefined) degrees[DEGREE_NAMES[degree]!]++;
       subNotes++;
       subSteps += note.length;
@@ -315,7 +337,7 @@ export function simulate({ bars, seed, live, key = DEFAULT_KEY }: SimulationOpti
   return {
     bars: barCount,
     seed,
-    key,
+    initialKey,
     live,
     density: Object.fromEntries(
       PARTS.map((part) => {
@@ -336,7 +358,7 @@ export function simulate({ bars, seed, live, key = DEFAULT_KEY }: SimulationOpti
       section: boundaries > 0 ? repeatedSections / boundaries : 0,
       distinctBasePatterns: distinctBases.size,
     },
-    harmony: { main: mainProgressions, transition: transitionProgressions, mainChanges, outOfChord, outOfRange },
+    harmony: { main: mainProgressions, transition: transitionProgressions, mainChanges, modulations, barsByKey, outOfChord, outOfRange },
     notesPerPair: Object.fromEntries(PITCHED_PARTS.map((part) => [part, pitchedNotes[part] / pairs])) as Record<
       PitchedPart,
       number
@@ -412,7 +434,7 @@ function formatReport(report: SimulationReport): string {
   const num = (x: number) => x.toFixed(2).padStart(6);
   const { live, mutation } = report;
   const lines = [
-    `bars: ${report.bars}  seed: ${report.seed}  key: ${KEY_NAMES[report.key]}m  m2: ${live.m2}  m8: ${live.m8}  m32: ${live.m32}  energyDepth: ${live.energyDepth}  fillIntensity: ${live.fillIntensity}`,
+    `bars: ${report.bars}  seed: ${report.seed}  initial key: ${KEY_NAMES[report.initialKey]}m  m2: ${live.m2}  m8: ${live.m8}  m32: ${live.m32}  energyDepth: ${live.energyDepth}  fillIntensity: ${live.fillIntensity}`,
     '',
     'Density (hits per bar)',
     '  part     total   base ornament   fill',
@@ -447,6 +469,7 @@ function formatReport(report: SimulationReport): string {
     ...Object.entries(report.harmony.main).map(([name, count]) => `  A/A'/A''  ${name.padEnd(18)} ${String(count).padStart(6)}`),
     ...Object.entries(report.harmony.transition).map(([name, count]) => `  B         ${name.padEnd(18)} ${String(count).padStart(6)}`),
     `  main progression changed at ${report.harmony.mainChanges} of ${report.phrase.boundaries} 32-bar boundaries`,
+    `  key moved ${report.harmony.modulations} times  bars by key: ${Object.entries(report.harmony.barsByKey).map(([place, bars]) => `${place} ${bars}`).join('  ')}`,
     `  notes outside the chord: ${report.harmony.outOfChord}  outside the range: ${report.harmony.outOfRange}`,
     `  notes per 2 bars: ${PITCHED_PARTS.map((part) => `${part} ${report.notesPerPair[part].toFixed(2)}`).join('  ')}`,
     '',
@@ -511,7 +534,7 @@ function main() {
       m8: { type: 'string', default: String(DEFAULT_LIVE_PARAMS.m8) },
       m32: { type: 'string', default: String(DEFAULT_LIVE_PARAMS.m32) },
       energy: { type: 'string', default: String(DEFAULT_LIVE_PARAMS.energyDepth) },
-      key: { type: 'string', default: KEY_NAMES[DEFAULT_KEY] },
+      'initial-key': { type: 'string', default: KEY_NAMES[DEFAULT_KEY] },
       fill: { type: 'string', default: String(DEFAULT_LIVE_PARAMS.fillIntensity) },
       json: { type: 'boolean', default: false },
     },
@@ -527,9 +550,11 @@ function main() {
     energyDepth: clampUnit(Number(values.energy)),
     fillIntensity: clampUnit(Number(values.fill)),
   };
-  const key = parseKey(values.key ?? '');
-  if (key === undefined) throw new Error(`--key must be a note name such as F, F# or Bb: ${values.key}`);
-  const report = simulate({ bars, seed, live, key });
+  const initialKey = parseKey(values['initial-key'] ?? '');
+  if (initialKey === undefined) {
+    throw new Error(`--initial-key must be a note name such as F, F# or Bb: ${values['initial-key']}`);
+  }
+  const report = simulate({ bars, seed, live, initialKey });
   console.log(values.json ? JSON.stringify(report, null, 2) : formatReport(report));
 }
 

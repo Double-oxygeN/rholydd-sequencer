@@ -13,7 +13,7 @@ import type { ContextWithDrums, NoteEvent, PadChord } from './types.ts';
 /** Fixed for the whole session: changing either needs a new ensemble. */
 export interface SessionSettings {
   readonly seed: Seed;
-  readonly key: Key;
+  readonly initialKey: Key;
 }
 
 export interface EnsemblePair {
@@ -39,8 +39,8 @@ export interface Ensemble {
  * The pitched parts never read each other: they agree by playing chord tones of the same chord, so adding or
  * removing one never changes the others.
  */
-export function createEnsemble({ seed, key }: SessionSettings): Ensemble {
-  const conductor = createConductor(seed, key);
+export function createEnsemble({ seed, initialKey }: SessionSettings): Ensemble {
+  const conductor = createConductor(seed, initialKey);
   const drums = createDrumGenerator();
   const sub = createSubGenerator();
   const reese = createReeseGenerator();

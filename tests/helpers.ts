@@ -51,9 +51,9 @@ export function run(
   seed: number,
   bars: number,
   live: (pairIndex: number) => LiveParams = () => DEFAULT_LIVE,
-  key: Key = DEFAULT_KEY,
+  initialKey: Key = DEFAULT_KEY,
 ): GeneratedPair[] {
-  const ensemble = createEnsemble({ seed: toSeed(seed), key });
+  const ensemble = createEnsemble({ seed: toSeed(seed), initialKey });
   return Array.from({ length: Math.ceil(bars / 2) }, (_, i) => {
     const { ctx, drumLayers, sub, reese, stab, pad, events, fx } = ensemble.next(live(i));
     const pitched = [...sub.notes, ...reese.notes, ...stab.hits, pad];

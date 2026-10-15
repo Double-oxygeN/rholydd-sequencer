@@ -13,7 +13,7 @@ import {
   leadsIntoDrop,
   sceneEnergy,
 } from '../src/structure/arrangement.ts';
-import { DEFAULT_KEY } from '../src/structure/key.ts';
+import { ALL_KEYS, DEFAULT_KEY, KEY_NAMES, degreeOf, keyAt, parseKey, type Key } from '../src/structure/key.ts';
 import { clampUnit } from '../src/units.ts';
 import { DEFAULT_LIVE, PARAM_SETS, SEEDS, liveParams, run, type GeneratedPair } from './helpers.ts';
 
@@ -373,9 +373,79 @@ describe('phase 3 acceptance: a theme per cycle', () => {
   });
 });
 
+// Semitones from the initial key up to the cycle's key: 0 at home, 7 in the dominant and 5 in the subdominant.
+const shiftOf = (pair: GeneratedPair, initialKey: Key) => (((pair.ctx.key - initialKey) % 12) + 12) % 12;
+
+describe('phase 3 acceptance: modulation', () => {
+  it('names the dominant and the subdominant minor of the initial key', () => {
+    expect(KEY_NAMES[keyAt(DEFAULT_KEY, 1)]).toBe('C');
+    expect(KEY_NAMES[keyAt(DEFAULT_KEY, -1)]).toBe('B♭');
+    expect(KEY_NAMES[keyAt(parseKey('C')!, -1)]).toBe('F');
+    expect(KEY_NAMES[keyAt(parseKey('B')!, 1)]).toBe('F♯');
+  });
+
+  it('moves the key only at the start of a cycle, between the initial key and its neighbours, and never when m32 is 0', () => {
+    for (const { params, pairs } of runs) {
+      expect(shiftOf(pairs[0]!, DEFAULT_KEY)).toBe(0);
+      let moves = 0;
+      for (let i = 1; i < pairs.length; i++) {
+        const before = shiftOf(pairs[i - 1]!, DEFAULT_KEY);
+        const after = shiftOf(pairs[i]!, DEFAULT_KEY);
+        expect([0, 5, 7]).toContain(after);
+        if (before === after) continue;
+        moves++;
+        expect(pairs[i]!.ctx.sectionInCycle === 0 && pairs[i]!.ctx.isSectionStart).toBe(true);
+        expect(before === 0 || after === 0).toBe(true);
+      }
+      if (params.m32 === 0) expect(moves).toBe(0);
+    }
+  });
+
+  it('reaches both the dominant and the subdominant over long runs', () => {
+    const shifts = new Set(SEEDS.flatMap((seed) => run(seed, 8192).map((pair) => shiftOf(pair, DEFAULT_KEY))));
+    expect([...shifts].sort((a, b) => a - b)).toEqual([0, 5, 7]);
+  });
+
+  it("plays every pitched note in the natural minor of the cycle's key", () => {
+    let modulated = 0;
+    for (const { pairs } of runs) {
+      for (const pair of pairs) {
+        if (shiftOf(pair, DEFAULT_KEY) !== 0) modulated++;
+        for (const event of pair.heard) {
+          if (event.instrument === 'drums') continue;
+          for (const pitch of 'pitch' in event ? [event.pitch] : event.voicing) {
+            expect(degreeOf(pair.ctx.key, pitch)).toBeDefined();
+          }
+        }
+      }
+    }
+    expect(modulated).toBeGreaterThan(0);
+  });
+
+  it('moves by the same steps from every initial key, transposing the pitched parts by the difference', () => {
+    for (const seed of SEEDS) {
+      const inF = run(seed, BARS);
+      for (const initialKey of ALL_KEYS) {
+        const other = run(seed, BARS, () => DEFAULT_LIVE, initialKey);
+        other.forEach((pair, i) => {
+          expect(shiftOf(pair, initialKey)).toBe(shiftOf(inF[i]!, DEFAULT_KEY));
+          // Folding into a fixed range reorders the tones of a chord, so the pitch classes compare as sets.
+          const classes = (events: readonly NoteEvent[], shift: number) =>
+            events.flatMap((e) =>
+              e.instrument === 'drums'
+                ? []
+                : [[...new Set(('pitch' in e ? [e.pitch] : e.voicing).map((p) => (((p - shift) % 12) + 12) % 12))].sort()],
+            );
+          expect(classes(pair.heard, initialKey - DEFAULT_KEY)).toEqual(classes(inF[i]!.heard, 0));
+        });
+      }
+    }
+  });
+});
+
 describe('phase 3 acceptance: performance', () => {
   it('generates 2 bars, arrangement and effects included, in 5 ms or less on average', () => {
-    const ensemble = createEnsemble({ seed: toSeed(42), key: DEFAULT_KEY });
+    const ensemble = createEnsemble({ seed: toSeed(42), initialKey: DEFAULT_KEY });
     const pairs = 4096;
     const start = performance.now();
     for (let i = 0; i < pairs; i++) ensemble.next(DEFAULT_LIVE);

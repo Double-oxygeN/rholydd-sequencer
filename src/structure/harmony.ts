@@ -1,6 +1,6 @@
 import { TAG, createRng, hash, type Seed } from '../random/rng.ts';
 import type { UnitInterval } from '../units.ts';
-import { noteNameIn, pitchClassOf, shiftDegree, type Key, type ScaleDegree } from './key.ts';
+import { noteNameIn, pitchClassOf, shiftDegree, type FifthsFromInitial, type Key, type ScaleDegree } from './key.ts';
 
 /**
  * Position of a chord's root in the natural minor scale. ii (1) is left out: its diminished 5th would let the
@@ -92,6 +92,23 @@ export function cycleMainProgression(
         mainRoll,
       )
     : previousMain;
+}
+
+// Half of m32, because a new key stands out more than a new progression and feels restless when it comes too often.
+const MODULATION_SHARE = 0.5;
+
+/**
+ * Key of a cycle, as steps from the initial key. It moves only between the initial key and its neighbours on the
+ * circle of fifths, the keys a DJ can mix into without a clash, and never sees the initial key itself so that
+ * the same seed moves by the same steps whatever key it starts in.
+ */
+export function cycleModulation(previous: FifthsFromInitial, cycleSeed: Seed, m32: UnitInterval): FifthsFromInitial {
+  const rng = createRng(hash(cycleSeed, TAG.modulation));
+  const changeRoll = rng.float();
+  const directionRoll = rng.float();
+  if (changeRoll >= m32 * MODULATION_SHARE) return previous;
+  if (previous !== 0) return 0;
+  return directionRoll < 0.5 ? 1 : -1;
 }
 
 /** Transition progression of a 32-bar phrase, chosen afresh for every B. */

@@ -106,7 +106,7 @@ describe('phase 2 acceptance: chord progression', () => {
     }
   });
 
-  it('keeps the progression in degrees when only the key changes', () => {
+  it('keeps the progression in degrees when only the initial key changes', () => {
     for (const seed of SEEDS) {
       const inF = run(seed, 256, () => DEFAULT_LIVE, DEFAULT_KEY);
       for (const key of ALL_KEYS) {
@@ -123,13 +123,13 @@ describe('phase 2 acceptance: parts on the chords', () => {
   const cutFrom = (pair: GeneratedPair) => (isPhraseEnd(pair) ? (pair.ctx.drums.fill?.from ?? 32) : 32);
 
   it('plays only chord tones of the 2 bars, each part within its range', () => {
-    for (const key of ALL_KEYS) {
+    for (const initialKey of ALL_KEYS) {
       for (const params of PARAM_SETS) {
-        for (const pair of run(7, 256, () => params, key)) {
+        for (const pair of run(7, 256, () => params, initialKey)) {
           for (const event of pair.pitched) {
             const [lowest, highest] = RANGES[event.instrument];
             for (const pitch of pitchesOf(event)) {
-              const degree = degreeOf(key, pitch);
+              const degree = degreeOf(pair.ctx.key, pitch);
               expect(degree).toBeDefined();
               expect(isChordTone(chordOf(pair.ctx), degree!)).toBe(true);
               expect(pitch).toBeGreaterThanOrEqual(lowest);
@@ -151,7 +151,7 @@ describe('phase 2 acceptance: parts on the chords', () => {
     }
   });
 
-  it('only transposes every pitched part when the key changes, leaving the drums as they were', () => {
+  it('only transposes every pitched part when the initial key changes, leaving the drums as they were', () => {
     for (const seed of SEEDS) {
       const inF = run(seed, 256, () => DEFAULT_LIVE, DEFAULT_KEY);
       for (const key of ALL_KEYS) {

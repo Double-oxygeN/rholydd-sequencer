@@ -13,12 +13,13 @@ import {
 } from './arrangement.ts';
 import {
   cycleMainProgression,
+  cycleModulation,
   phraseTransitionProgression,
   type Chord,
   type MainProgression,
   type TransitionProgression,
 } from './harmony.ts';
-import { DEFAULT_KEY, type Key } from './key.ts';
+import { DEFAULT_KEY, keyAt, type FifthsFromInitial, type Key } from './key.ts';
 import {
   BARS_PER_PAIR,
   PAIRS_PER_SECTION,
@@ -89,7 +90,7 @@ export type Context = PairRole &
   readonly phrase: PhraseIndex;
   /** Fixed for the whole 8-bar section so that its repeat units stay identical. */
   readonly energy: UnitInterval;
-  /** Fixed for the session. Only transposes pitches and never feeds a seed, so changing it keeps the same piece. */
+  /** Key of the cycle. Only transposes pitches and never feeds a seed, so another initial key keeps the same piece. */
   readonly key: Key;
   readonly cycle: CycleIndex;
   readonly layout: CycleLayout;
@@ -122,6 +123,7 @@ interface CycleState {
   /** Section count from the start of playback at which the cycle starts. */
   readonly firstSection: number;
   readonly main: MainProgression;
+  readonly fifths: FifthsFromInitial;
 }
 
 export interface Conductor {
@@ -129,7 +131,7 @@ export interface Conductor {
   next(live: LiveParams): Context;
 }
 
-export function createConductor(master: Seed, key: Key = DEFAULT_KEY): Conductor {
+export function createConductor(master: Seed, initialKey: Key = DEFAULT_KEY): Conductor {
   let pair = 0;
   let sectionParams: SectionParams | undefined;
   let phraseParams: PhraseParams | undefined;
@@ -167,7 +169,7 @@ export function createConductor(master: Seed, key: Key = DEFAULT_KEY): Conductor
         phrase: phrase as PhraseIndex,
         ...sectionHarmony(inPhrase, cycle.main, transition),
         energy,
-        key,
+        key: keyAt(initialKey, cycle.fifths),
         cycle: cycle.index,
         layout: cycle.layout,
         sectionInCycle,
@@ -199,5 +201,6 @@ function nextCycle(master: Seed, previous: CycleState | undefined, firstSection:
     scenes: cycleScenes(layout),
     firstSection,
     main: cycleMainProgression(previous?.main, seed, m32),
+    fifths: previous === undefined ? 0 : cycleModulation(previous.fifths, seed, m32),
   };
 }

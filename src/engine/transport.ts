@@ -8,7 +8,7 @@ import type { Context, LiveParams } from '../structure/conductor.ts';
 import type { Instruments } from './audio.ts';
 import type { Seconds } from './ducking.ts';
 
-/** Fixed for the whole session: BPM, seed and key only change between stop and play. */
+/** Fixed for the whole session: BPM, seed and initial key only change between stop and play. */
 export interface PlaybackSettings extends SessionSettings {
   readonly bpm: Bpm;
 }
@@ -39,9 +39,9 @@ export function createSequencer(
   const draw = Tone.getDraw();
 
   return {
-    start({ bpm, seed, key }) {
+    start({ bpm, seed, initialKey }) {
       // A fresh ensemble per session replays the same seed from the very beginning (F-02).
-      const ensemble = createEnsemble({ seed, key });
+      const ensemble = createEnsemble({ seed, initialKey });
       const stepSeconds = 60 / bpm / (STEPS_PER_BAR / 4);
       transport.bpm.value = bpm;
       transport.scheduleRepeat(
