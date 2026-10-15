@@ -3,6 +3,7 @@ import { BARS_PER_PAIR, PAIRS_PER_SECTION, SECTIONS_PER_PHRASE, type SectionIn32
 import { chordOf, type Context } from '../structure/conductor.ts';
 import { chordName } from '../structure/harmony.ts';
 import { barsToNextScene, cycleScenes, sceneName } from '../structure/arrangement.ts';
+import { keyName } from '../structure/key.ts';
 
 const BARS_PER_SECTION = BARS_PER_PAIR * PAIRS_PER_SECTION;
 const BARS_PER_PHRASE = BARS_PER_SECTION * SECTIONS_PER_PHRASE;
@@ -22,17 +23,21 @@ export function createPositionView(): PositionView {
   const cycle = sceneMeter();
   const total = document.createElement('div');
   total.className = 'position-total';
+  // Shown apart from the chord because a chord name alone hardly tells that the cycle has changed key.
+  const key = document.createElement('span');
+  key.className = 'position-key';
   const chord = document.createElement('span');
   chord.className = 'position-chord';
   const scene = document.createElement('span');
   scene.className = 'position-scene';
   const text = document.createElement('span');
-  total.append(chord, scene, text);
+  total.append(key, chord, scene, text);
   element.append(...meters.map((m) => m.element), cycle.element, total);
 
   const clear = () => {
     for (const m of meters) m.set(null);
     cycle.clear();
+    key.textContent = '';
     chord.textContent = '';
     scene.textContent = '';
     text.textContent = '停止中';
@@ -50,6 +55,7 @@ export function createPositionView(): PositionView {
       meters[1]!.set(inPhrase);
       const scenes = cycleScenes(ctx.layout);
       cycle.show(scenes.map((role) => role.scene), ctx.sectionInCycle);
+      key.textContent = keyName(ctx.key);
       chord.textContent = chordName(ctx.key, chordOf(ctx));
       scene.textContent = `${sceneName(ctx.sceneRole)}（次のシーンまで ${barsToNextScene(scenes, ctx.sectionInCycle, inSection)} 小節）`;
       text.textContent = `通算 ${bar + 1} 小節目 / 32bar 中 ${inPhrase + 1} 小節目（${SECTION_LABEL[sectionIn32]}） / 8bar 中 ${inSection + 1} 小節目${ctx.isSectionEnd ? '（フィル区間）' : ''}`;

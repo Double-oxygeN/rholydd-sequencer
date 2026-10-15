@@ -201,6 +201,12 @@ button.play.playing {
   font-variant-numeric: tabular-nums;
 }
 
+.position-key {
+  color: var(--fg);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 .position-chord {
   min-width: 5em;
   font-size: 1.2rem;
