@@ -130,6 +130,23 @@ describe('fx automation', () => {
     }
   });
 
+  it('moves a filter\'s frequency in one step only where none of it is heard', () => {
+    const points = automate(42, 2048).flatMap(({ points }) => points);
+    const share = curveOf(points, 'highpassShare');
+    let jumps = 0;
+    for (const target of ['highpass', 'lowpass'] as const) {
+      const frequency = curveOf(points, target);
+      for (const point of of(points, target).filter((p) => p.ramp === 'set')) {
+        // A filter whose frequency jumps while sound flows through it thumps far louder than the sound itself.
+        if (Math.abs(frequency(point.time - 1e-9) - point.value) < 1e-6) continue;
+        jumps++;
+        expect(target).toBe('highpass');
+        expect(share(point.time)).toBe(0);
+      }
+    }
+    expect(jumps).toBeGreaterThan(5);
+  });
+
   it('sends one snare hit to the reverb and closes the send before the next 16th', () => {
     for (const { pair, points } of automate(42, 2048)) {
       const thrown = pair.fx.find((event) => event.fx === 'throw');

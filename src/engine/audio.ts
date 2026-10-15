@@ -7,6 +7,7 @@ import { CLIP_METER_NAME, type LevelReport } from './clip.ts';
 import clipWorkletUrl from './clip-worklet.ts?worker&url';
 import {
   AUTOMATION_TARGETS,
+  HIGHPASS,
   RESTING_VALUE,
   RISER,
   fxAutomation,
@@ -118,8 +119,19 @@ export async function loadInstruments(drumSamplesUrl: string, mixer: MixerSettin
   const clipMeter = context.createAudioWorkletNode(CLIP_METER_NAME, { outputChannelCount: [2] });
   Tone.connect(clipMeter, gate);
   const limiter = new Tone.Limiter(LIMITER_THRESHOLD_DB).connect(clipMeter);
+  const masterBus = new Tone.Compressor(MASTER_BUS).connect(limiter);
+  // The mix runs through one of two equal high-passes: the swept one, or one resting open that keeps the low end
+  // shaped as it always is. Their shares come from one signal, so that they always add up to the whole mix.
   const sweepHighpass = new Tone.Filter({ type: 'highpass', frequency: RESTING_VALUE.highpass, rolloff: -24 });
-  const mixBus = new Tone.Gain().chain(sweepHighpass, new Tone.Compressor(MASTER_BUS), limiter);
+  const restingHighpass = new Tone.Filter({ type: 'highpass', frequency: HIGHPASS.openHz, rolloff: -24 });
+  const sweptShare = new Tone.Gain(0).connect(masterBus);
+  const restingShare = new Tone.Gain(0).connect(masterBus);
+  const highpassShare = new Tone.Signal(RESTING_VALUE.highpassShare);
+  highpassShare.connect(sweptShare.gain);
+  highpassShare.chain(new Tone.Negate(), new Tone.Add(1), restingShare.gain);
+  const mixBus = new Tone.Gain().fan(sweepHighpass, restingHighpass);
+  sweepHighpass.connect(sweptShare);
+  restingHighpass.connect(restingShare);
   const drumBus = new Tone.Compressor(DRUM_BUS).connect(mixBus);
   const reverbIn = new Tone.Gain();
 
@@ -168,6 +180,7 @@ export async function loadInstruments(drumSamplesUrl: string, mixer: MixerSettin
     riserGain: [riserGain.gain],
     riserFrequency: [riserFilter.frequency],
     highpass: [sweepHighpass.frequency],
+    highpassShare: [highpassShare],
     lowpass: Object.values(introLowpass).map((filter) => filter.frequency),
     throwSend: [throwSend.gain],
     padGate: [padGate.gain],

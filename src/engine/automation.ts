@@ -2,8 +2,18 @@ import { startsEffect, type FxEvent, type FxSpan } from '../generators/fx/index.
 import { STEPS_PER_PAIR } from '../generators/types.ts';
 import type { Seconds } from './ducking.ts';
 
-/** Parameters that the effects move. Each has one value it rests at whenever no effect is under way. */
-export type AutomationTarget = 'riserGain' | 'riserFrequency' | 'highpass' | 'lowpass' | 'throwSend' | 'padGate';
+/**
+ * Parameters that the effects move. Each has one value it rests at whenever no effect is under way.
+ * highpassShare is the share of the mix taken through the swept high-pass rather than the one resting open beside it.
+ */
+export type AutomationTarget =
+  | 'riserGain'
+  | 'riserFrequency'
+  | 'highpass'
+  | 'highpassShare'
+  | 'lowpass'
+  | 'throwSend'
+  | 'padGate';
 
 /** How the value gets to a point from the one before: jumps there, or moves in a straight or exponential line. */
 export type Ramp = 'set' | 'linear' | 'exponential';
@@ -25,6 +35,7 @@ export const RESTING_VALUE: Readonly<Record<AutomationTarget, number>> = {
   riserGain: 0,
   riserFrequency: RISER.lowHz,
   highpass: HIGHPASS.openHz,
+  highpassShare: 0,
   lowpass: LOWPASS.openHz,
   throwSend: 0,
   padGate: 1,
@@ -41,6 +52,10 @@ const GAP_FADE_SECONDS = 0.03;
 // A filter whose frequency jumps while sound flows through it lets out a thump far louder than the sound itself.
 // The low-pass closes over the tails of the drop before an intro, so it glides shut instead of jumping.
 const LOWPASS_CLOSE_SECONDS = 0.02;
+// Opening the high-pass in one step clipped the drop after a build that plays into it. The drop instead hands the
+// mix over to the high-pass resting open, ending as the drop lands so that its first hit comes with all its low end,
+// and the swept one opens once nothing of it is heard. Long enough not to click.
+const HIGHPASS_HANDOVER_SECONDS = 0.005;
 // Slow enough that the tail of the chord cut by the gap does not come back, and no slower than any pad's attack
 // (checked against the sound table), so the gate never blunts the first chord of the drop.
 export const GATE_REOPEN_SECONDS = 0.4;
@@ -86,16 +101,25 @@ export function fxAutomation(events: readonly FxEvent[], pairStart: Seconds, ste
       }
       case 'sweep':
         return event.filter === 'highpass'
-          ? along('highpass', event.span, highpassFrequency, 'exponential')
+          ? along('highpass', event.span, highpassFrequency, 'exponential', [
+              // Both high-passes stand open here, so the mix moves over to the swept one unheard.
+              { target: 'highpass', time: at(0), value: HIGHPASS.openHz, ramp: 'set' },
+              { target: 'highpassShare', time: at(0), value: 0, ramp: 'set' },
+              { target: 'highpassShare', time: after(at(0), HIGHPASS_HANDOVER_SECONDS), value: 1, ramp: 'linear' },
+            ])
           : along('lowpass', event.span, lowpassFrequency, 'exponential', [
               { target: 'lowpass', time: at(0), value: LOWPASS.openHz, ramp: 'set' },
               { target: 'lowpass', time: after(at(0), LOWPASS_CLOSE_SECONDS), value: LOWPASS.closedHz, ramp: 'exponential' },
             ]);
-      case 'filterReset':
+      case 'filterReset': {
+        const end = at(STEPS_PER_PAIR);
         return [
-          { target: 'highpass', time: at(STEPS_PER_PAIR), value: HIGHPASS.openHz, ramp: 'set' },
-          { target: 'lowpass', time: at(STEPS_PER_PAIR), value: LOWPASS.openHz, ramp: 'set' },
+          { target: 'highpassShare', time: after(end, -HIGHPASS_HANDOVER_SECONDS), value: 1, ramp: 'set' },
+          { target: 'highpassShare', time: end, value: 0, ramp: 'linear' },
+          { target: 'highpass', time: end, value: HIGHPASS.openHz, ramp: 'set' },
+          { target: 'lowpass', time: end, value: LOWPASS.openHz, ramp: 'set' },
         ];
+      }
       case 'throw': {
         const hit = at(event.step);
         return [
