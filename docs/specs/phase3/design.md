@@ -381,7 +381,7 @@ type FxEvent =
   | { fx: 'sweep'; filter: 'lowpass' | 'highpass'; span: FxSpan }
   | { fx: 'impact'; step: Step }
   | { fx: 'throw'; step: Step }
-  | { fx: 'filterReset'; step: Step }
+  | { fx: 'filterReset' }   // その2bar の終わり
   | { fx: 'gap'; from: Step; pad: 'cut' | 'held' };   // その2bar の終わりまで溜め
 ```
 
@@ -390,7 +390,8 @@ type FxEvent =
 | ライザー | ビルドの各2bar | ビルドの頭から止まる位置までの進み具合。止まる位置は、`silencesGap` が真の入り方では溜めの頭（最後の2bar のステップ28。最後の2bar は `to = 28`）、それ以外ではドロップの頭（最後の2bar は `to = 32`） |
 | ハイパスのスイープ | ビルドの各2bar | ライザーと同じ区間と進み具合 |
 | ローパスのスイープ | イントロの最後の8bar より前の各2bar | イントロの頭から、イントロの最後の8bar の頭までの進み具合 |
-| インパクト・フィルターのリセット | `opensDrop` の2bar | ステップ0 |
+| インパクト | `opensDrop` の2bar | ステップ0 |
+| フィルターのリセット | `leadsIntoDrop` の2bar | その2bar の終わり（ドロップの頭）。ドロップ側の2bar に置くと、ペアごとに求める開始時刻の浮動小数の誤差で、リセットが同じ瞬間に終わるハイパスのランプより前に入ることがある。そうなるとランプがリセットの値から閉じ直し、ハイパスが閉じたままドロップが鳴るため、ランプと同じ2bar の開始時刻から求める |
 | 溜め | `dropLeadIn` が溜めのある入り方の2bar | ステップ28 から。`pad` は `silencesGap` が真なら `cut`、`padHold` なら `held` |
 | リバーブスロー | `leadsIntoDrop` か `leadsIntoBreakdown` の2bar | 鳴る側のドラムのうち最後のスネアの位置。`leadsIntoDrop` の2bar では、入り方によらずステップ28より前に限る（ピックアップや溜めなしのロールの終わりの残響を、ドロップの頭に被せないため） |
 
@@ -425,7 +426,7 @@ function fxAutomation(events: readonly FxEvent[], pairStart: Seconds, stepSecond
 | --- | --- |
 | ライザー | 区間の頭で開始時の値に `set`、終わりで終了時の値へ。音量は `linear`（0 に向けた指数ランプは使えないため）、周波数は `exponential`。`endProgress` が1なら、10 ms 後に音量を0へ `linear` |
 | スイープ | 区間の頭で開始時の周波数に `set`、終わりへ `exponential` |
-| フィルターのリセット | ハイパスとローパスを開いた周波数に `set` |
+| フィルターのリセット | 2bar の終わりで、ハイパスとローパスを開いた周波数に `set`。同じ瞬間に終わるハイパスのランプより後に予約する（同時刻の点は予約した順に効くため） |
 | リバーブスロー | 打音の 5 ms 前に送り量を `set`、120 ms 後に0へ `set` |
 | 溜め | `pad` が `cut` のとき、開始で1に `set`、30 ms でパッドのゲートを0へ `linear`。2bar の終わりで0に `set` し、0.4 秒（パッドのアタック）で1へ `linear`。すぐに1に戻すと、溜めで切ったパッドのリリースがドロップの頭で聞こえ直すため。`held` のときは点を作らない |
 

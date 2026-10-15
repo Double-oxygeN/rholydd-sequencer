@@ -432,7 +432,7 @@ interface RiserSegment { fx: 'riser'; span: FxSpan }
 interface Impact       { fx: 'impact'; step: Step }
 interface ReverbThrow  { fx: 'throw'; step: Step }                       // 対象はスネアだけ
 interface SweepSegment { fx: 'sweep'; filter: 'lowpass' | 'highpass'; span: FxSpan }
-interface FilterReset  { fx: 'filterReset'; step: Step }                 // ビルドの後のドロップの頭
+interface FilterReset  { fx: 'filterReset' }                             // ビルドの最後の2bar の終わり（ドロップの頭）
 interface Gap          { fx: 'gap'; from: Step; pad: 'cut' | 'held' }   // 溜め。その2bar の終わりまで。cut なら再生側はパッドを切る。溜めなしでは出さない
 type FxEvent = RiserSegment | Impact | ReverbThrow | SweepSegment | FilterReset | Gap;
 ```
