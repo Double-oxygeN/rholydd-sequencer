@@ -80,7 +80,7 @@ GenDnB
 | --- | --- | --- | --- |
 | F-75 | 再生 | 再生中に一時停止すると、全パート・リバーブの残響・FX が短いフェードですぐに止まる。再開すると、一時停止した時点でまだ鳴っていなかった最初のステップ（16分音符）から鳴らす | 必須 |
 | F-76 | 再生 | 再開した後に生成・再生されるイベント列・FX・オートメーションの値は、一時停止しなかった場合と同じになる。再開位置をまたいで鳴っていたノートは、再開位置から残りの長さで鳴らし直す。ライザー・スイープ・パッドのゲートは再開位置の値から続け、ダッキングは再開位置以降のキックから予約し直す | 必須 |
-| F-77 | UI | 1つのボタンで再生・一時停止・再開を切り替え、停止のボタンを別に置く。停止は再生中と一時停止中に押せ、次の再生は最初から始まる。BPM と初期キーは停止中だけ変えられる。一時停止中は、位置の表示とステップのハイライトが止めた位置を保つ | 必須 |
+| F-77 | UI | 1つのボタンで再生・一時停止・再開を切り替え、停止のボタンを別に置く。停止は再生中と一時停止中に押せ、次の再生は最初から始まる。BPM と初期キーは停止中だけ変えられる。一時停止中は、位置の表示と、最後に鳴ったステップのハイライトを保つ | 必須 |
 | F-78 | 構造 | 進行の各コードに、確率でテンションを1つ加える。テンションはコードごとの表（アボイドノートを除く）から選ぶ | 必須 |
 | F-79 | 構造 | iv の位置のコードを確率で IV7（ドリア）か ♭IImaj7（フリギア）に、v の位置のコードを確率で V7（和声的短音階）に置き換える | 必須 |
 | F-80 | 構造 | 色付け（F-78・F-79）は、主進行ではサイクルの頭で主進行と一緒に決め、主進行を引き継ぐときは色付けも引き継ぐ。転換進行では32bar の頭で決める。色付けは新しいシードから引き、既存の乱数列の引き方を変えない | 必須 |
@@ -187,9 +187,11 @@ type TensionOf<S extends ChordSymbol> = …;   // 表のとおり。例: Tension
 // 色付けしたコード。symbol と tension の組は表にあるものしか作れない
 type ColoredChord = { [S in ChordSymbol]: { symbol: S; tension: TensionOf<S> | null } }[ChordSymbol];
 
-// 主進行は i で始まる。iv の位置は iv・IV7・♭IImaj7、v の位置は v・V7 のいずれか
-type MainProgression = readonly [TonicChord, ColoredChord, ColoredChord, ColoredChord];
-type TransitionProgression = readonly [OffTonicChord, ColoredChord, ColoredChord, OffTonicChord];
+// 進行は、表から選んだ骨組み（ダイアトニックのコード4つ）と、色付けしたコード4つの組で持つ
+// 色付けしたコードは、骨組みの同じ位置のコードか、その借用和音（iv の位置は IV7・♭IImaj7、v の位置は V7）
+// 主進行の先頭は i のまま。転換進行の両端は i 以外のまま
+interface MainProgression { readonly skeleton: MainSkeleton; readonly chords: readonly [Colored<'i'>, ColoredChord, ColoredChord, ColoredChord] }
+interface TransitionProgression { readonly skeleton: TransitionSkeleton; readonly chords: readonly [ColoredChord, ColoredChord, ColoredChord, ColoredChord] }
 
 // 構成音の番号。ベースが選ぶ音と、反復の一致（F-40）の比較に使う
 type ChordTone = 'root' | 'third' | 'fifth' | 'seventh';
@@ -225,8 +227,8 @@ type ChordTone = 'root' | 'third' | 'fifth' | 'seventh';
 
 一時停止を押した時点で、まだ鳴っていなかった最初のステップから再開します。
 
-- 16分音符単位にするのは、ステップグリッドのハイライトが止まった位置と、再開して最初に鳴る位置を一致させるためです。2bar や小節の頭まで戻すと、聴いた部分を聴き直すことになります
-- 止めた時点で鳴っていたステップは鳴らし直しません。同じ打音が2度聞こえないようにするためです
+- 16分音符単位にするのは、聴いた部分を聴き直さず、聴いていない部分も飛ばさないためです。2bar や小節の頭まで戻すと、聴いた部分を聴き直すことになります
+- 止めた時点で鳴っていたステップは鳴らし直しません。同じ打音が2度聞こえないようにするためです。一時停止中のステップグリッドのハイライトは、最後に鳴ったステップに残り、再開はその次のステップから鳴ります
 
 ### 再開したときに鳴るもの
 
