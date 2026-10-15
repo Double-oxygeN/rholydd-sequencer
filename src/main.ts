@@ -7,6 +7,7 @@ import { seedFromQuery } from './params/query.ts';
 import { createParamStore } from './params/store.ts';
 import { createControls } from './ui/controls.ts';
 import { createStepGrid } from './ui/grid.ts';
+import { createMenu } from './ui/menu.ts';
 import { createMixerView } from './ui/mixer.ts';
 import { createPanel } from './ui/panel.ts';
 import { createPositionView } from './ui/position.ts';
@@ -36,7 +37,15 @@ async function boot(root: HTMLElement) {
   const status = document.createElement('p');
   status.className = 'status';
   status.textContent = 'サンプルを読み込み中…';
-  root.append(title, controls.element, panel.element, position.element, views.element, mixerView.element, status);
+  root.append(
+    title,
+    controls.element,
+    position.element,
+    views.element,
+    createMenu('パラメーター', panel.element),
+    createMenu('ミキサー', mixerView.element),
+    status,
+  );
 
   const instruments = await loadInstruments(SAMPLE_BASE_URL, store.get().mixer, config.sound);
   status.textContent = warnings.length > 0 ? '設定ファイルの一部の値を無視しました（詳細はコンソール）' : '';

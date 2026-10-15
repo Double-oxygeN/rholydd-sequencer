@@ -57,6 +57,19 @@ h1 {
   letter-spacing: 0.04em;
 }
 
+.menu > summary {
+  width: fit-content;
+  padding: 4px 0;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.menu[open] > summary {
+  margin-bottom: 8px;
+  color: var(--fg);
+}
+
 .panel {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
