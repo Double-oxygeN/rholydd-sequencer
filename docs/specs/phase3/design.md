@@ -17,14 +17,14 @@ tools/simulate ──▶ generators/ensemble          （Tone.js に依存しな
 
 | モジュール | 責務 | Tone.js 依存 |
 | --- | --- | --- |
-| `src/structure/arrangement.ts` | サイクルのレイアウト、8bar ごとのシーン、シーンのエネルギー、シーンごとに鳴らすパート、シーンの境界の判定 | なし |
+| `src/structure/arrangement.ts` | サイクルのレイアウトとドロップの入り方、8bar ごとのシーン、シーンのエネルギー、シーンごとに鳴らすパート、シーンの境界の判定 | なし |
 | `src/structure/key.ts` | 初期キーから五度圏を何歩進んだかを表す型と、1歩動かす関数、そこからキーを求める関数 | なし |
 | `src/structure/harmony.ts` | 主進行の選択をサイクル単位に、転換進行の選択を32bar 単位に分ける。サイクルの頭での移調を決める | なし |
 | `src/structure/conductor.ts` | サイクルを数え、`Context` にサイクル・シーン・次のシーンを加え、キーと音色をサイクルごとに求める | なし |
 | `src/structure/timbre.ts` | パートごとの音色の名前の表と、サイクルの頭での音色の選択 | なし |
 | `src/generators/line.ts` | 型とモチーフのシードを A 系はサイクルから、B は32bar から派生させる | なし |
 | `src/generators/drums/*` | 強い変異のタイミング、シーンの境界に応じたフィルの種類と有無 | なし |
-| `src/generators/arrange.ts` | 生成したイベントから、シーンで鳴らすパートだけを残し、溜めを空ける | なし |
+| `src/generators/arrange.ts` | 生成したイベントから、シーンで鳴らすパートだけを残し、ドロップの入り方に従って溜めを空ける | なし |
 | `src/generators/fx/index.ts` | 2bar ごとの FX のイベント | なし |
 | `src/generators/ensemble.ts` | 生成 → 選別 → FX の順に2bar を作る | なし |
 | `src/engine/automation.ts` | FX のイベントから、パラメーターごとのオートメーションの点列を求める | なし |
@@ -44,7 +44,10 @@ tools/simulate ──▶ generators/ensemble          （Tone.js に依存しな
 | `SectionInCycle` | number | サイクル内の8bar の番号（0 始まり）。サイクルの長さ未満 |
 | `LeadSections` | `2 \| 3` | イントロ・ブレイクダウンの8bar の数 |
 | `DropPhrases` | `1 \| 2` | ドロップの32bar の数 |
-| `CycleLayout` | `{ intro, breakdown, firstDrop, secondDrop }` | サイクルの長さは `32 × (2 + firstDrop + secondDrop)` bar から求め、別に持たない |
+| `CycleLayout` | `{ intro, breakdown, firstDrop, secondDrop, leadIns }` | サイクルの長さは `32 × (2 + firstDrop + secondDrop)` bar から求め、別に持たない。`leadIns` の2つは異なる |
+| `DropOrdinal` | `'first' \| 'second'` | サイクル内のドロップ1・ドロップ2 |
+| `DropLeadIn` | `'silence' \| 'pickup' \| 'padHold' \| 'straight'` | ドロップの入り方。ビルドの `SceneRole` だけが持つ |
+| `GapLeadIn` | `Exclude<DropLeadIn, 'straight'>` | 溜めのある入り方 |
 | `Scene` | `'intro' \| 'build' \| 'drop' \| 'breakdown'` | |
 | `SceneRole` | シーンごとの判別共用体（下記） | 長さを超える位置を表現できない |
 | `FxEvent` | FX の判別共用体（下記） | |
@@ -61,10 +64,12 @@ type DropPosition  = { phrases: 1; phrase: 0 } | { phrases: 2; phrase: 0 | 1 };
 
 type SceneRole =
   | ({ scene: 'intro' } & LeadPosition)
-  | ({ scene: 'build' } & BuildPosition)
-  | ({ scene: 'drop'; drop: 'first' | 'second' } & DropPosition)
+  | ({ scene: 'build'; leadIn: DropLeadIn } & BuildPosition)
+  | ({ scene: 'drop'; drop: DropOrdinal } & DropPosition)
   | ({ scene: 'breakdown' } & LeadPosition);
 ```
+
+入り方をビルドの `SceneRole` に持たせるのは、ビルドの全2bar がそれを読む（ライザーとハイパスの進み具合の分母が入り方で変わる）一方、ほかのシーンには意味がないためです。`Context` に入り方の欄を足すと、ビルド以外でも値を持ててしまいます。
 
 ### `Context` に加えるもの
 
@@ -101,7 +106,20 @@ type Context = PairRole & SectionHarmony & {
 | 2つ目 | 0.5 未満ならブレイクダウン 3、それ以外は 2 |
 | 3つ目 | ドロップの延長。`[1/3, 1/6, 1/6, 1/3]` の重みで、なし・ドロップ1・ドロップ2・両方 |
 
-`cycleScenes(layout)` は、サイクルの8bar ごとの `SceneRole` を並べた配列を返します。コンダクターはサイクルの頭でこれを作って保持し、`sectionInCycle` 番目を `Context` に入れます。
+続けて `drawLayout` は、`hash(cycleSeed, TAG.dropLeadIn)`（`TAG.dropLeadIn = 23`）から2つの整数を引き、`leadIns` を決めます。レイアウトの乱数とシードを分けるのは、レイアウトの3つの値の引き方を変えないためです。
+
+```ts
+const DROP_LEAD_INS = ['silence', 'pickup', 'padHold', 'straight'] as const;
+```
+
+| 乱数 | 使い方 |
+| --- | --- |
+| 1つ目 | `int(4)` で、ドロップ1の入り方を `DROP_LEAD_INS` から選ぶ |
+| 2つ目 | `int(3)` で、ドロップ2の入り方を、ドロップ1の入り方を除いた残りから選ぶ |
+
+入り方をレイアウトに含めるのは、どちらもサイクルの頭で決まってサイクルの途中で変わらず、`cycleScenes` が両方からシーンの列を作るためです。
+
+`cycleScenes(layout)` は、サイクルの8bar ごとの `SceneRole` を並べた配列を返します。イントロの後のビルドには `leadIns.first`、ブレイクダウンの後のビルドには `leadIns.second` を入れます。コンダクターはサイクルの頭でこれを作って保持し、`sectionInCycle` 番目を `Context` に入れます。
 
 ### エネルギー
 
@@ -134,7 +152,14 @@ type Context = PairRole & SectionHarmony & {
 | `opensDrop(ctx)` | ビルドの後のドロップの最初の2bar（ドロップの `phrase` が 0 で、32bar の頭） |
 | `refreshesReference(role)` | イントロ、または「ドロップ1の最初の32bar」以外のドロップ。32bar の頭でだけ使う |
 
-溜めの開始位置 `GAP_START`（ステップ28）もここに置きます。
+`dropLeadIn(ctx)` は、`leadsIntoDrop(ctx)` が真の2bar でそのビルドの入り方を、それ以外で `null` を返します。
+
+溜めの開始位置 `GAP_START`（ステップ28）もここに置きます。入り方ごとの扱いは次の関数で引きます。
+
+| 関数 | 中身 |
+| --- | --- |
+| `hasGap(leadIn): leadIn is GapLeadIn` | `straight` 以外で真 |
+| `silencesGap(leadIn: GapLeadIn)` | 溜めでパッドとライザーも止めるか。`silence` と `pickup` で真、`padHold` で偽 |
 
 ## 主題の共有
 
@@ -329,7 +354,17 @@ function phraseFill(seed, intensity, cue: PhraseFillCue): Fill | null;
 生成した2bar から、実際に鳴るイベントを作ります。生成側の結果（`ctx.drums`、各パートのライン）は書き換えません。シミュレーションで「生成されたもの」と「鳴ったもの」を両方数えられるようにし、フェーズ2までのテストが見ている生成側の性質をそのまま保つためです。
 
 1. ドラムは `playsHit(sceneRole, hit)`、音程のあるパートは `plays(sceneRole, voice)` が偽のイベントを取り除く。ただしブレイクダウンの最後の2bar（`changesScene` が真）では、フィルの層のスネアを残す
-2. `leadsIntoDrop(ctx)` なら、ステップ28以降に始まるドラムの打音を取り除き、音程のあるパートのノートを `step + length ≤ 28` に切り詰める。切り詰めて長さが0になるノートは取り除く
+2. `dropLeadIn(ctx)` が溜めのある入り方なら、ステップ28以降に始まるドラムの打音を取り除き、音程のあるパートのノートを `step + length ≤ 28` に切り詰める。切り詰めて長さが0になるノートは取り除く。ただし `padHold` ではパッドを切り詰めない
+3. `pickup` なら、ステップ30 にスネアの打音（ベロシティ 0.9、層は `fill`）を1つ加える
+
+| 入り方 | ドラム | パッド | ほかの音程のあるパート | 加える打音 |
+| --- | --- | --- | --- | --- |
+| `silence` | 28 未満だけ | 28 で切る | 28 で切る | なし |
+| `pickup` | 28 未満だけ | 28 で切る | 28 で切る | ステップ30 のスネア |
+| `padHold` | 28 未満だけ | そのまま | 28 で切る | なし |
+| `straight` | そのまま | そのまま | そのまま | なし |
+
+ビルドで鳴る音程のあるパートはスタブとパッドだけなので、`padHold` で切るのは実質的にスタブです。ピックアップのスネアをドラム生成器のフィルに入れず、ここで加えるのは、フィル強度が0（フィルなし）でもピックアップを残すためです。層を `fill` にするのは、グリッドとシミュレーションで、基準パターンや装飾の打音と区別できるようにするためです。
 
 溜めをフィルに含めないのは、フィル強度が0でも溜めを残す（要件のパラメーター仕様）ためです。溜めを「4ステップのドロップアウト」として作ると、強度0で「大きなフィルが入らない」ことと食い違います。
 
@@ -347,19 +382,19 @@ type FxEvent =
   | { fx: 'impact'; step: Step }
   | { fx: 'throw'; step: Step }
   | { fx: 'filterReset'; step: Step }
-  | { fx: 'gap'; from: Step };   // その2bar の終わりまで溜め
+  | { fx: 'gap'; from: Step; pad: 'cut' | 'held' };   // その2bar の終わりまで溜め
 ```
 
 | FX | 2bar | 内容 |
 | --- | --- | --- |
-| ライザー | ビルドの各2bar | ビルドの頭から溜めの頭（最後の2bar のステップ28）までの進み具合。最後の2bar は `to = 28` |
+| ライザー | ビルドの各2bar | ビルドの頭から止まる位置までの進み具合。止まる位置は、`silencesGap` が真の入り方では溜めの頭（最後の2bar のステップ28。最後の2bar は `to = 28`）、それ以外ではドロップの頭（最後の2bar は `to = 32`） |
 | ハイパスのスイープ | ビルドの各2bar | ライザーと同じ区間と進み具合 |
 | ローパスのスイープ | イントロの最後の8bar より前の各2bar | イントロの頭から、イントロの最後の8bar の頭までの進み具合 |
 | インパクト・フィルターのリセット | `opensDrop` の2bar | ステップ0 |
-| 溜め | `leadsIntoDrop` の2bar | ステップ28 から |
-| リバーブスロー | `leadsIntoDrop` か `leadsIntoBreakdown` の2bar | 鳴る側のドラムのうち、最後のスネアの位置（溜めがあればステップ28より前） |
+| 溜め | `dropLeadIn` が溜めのある入り方の2bar | ステップ28 から。`pad` は `silencesGap` が真なら `cut`、`padHold` なら `held` |
+| リバーブスロー | `leadsIntoDrop` か `leadsIntoBreakdown` の2bar | 鳴る側のドラムのうち、ステップ28より前（溜めがなければ2bar 全体）で最後のスネアの位置。ピックアップのスネアは溜めの中にあるので送らない |
 
-進み具合は `(シーン内の通しステップ) / (区間全体のステップ数)` です。シーン内の位置は `sceneRole` の `index`、`pairIn8`、ステップから求めます。
+進み具合は `(シーン内の通しステップ) / (区間全体のステップ数)` です。シーン内の位置は `sceneRole` の `index`、`pairIn8`、ステップから求めます。ライザーとハイパスの区間全体は、ビルドの頭からビルドの `leadIn` で決まる止まる位置までです。
 
 ## アンサンブル
 
@@ -392,7 +427,7 @@ function fxAutomation(events: readonly FxEvent[], pairStart: Seconds, stepSecond
 | スイープ | 区間の頭で開始時の周波数に `set`、終わりへ `exponential` |
 | フィルターのリセット | ハイパスとローパスを開いた周波数に `set` |
 | リバーブスロー | 打音の 5 ms 前に送り量を `set`、120 ms 後に0へ `set` |
-| 溜め | 開始で1に `set`、30 ms でパッドのゲートを0へ `linear`。2bar の終わりで0に `set` し、0.4 秒（パッドのアタック）で1へ `linear`。すぐに1に戻すと、溜めで切ったパッドのリリースがドロップの頭で聞こえ直すため |
+| 溜め | `pad` が `cut` のとき、開始で1に `set`、30 ms でパッドのゲートを0へ `linear`。2bar の終わりで0に `set` し、0.4 秒（パッドのアタック）で1へ `linear`。すぐに1に戻すと、溜めで切ったパッドのリリースがドロップの頭で聞こえ直すため。`held` のときは点を作らない |
 
 インパクトは点ではなく発音なので、エンジンが直接鳴らします。
 
@@ -473,6 +508,7 @@ FX の音量は 0 dB、ミュートはオフです。
 - シーンで鳴らさないパートの鳴る側のイベント数（0になるはず）
 - 移調の回数と、初期キーから五度圏で何歩離れたキーか（−5〜+6。負は下属調の向き）ごとの小節数
 - パートごとの、音色ごとのサイクル数と、音色が替わった回数
+- ドロップ1・ドロップ2ごとの、入り方ごとの出現数
 
 音度やコードトーンの判定（サブベースの音度の分布、コード外の音の数、反復率）は、セッションのキーではなく `ctx.key` で数えます。
 
@@ -485,6 +521,7 @@ FX の音量は 0 dB、ミュートはオフです。
 | MVP〜フェーズ2の基準 | 既存のテストを維持する。フェーズ1の「B が最も疎で A'' が最も密」はシーンのエネルギーに置き換わるので、ドロップのエネルギーのテストに差し替える。MVP の「ドラムの層の後に音程のあるパート」は、選別の後のイベントとの比較に書き換える |
 | シーンの並び | 8bar ごとの `sceneRole` を、`layout` から期待される並びと比べる。サイクルの長さ、ドロップの開始が32bar の頭、ビルドの次がドロップ |
 | レイアウトの網羅 | 8192bar・複数シードで、イントロとブレイクダウンの長さ4通り、延長4通りが現れる |
+| 入り方の網羅 | 8192bar・複数シードで、ドロップ1・ドロップ2のそれぞれに4つの入り方が現れ、どのサイクルでも `leadIns.first` と `leadIns.second` が異なる |
 | 鳴らさないパート | 鳴る側のイベントを `plays` の表と照合する。ブレイクダウンの最後のフィルのスネアだけを除く |
 | イントロの最初の8bar | すべてのイントロの `index: 0` で、サブベース・ゴースト・奇数ステップのハイハットが鳴る側にない。`index` が1以上ではサブベースが鳴る |
 | エネルギー | ビルドで単調増加かつドロップの A 以下、ドロップはフェーズ1のカーブ、2周目以降のイントロは単調減少、`energyDepth = 0` で全て1 |
@@ -497,9 +534,9 @@ FX の音量は 0 dB、ミュートはオフです。
 | ドロップ間の主題 | 同じサイクルのドロップの32bar の A 系で、進行と、大きなフィル区間より前のリース・スタブ・パッドのイベント列が一致 |
 | B の型 | 転換の8bar の型がサイクルの A の型と異なる |
 | 基準パターン | 基準が変わる2bar が、サイクルの頭か、ドロップ1の最初を除くドロップの32bar の頭 |
-| 溜め | `leadsIntoDrop` の2bar で、大きなフィルがロール系か null（強度0）で、鳴る側の全イベントが28より前に終わる |
+| 溜め | `leadsIntoDrop` の2bar で、大きなフィルがロール系か null（強度0）。`silence` では鳴る側の全イベントが28より前に終わり、`pickup` ではそれに加えてステップ30 のスネア1打だけがあり、`padHold` ではパッド以外が28より前に終わってパッドがある。`straight` では選別の前後でイベントが変わらない（シーンで鳴らさないパートを除く） |
 | 必須フィル | `changesScene` の2bar で、`fillIntensity > 0` ならフィルがある |
-| FX の位置 | インパクト、ライザー、スイープ、スローの位置と進み具合を、上の表の条件と照合する |
+| FX の位置 | インパクト、ライザー、スイープ、スロー、溜めの位置と進み具合を、上の表の条件と入り方に照らして照合する |
 | 再現性 | 同じシードで2回生成した `events` と `fx` が一致する |
-| オートメーション | `fxAutomation` の点列で、ライザーの音量が単調に増えて溜めで0になる、スイープが区間の端で期待値になる、溜めでパッドのゲートが閉じて2bar の終わりで開く |
+| オートメーション | `fxAutomation` の点列で、ライザーの音量が単調に増えて止まる位置で0になる、スイープが区間の端で期待値になる、`pad: 'cut'` の溜めでだけパッドのゲートが閉じて2bar の終わりで開く |
 | 5ms 以内 | アンサンブルの `next` の平均時間（選別と FX を含む） |
