@@ -16,15 +16,19 @@ import { DEFAULT_LIVE_PARAMS } from '../src/params/store.ts';
 import { parseSeed, type Seed } from '../src/random/rng.ts';
 import {
   BARS_PER_SECTION,
+  DROP_LEAD_INS,
   cycleSections,
+  dropLeadIn,
   plays,
   playsHit,
   refreshesReference,
   type CycleLayout,
+  type DropLeadIn,
+  type DropOrdinal,
   type Scene,
 } from '../src/structure/arrangement.ts';
 import { chordOf, type Context, type LiveParams } from '../src/structure/conductor.ts';
-import type { SectionIn32 } from '../src/structure/form.ts';
+import { SECTIONS_PER_PHRASE, type SectionIn32 } from '../src/structure/form.ts';
 import {
   MAIN_PROGRESSIONS,
   TRANSITION_PROGRESSIONS,
@@ -120,6 +124,8 @@ export interface SimulationReport {
     /** Number of cycles per pair of intro and breakdown lengths in bars, such as "24/16". */
     readonly leads: Record<string, number>;
     readonly extensions: Record<DropExtension, number>;
+    /** Number of builds that led into each drop of a cycle in each way. */
+    readonly leadIns: Record<DropOrdinal, Record<DropLeadIn, number>>;
     readonly scenes: Record<Scene, SceneStats>;
     /** Heard events of parts that their scene leaves out, apart from the snare roll ending a breakdown. Always 0. */
     readonly misplaced: number;
@@ -223,6 +229,8 @@ export function simulate({ bars, seed, live, initialKey = DEFAULT_KEY }: Simulat
     LEAD_BARS.flatMap((intro) => LEAD_BARS.map((breakdown) => [`${intro}/${breakdown}`, 0])),
   ) as Record<string, number>;
   const extensions: Record<DropExtension, number> = { none: 0, first: 0, second: 0, both: 0 };
+  const leadInCounts = () => Object.fromEntries(DROP_LEAD_INS.map((leadIn) => [leadIn, 0])) as Record<DropLeadIn, number>;
+  const leadIns: Record<DropOrdinal, Record<DropLeadIn, number>> = { first: leadInCounts(), second: leadInCounts() };
   const sceneBars = Object.fromEntries(SCENES.map((scene) => [scene, 0])) as Record<Scene, number>;
   const sceneDrums = Object.fromEntries(SCENES.map((scene) => [scene, 0])) as Record<Scene, number>;
   const sceneNotes = Object.fromEntries(
@@ -286,6 +294,9 @@ export function simulate({ bars, seed, live, initialKey = DEFAULT_KEY }: Simulat
       if (!allowed && !(scene === 'breakdown' && announcesDrums)) misplaced++;
     }
     for (const event of fx) fxCounts[event.fx]++;
+    const leadIn = dropLeadIn(ctx);
+    // The first drop always starts the cycle's second 32 bars, so only the build before it lies in the first.
+    if (leadIn !== null) leadIns[ctx.sectionInCycle < SECTIONS_PER_PHRASE ? 'first' : 'second'][leadIn]++;
     if (ctx.isSectionStart && (ctx.sectionRole.isPhraseStart || ctx.sectionRole.relation === 'transition')) {
       const plan = ctx.sectionRole.relation === 'transition' ? 'transition' : 'main';
       styles[sub.style][plan]++;
@@ -403,6 +414,7 @@ export function simulate({ bars, seed, live, initialKey = DEFAULT_KEY }: Simulat
       lengths: cycleLengths,
       leads,
       extensions,
+      leadIns,
       scenes: Object.fromEntries(
         SCENES.map((scene): [Scene, SceneStats] => {
           const bars = sceneBars[scene];
@@ -530,6 +542,10 @@ function formatArrangement({ arrangement, fx, timbre }: SimulationReport): strin
     `  length:     ${Object.entries(arrangement.lengths).map(([bars, n]) => `${bars} bars ${n}`).join('  ')}`,
     `  intro/breakdown bars: ${Object.entries(arrangement.leads).map(([lead, n]) => `${lead} ${n}`).join('  ')}`,
     `  extended drops: ${Object.entries(arrangement.extensions).map(([which, n]) => `${which} ${n}`).join('  ')}`,
+    ...(['first', 'second'] as const).map(
+      (drop) =>
+        `  lead-ins into the ${drop} drop: ${DROP_LEAD_INS.map((leadIn) => `${leadIn} ${arrangement.leadIns[drop][leadIn]}`).join('  ')}`,
+    ),
     `  scene        bars  drums/bar ${PITCHED_PARTS.map((part) => part.padStart(6)).join(' ')}  (notes per 2 bars)`,
     ...SCENES.map((scene) => {
       const stats = arrangement.scenes[scene];
