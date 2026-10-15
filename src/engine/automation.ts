@@ -92,6 +92,7 @@ export function fxAutomation(events: readonly FxEvent[], pairStart: Seconds, ste
         ];
       }
       case 'gap': {
+        if (event.pad === 'held') return [];
         const start = at(event.from);
         const end = at(STEPS_PER_PAIR);
         return [

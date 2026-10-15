@@ -1,4 +1,13 @@
-import { GAP_START, leadsIntoBreakdown, leadsIntoDrop, opensDrop } from '../../structure/arrangement.ts';
+import {
+  GAP_START,
+  dropLeadIn,
+  hasGap,
+  leadsIntoBreakdown,
+  leadsIntoDrop,
+  opensDrop,
+  silencesGap,
+  type DropLeadIn,
+} from '../../structure/arrangement.ts';
 import type { Context } from '../../structure/conductor.ts';
 import { PAIRS_PER_SECTION } from '../../structure/form.ts';
 import type { Brand, UnitInterval } from '../../units.ts';
@@ -48,10 +57,14 @@ export interface FilterReset {
   readonly step: Step;
 }
 
-/** The silent beat before a drop, from the given step to the end of the 2 bars. */
+/**
+ * The gap before a drop, from the given step to the end of the 2 bars. Playback cuts the pad when the gap
+ * silences it, and leaves it ringing when the lead-in holds it over the stopped drums.
+ */
 export interface Gap {
   readonly fx: 'gap';
   readonly from: Step;
+  readonly pad: 'cut' | 'held';
 }
 
 export type FxEvent = RiserSegment | SweepSegment | Impact | ReverbThrow | FilterReset | Gap;
@@ -61,10 +74,10 @@ export function fxEvents(ctx: Context, heard: readonly NoteEvent[]): readonly Fx
   const events: FxEvent[] = [];
   const role = ctx.sceneRole;
   if (role.scene === 'build') {
-    // Runs from the start of the build up to the silent beat, so the riser peaks right as the gap opens.
+    const peak = buildPeak(role.leadIn);
     const offset = (role.index * PAIRS_PER_SECTION + ctx.pairIn8) * STEPS_PER_PAIR;
-    const total = role.sections * PAIRS_PER_SECTION * STEPS_PER_PAIR - (STEPS_PER_PAIR - GAP_START);
-    const span = spanOf(offset, total, leadsIntoDrop(ctx) ? GAP_START : STEPS_PER_PAIR);
+    const total = role.sections * PAIRS_PER_SECTION * STEPS_PER_PAIR - (STEPS_PER_PAIR - peak);
+    const span = spanOf(offset, total, leadsIntoDrop(ctx) ? peak : STEPS_PER_PAIR);
     events.push({ fx: 'riser', span }, { fx: 'sweep', filter: 'highpass', span });
   }
   // The intro opens up by its last 8 bars, which then play in full before the build.
@@ -74,12 +87,23 @@ export function fxEvents(ctx: Context, heard: readonly NoteEvent[]): readonly Fx
     events.push({ fx: 'sweep', filter: 'lowpass', span: spanOf(offset, total, STEPS_PER_PAIR) });
   }
   if (opensDrop(ctx)) events.push({ fx: 'impact', step: 0 as Step }, { fx: 'filterReset', step: 0 as Step });
-  if (leadsIntoDrop(ctx)) events.push({ fx: 'gap', from: GAP_START as Step });
+  const leadIn = dropLeadIn(ctx);
+  const gapped = leadIn !== null && hasGap(leadIn);
+  if (gapped) events.push({ fx: 'gap', from: GAP_START as Step, pad: silencesGap(leadIn) ? 'cut' : 'held' });
   if (leadsIntoDrop(ctx) || leadsIntoBreakdown(ctx)) {
-    const lastSnare = heardDrums(heard).findLast((hit) => hit.part === 'snare');
+    // The pickup inside the gap stays dry, so that no reverb tail smears the drop's first hit.
+    const lastSnare = heardDrums(heard).findLast((hit) => hit.part === 'snare' && (!gapped || hit.step < GAP_START));
     if (lastSnare !== undefined) events.push({ fx: 'throw', step: lastSnare.step });
   }
   return events;
+}
+
+/**
+ * Where the riser and the high-pass top out: as the gap opens when it silences everything, so that the riser's
+ * peak hands over to the silence, and on the drop itself when something carries on through the last beat.
+ */
+function buildPeak(leadIn: DropLeadIn): number {
+  return hasGap(leadIn) && silencesGap(leadIn) ? GAP_START : STEPS_PER_PAIR;
 }
 
 function spanOf(offset: number, total: number, to: number): FxSpan {

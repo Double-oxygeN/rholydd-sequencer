@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { PICKUP } from '../src/generators/arrange.ts';
 import { DROP_LEAD_FILL_KINDS } from '../src/generators/drums/fill.ts';
 import type { FxEvent } from '../src/generators/fx/index.ts';
 import type { NoteEvent } from '../src/generators/types.ts';
@@ -6,10 +7,12 @@ import { patternsEqual } from '../src/generators/drums/pattern.ts';
 import { createEnsemble } from '../src/generators/ensemble.ts';
 import { toSeed } from '../src/random/rng.ts';
 import {
+  DROP_LEAD_INS,
   GAP_START,
   changesScene,
   cycleScenes,
   cycleSections,
+  dropLeadIn,
   leadsIntoDrop,
   sceneEnergy,
 } from '../src/structure/arrangement.ts';
@@ -34,6 +37,7 @@ import {
   STAB_MAX_RELEASE,
   STAB_PATCHES,
 } from '../src/engine/patches.ts';
+import { SECTIONS_PER_PHRASE } from '../src/structure/form.ts';
 import { clampUnit } from '../src/units.ts';
 import { DEFAULT_LIVE, PARAM_SETS, SEEDS, liveParams, run, type GeneratedPair } from './helpers.ts';
 
@@ -100,17 +104,34 @@ describe('phase 3 acceptance: parts per scene', () => {
     expect(openings).toBeGreaterThan(runs.length * 4 * 2);
   });
 
-  it('empties the last beat before every drop, whatever the fill intensity', () => {
-    let gaps = 0;
+  it('leaves of the last beat before every drop what its lead-in keeps, whatever the fill intensity', () => {
+    const gaps = new Map<string, number>();
     for (const { pairs } of runs) {
       for (const pair of pairs) {
-        if (!leadsIntoDrop(pair.ctx)) continue;
-        gaps++;
-        for (const event of pair.heard) expect(endOf(event)).toBeLessThanOrEqual(GAP_START);
+        const leadIn = dropLeadIn(pair.ctx);
+        if (leadIn === null) continue;
+        gaps.set(leadIn, (gaps.get(leadIn) ?? 0) + 1);
+        const inGap = pair.heard.filter((event) => endOf(event) > GAP_START);
         expect(pair.heard.some((event) => event.instrument === 'pad')).toBe(true);
+        switch (leadIn) {
+          case 'silence':
+            expect(inGap).toEqual([]);
+            break;
+          case 'pickup':
+            expect(inGap).toEqual([PICKUP]);
+            break;
+          case 'padHold':
+            expect(inGap).toEqual([pair.pad]);
+            break;
+          case 'straight':
+            // Every part of a build is heard to the end, as in any other 2 bars of the build.
+            expect(pair.heard).toEqual([...pair.events, ...pair.stab.hits, pair.pad]);
+            break;
+        }
       }
     }
-    expect(gaps).toBeGreaterThan(100);
+    expect([...gaps.keys()].sort()).toEqual([...DROP_LEAD_INS].sort());
+    for (const count of gaps.values()) expect(count).toBeGreaterThan(20);
   });
 });
 
@@ -171,7 +192,7 @@ describe('phase 3 acceptance: effects', () => {
     }
   });
 
-  it('raises the riser and the high-pass without a break through each build, ending as the silent beat starts', () => {
+  it('raises the riser and the high-pass without a break through each build, up to the gap or the drop by lead-in', () => {
     for (const { pairs } of runs) {
       let progress: number | undefined;
       for (const pair of pairs) {
@@ -189,8 +210,10 @@ describe('phase 3 acceptance: effects', () => {
         expect(span.startProgress).toBeCloseTo(progress ?? 0);
         expect(span.endProgress).toBeGreaterThan(span.startProgress);
         progress = span.endProgress;
-        if (leadsIntoDrop(pair.ctx)) {
-          expect([span.to, span.endProgress]).toEqual([GAP_START, 1]);
+        const leadIn = dropLeadIn(pair.ctx);
+        if (leadIn !== null) {
+          const silences = leadIn === 'silence' || leadIn === 'pickup';
+          expect([span.to, span.endProgress]).toEqual([silences ? GAP_START : 32, 1]);
           progress = undefined;
         }
       }
@@ -216,13 +239,17 @@ describe('phase 3 acceptance: effects', () => {
     }
   });
 
-  it('throws the last snare into the reverb before every drop after a build and every breakdown, and nowhere else', () => {
+  it('throws the last snare before any gap into the reverb before every drop after a build and every breakdown, and nowhere else', () => {
     let throws = 0;
     for (const { pairs } of runs) {
       for (const pair of pairs) {
         const thrown = ofKind(pair, 'throw');
         const before = leadsIntoDrop(pair.ctx) || (changesScene(pair.ctx) && pair.ctx.nextScene === 'breakdown');
-        const snares = pair.heard.filter((event) => event.instrument === 'drums' && event.part === 'snare');
+        const leadIn = dropLeadIn(pair.ctx);
+        const gapped = leadIn !== null && leadIn !== 'straight';
+        const snares = pair.heard.filter(
+          (event) => event.instrument === 'drums' && event.part === 'snare' && (!gapped || event.step < GAP_START),
+        );
         if (!before || snares.length === 0) {
           expect(thrown).toEqual([]);
           continue;
@@ -234,10 +261,13 @@ describe('phase 3 acceptance: effects', () => {
     expect(throws).toBeGreaterThan(100);
   });
 
-  it('opens the silent beat before every drop after a build', () => {
+  it('opens a gap before every drop after a build unless it goes straight in, cutting the pad unless it is held', () => {
+    const expected = { silence: 'cut', pickup: 'cut', padHold: 'held' } as const;
     for (const { pairs } of runs) {
       for (const pair of pairs) {
-        expect(ofKind(pair, 'gap')).toEqual(leadsIntoDrop(pair.ctx) ? [{ fx: 'gap', from: GAP_START }] : []);
+        const leadIn = dropLeadIn(pair.ctx);
+        const gap = leadIn === null || leadIn === 'straight' ? [] : [{ fx: 'gap', from: GAP_START, pad: expected[leadIn] }];
+        expect(ofKind(pair, 'gap')).toEqual(gap);
       }
     }
   });
@@ -300,6 +330,25 @@ describe('phase 3 acceptance: cycles and scenes', () => {
     expect([...seen].sort()).toEqual(
       ['lead 2/2', 'lead 2/3', 'lead 3/2', 'lead 3/3', 'drop 1/1', 'drop 1/2', 'drop 2/1', 'drop 2/2'].sort(),
     );
+  });
+});
+
+describe('phase 3 acceptance: lead-ins', () => {
+  it('leads into each drop every way over long runs, never the same way into both drops of a cycle', () => {
+    const seen = { first: new Set<string>(), second: new Set<string>() };
+    for (const seed of SEEDS) {
+      for (const { ctx } of run(seed, 8192)) {
+        const leadIn = dropLeadIn(ctx);
+        if (leadIn === null) continue;
+        // The first drop always starts the cycle's second 32 bars.
+        const drop = ctx.sectionInCycle < SECTIONS_PER_PHRASE ? 'first' : 'second';
+        expect(leadIn).toBe(ctx.layout.leadIns[drop]);
+        expect(ctx.layout.leadIns.second).not.toBe(ctx.layout.leadIns.first);
+        seen[drop].add(leadIn);
+      }
+    }
+    expect([...seen.first].sort()).toEqual([...DROP_LEAD_INS].sort());
+    expect([...seen.second].sort()).toEqual([...DROP_LEAD_INS].sort());
   });
 });
 

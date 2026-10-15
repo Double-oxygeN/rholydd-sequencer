@@ -9,7 +9,7 @@ import {
   type AutomationPoint,
   type AutomationTarget,
 } from '../src/engine/automation.ts';
-import { GAP_START, leadsIntoDrop } from '../src/structure/arrangement.ts';
+import { GAP_START, dropLeadIn, leadsIntoDrop } from '../src/structure/arrangement.ts';
 import { run } from './helpers.ts';
 
 const STEP = 0.1;
@@ -22,7 +22,7 @@ function automate(seed: number, bars: number) {
 const of = (points: readonly AutomationPoint[], target: AutomationTarget) => points.filter((p) => p.target === target);
 
 describe('fx automation', () => {
-  it('raises the riser\'s gain and pitch through each build and cuts it as the silent beat starts', () => {
+  it('raises the riser\'s gain and pitch through each build and cuts it at the gap or the drop', () => {
     let builds = 0;
     let previousGain = 0;
     for (const { pair, points } of automate(42, 2048)) {
@@ -38,7 +38,9 @@ describe('fx automation', () => {
       expect(frequencies[1]!.value).toBeGreaterThan(frequencies[0]!.value);
       if (leadsIntoDrop(pair.ctx)) {
         builds++;
-        expect(gains[1]!).toMatchObject({ value: RISER.peakGain, time: pair.ctx.pair * 32 * STEP + GAP_START * STEP });
+        const silences = pair.fx.some((event) => event.fx === 'gap' && event.pad === 'cut');
+        const peak = silences ? GAP_START : 32;
+        expect(gains[1]!).toMatchObject({ value: RISER.peakGain, time: pair.ctx.pair * 32 * STEP + peak * STEP });
         expect(frequencies[1]!.value).toBeCloseTo(RISER.highHz);
         expect(gains.at(-1)).toMatchObject({ value: 0, ramp: 'linear' });
         previousGain = 0;
@@ -84,10 +86,11 @@ describe('fx automation', () => {
     }
   });
 
-  it('closes the pad\'s gate for the silent beat and opens it again from the drop', () => {
+  it('closes the pad\'s gate for a silent gap and opens it again from the drop', () => {
     for (const { pair, points } of automate(42, 2048)) {
       const gate = of(points, 'padGate');
-      if (!leadsIntoDrop(pair.ctx)) {
+      const leadIn = dropLeadIn(pair.ctx);
+      if (leadIn !== 'silence' && leadIn !== 'pickup') {
         expect(gate).toEqual([]);
         continue;
       }

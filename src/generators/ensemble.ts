@@ -23,7 +23,7 @@ export interface EnsemblePair {
   readonly reese: ReeseLine;
   readonly stab: StabLine;
   readonly pad: PadChord;
-  /** What is heard: the parts the scene plays, with the silent beat before a drop left empty. */
+  /** What is heard: the parts the scene plays, with what the drop's lead-in leaves of the last beat of a build. */
   readonly events: readonly NoteEvent[];
   readonly fx: readonly FxEvent[];
 }

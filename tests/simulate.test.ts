@@ -47,7 +47,7 @@ describe('simulate', () => {
     expect(arrangement.scenes.breakdown.notesPerPair.sub).toBe(0);
     expect(arrangement.scenes.breakdown.drumHitsPerBar).toBeLessThan(arrangement.scenes.drop.drumHitsPerBar);
     // The last build may end the simulation before its drop lands.
-    expect(fx.gap - fx.impact).toBeGreaterThanOrEqual(0);
+    // Going straight into a drop leaves no gap.
     expect(fx.gap - fx.impact).toBeLessThanOrEqual(1);
   });
 });

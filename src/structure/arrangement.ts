@@ -12,6 +12,16 @@ export type SectionInCycle = Brand<number, 'SectionInCycle'>;
 export type LeadSections = 2 | 3;
 /** 32-bar phrases of a drop. */
 export type DropPhrases = 1 | 2;
+export type DropOrdinal = 'first' | 'second';
+
+/**
+ * How a build hands over to its drop, in its last beat: in silence, in silence but for one snare on the last 8th,
+ * with the pad and the riser held over stopped drums, or straight through without a gap.
+ */
+export const DROP_LEAD_INS = ['silence', 'pickup', 'padHold', 'straight'] as const;
+export type DropLeadIn = (typeof DROP_LEAD_INS)[number];
+/** Lead-ins that stop the drums for the last beat. */
+export type GapLeadIn = Exclude<DropLeadIn, 'straight'>;
 
 /** The cycle's length follows from the drops, so it is never stored apart from them. */
 export interface CycleLayout {
@@ -19,6 +29,8 @@ export interface CycleLayout {
   readonly breakdown: LeadSections;
   readonly firstDrop: DropPhrases;
   readonly secondDrop: DropPhrases;
+  /** Always differ, so that the second drop of a track never comes in the way the first did. */
+  readonly leadIns: Readonly<Record<DropOrdinal, DropLeadIn>>;
 }
 
 export type LeadPosition = { readonly sections: 2; readonly index: 0 | 1 } | { readonly sections: 3; readonly index: 0 | 1 | 2 };
@@ -28,9 +40,9 @@ export type DropPosition = { readonly phrases: 1; readonly phrase: 0 } | { reado
 /** Positions pair with lengths so that no position can lie past the end of its scene. */
 export type SceneRole =
   | ({ readonly scene: 'intro' } & LeadPosition)
-  /** Always followed by a drop. */
-  | ({ readonly scene: 'build' } & BuildPosition)
-  | ({ readonly scene: 'drop'; readonly drop: 'first' | 'second' } & DropPosition)
+  /** Always followed by a drop, whose lead-in every 2 bars of the build need to pace the riser. */
+  | ({ readonly scene: 'build'; readonly leadIn: DropLeadIn } & BuildPosition)
+  | ({ readonly scene: 'drop'; readonly drop: DropOrdinal } & DropPosition)
   | ({ readonly scene: 'breakdown' } & LeadPosition);
 
 export type Scene = SceneRole['scene'];
@@ -49,23 +61,31 @@ const DROP_EXTENSIONS: readonly (readonly [DropPhrases, DropPhrases, number])[] 
   [2, 2, 1 / 3],
 ];
 
-/** Draws the intro length, the breakdown length and the drop extension, in that order. */
+/** Draws the intro length, the breakdown length and the drop extension, in that order, then the lead-ins. */
 export function drawLayout(cycleSeed: Seed): CycleLayout {
   const rng = createRng(hash(cycleSeed, TAG.layout));
   const intro: LeadSections = rng.float() < 0.5 ? 3 : 2;
   const breakdown: LeadSections = rng.float() < 0.5 ? 3 : 2;
   const [firstDrop, secondDrop] = DROP_EXTENSIONS[weightedIndex(rng.float(), DROP_EXTENSIONS.map(([, , w]) => w)) ?? 0]!;
-  return { intro, breakdown, firstDrop, secondDrop };
+  return { intro, breakdown, firstDrop, secondDrop, leadIns: drawLeadIns(cycleSeed) };
+}
+
+// A seed of their own keeps the draws of the layout above as they were.
+function drawLeadIns(cycleSeed: Seed): CycleLayout['leadIns'] {
+  const rng = createRng(hash(cycleSeed, TAG.dropLeadIn));
+  const first = DROP_LEAD_INS[rng.int(DROP_LEAD_INS.length)]!;
+  const rest = DROP_LEAD_INS.filter((leadIn) => leadIn !== first);
+  return { first, second: rest[rng.int(rest.length)]! };
 }
 
 /** One role per 8-bar section of the cycle. */
 export function cycleScenes(layout: CycleLayout): readonly SceneRole[] {
   return [
     ...lead(layout.intro).map((position): SceneRole => ({ scene: 'intro', ...position })),
-    ...build(layout.intro),
+    ...build(layout.intro, layout.leadIns.first),
     ...drop('first', layout.firstDrop),
     ...lead(layout.breakdown).map((position): SceneRole => ({ scene: 'breakdown', ...position })),
-    ...build(layout.breakdown),
+    ...build(layout.breakdown, layout.leadIns.second),
     ...drop('second', layout.secondDrop),
   ];
 }
@@ -83,16 +103,16 @@ function lead(sections: LeadSections): readonly LeadPosition[] {
       ];
 }
 
-function build(leadSections: LeadSections): readonly SceneRole[] {
+function build(leadSections: LeadSections, leadIn: DropLeadIn): readonly SceneRole[] {
   return leadSections === 3
-    ? [{ scene: 'build', sections: 1, index: 0 }]
+    ? [{ scene: 'build', leadIn, sections: 1, index: 0 }]
     : [
-        { scene: 'build', sections: 2, index: 0 },
-        { scene: 'build', sections: 2, index: 1 },
+        { scene: 'build', leadIn, sections: 2, index: 0 },
+        { scene: 'build', leadIn, sections: 2, index: 1 },
       ];
 }
 
-function drop(which: 'first' | 'second', phrases: DropPhrases): readonly SceneRole[] {
+function drop(which: DropOrdinal, phrases: DropPhrases): readonly SceneRole[] {
   const positions: readonly DropPosition[] =
     phrases === 1
       ? [{ phrases, phrase: 0 }]
@@ -160,8 +180,17 @@ export function playsHit(role: SceneRole, hit: { readonly part: Voice; readonly 
   return plays(role, hit.part);
 }
 
-/** Where the silent beat before a drop starts: the last beat of the build. */
+/** Where the gap before a drop starts: the last beat of the build. */
 export const GAP_START = 28;
+
+export function hasGap(leadIn: DropLeadIn): leadIn is GapLeadIn {
+  return leadIn !== 'straight';
+}
+
+/** Whether the gap also stops the pad and the riser, leaving nothing but reverb tails (and the pickup). */
+export function silencesGap(leadIn: GapLeadIn): boolean {
+  return leadIn !== 'padHold';
+}
 
 /** The parts of a context that the scene boundaries depend on. */
 export interface ScenePlace {
@@ -174,9 +203,14 @@ export function changesScene(ctx: ScenePlace): boolean {
   return ctx.isSectionEnd && ctx.nextScene !== ctx.sceneRole.scene;
 }
 
-/** The last 2 bars of a build, which end in the silent beat. */
+/** The last 2 bars of a build, which end in the drop's lead-in. */
 export function leadsIntoDrop(ctx: ScenePlace): boolean {
   return changesScene(ctx) && ctx.nextScene === 'drop';
+}
+
+/** The lead-in that the 2 bars end in, if they are the last of a build. */
+export function dropLeadIn(ctx: ScenePlace): DropLeadIn | null {
+  return leadsIntoDrop(ctx) && ctx.sceneRole.scene === 'build' ? ctx.sceneRole.leadIn : null;
 }
 
 /** The last 2 bars of the first drop. */

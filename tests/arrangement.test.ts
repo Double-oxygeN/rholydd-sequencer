@@ -4,6 +4,7 @@ import {
   barsToNextScene,
   cycleScenes,
   cycleSections,
+  DROP_LEAD_INS,
   drawLayout,
   plays,
   playsHit,
@@ -14,7 +15,13 @@ import {
 } from '../src/structure/arrangement.ts';
 import { clampUnit } from '../src/units.ts';
 
-const LAYOUT: CycleLayout = { intro: 3, breakdown: 2, firstDrop: 2, secondDrop: 1 };
+const LAYOUT: CycleLayout = {
+  intro: 3,
+  breakdown: 2,
+  firstDrop: 2,
+  secondDrop: 1,
+  leadIns: { first: 'pickup', second: 'straight' },
+};
 
 describe('cycle layout', () => {
   it('lays out intro, build, first drop, breakdown, build and second drop in 8-bar sections', () => {
@@ -31,11 +38,11 @@ describe('cycle layout', () => {
   it('numbers the sections within each scene and the phrases within each drop', () => {
     const scenes = cycleScenes(LAYOUT);
     expect(scenes[0]).toEqual({ scene: 'intro', sections: 3, index: 0 });
-    expect(scenes[3]).toEqual({ scene: 'build', sections: 1, index: 0 });
+    expect(scenes[3]).toEqual({ scene: 'build', leadIn: 'pickup', sections: 1, index: 0 });
     expect(scenes[4]).toEqual({ scene: 'drop', drop: 'first', phrases: 2, phrase: 0 });
     expect(scenes[8]).toEqual({ scene: 'drop', drop: 'first', phrases: 2, phrase: 1 });
-    expect(scenes[14]).toEqual({ scene: 'build', sections: 2, index: 0 });
-    expect(scenes[15]).toEqual({ scene: 'build', sections: 2, index: 1 });
+    expect(scenes[14]).toEqual({ scene: 'build', leadIn: 'straight', sections: 2, index: 0 });
+    expect(scenes[15]).toEqual({ scene: 'build', leadIn: 'straight', sections: 2, index: 1 });
     expect(scenes[16]).toEqual({ scene: 'drop', drop: 'second', phrases: 1, phrase: 0 });
   });
 
@@ -55,6 +62,20 @@ describe('cycle layout', () => {
     for (const count of lengths.values()) expect(count / draws).toBeCloseTo(1 / 3, 1);
     expect(longIntros / draws).toBeCloseTo(0.5, 1);
     expect(longBreakdowns / draws).toBeCloseTo(0.5, 1);
+  });
+
+  it('draws every lead-in about equally often for each drop, never the same for both drops of a cycle', () => {
+    const counts = { first: new Map<string, number>(), second: new Map<string, number>() };
+    const draws = 6000;
+    for (let n = 0; n < draws; n++) {
+      const { leadIns } = drawLayout(hash(n));
+      expect(leadIns.second).not.toBe(leadIns.first);
+      for (const drop of ['first', 'second'] as const) counts[drop].set(leadIns[drop], (counts[drop].get(leadIns[drop]) ?? 0) + 1);
+    }
+    for (const drop of ['first', 'second'] as const) {
+      expect([...counts[drop].keys()].sort()).toEqual([...DROP_LEAD_INS].sort());
+      for (const count of counts[drop].values()) expect(count / draws).toBeCloseTo(1 / 4, 1);
+    }
   });
 
   it('counts the bars to the next scene, treating an extended drop as one scene', () => {
@@ -88,9 +109,9 @@ describe('scene energy', () => {
   const energy = (role: SceneRole, sectionIn32: 0 | 1 | 2 | 3 = 0) => sceneEnergy(role, sectionIn32, full);
 
   it('rises through a build up to the drop\'s A', () => {
-    expect(energy({ scene: 'build', sections: 2, index: 0 })).toBe(0.6);
-    expect(energy({ scene: 'build', sections: 2, index: 1 })).toBe(0.75);
-    expect(energy({ scene: 'build', sections: 1, index: 0 })).toBe(0.75);
+    expect(energy({ scene: 'build', leadIn: 'silence', sections: 2, index: 0 })).toBe(0.6);
+    expect(energy({ scene: 'build', leadIn: 'silence', sections: 2, index: 1 })).toBe(0.75);
+    expect(energy({ scene: 'build', leadIn: 'silence', sections: 1, index: 0 })).toBe(0.75);
     expect(energy({ scene: 'drop', drop: 'first', phrases: 1, phrase: 0 }, 0)).toBe(0.75);
   });
 

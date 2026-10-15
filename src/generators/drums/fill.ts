@@ -7,7 +7,7 @@ import { isAnchorStep } from './weights.ts';
 export const FILL_KINDS = ['snareRoll', 'ghostRush', 'dropout', 'kickSolo', 'snareSolo', 'hatSolo'] as const;
 /** Big fills at the end of 32 bars: the solos are left out because they are too sparse to announce a new phrase. */
 export const PHRASE_FILL_KINDS = ['snareRoll', 'ghostRush', 'dropout', 'accelRoll', 'dropRoll'] as const;
-/** Big fills before a drop: a dropout or a ghost rush would not raise the tension before the silent beat. */
+/** Big fills before a drop: a dropout or a ghost rush would not raise the tension before the drop's lead-in. */
 export const DROP_LEAD_FILL_KINDS = ['snareRoll', 'accelRoll', 'dropRoll'] as const;
 export const ALL_FILL_KINDS = [...FILL_KINDS, 'accelRoll', 'dropRoll'] as const;
 export type FillKind = (typeof ALL_FILL_KINDS)[number];
