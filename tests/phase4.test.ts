@@ -5,6 +5,8 @@ import { DEFAULT_CONFIG, decodeConfig, initialParams, parseConfigText } from '..
 import { loadConfig } from '../src/params/load-config.ts';
 import { CHANNEL_IDS, DEFAULT_MIXER, SOLOABLE_IDS, audibleChannels, type MixerSettings } from '../src/params/mixer.ts';
 import { seedFromQuery, shareUrl } from '../src/params/query.ts';
+import { SILENCE, SILENT_SAMPLE, silentWav } from '../src/ui/media-session.ts';
+import { MEDIA_ACTIONS, mediaCommand, toggleCommand } from '../src/ui/playback.ts';
 import { BAND_CENTERS, FLOOR_DB, SEGMENTS, bandLevels, holdPeaks, litSegments } from '../src/ui/spectrum.ts';
 import type { PitchedEvent } from '../src/generators/types.ts';
 import { toSeed } from '../src/random/rng.ts';
@@ -258,6 +260,40 @@ describe('phase 4 acceptance: sharing', () => {
       }
       expect(seedFromQuery(new URL(shareUrl(page, undefined)).search)).toBeUndefined();
     }
+  });
+});
+
+describe('phase 4 acceptance: media controls', () => {
+  const STATES = ['stopped', 'playing', 'paused'] as const;
+
+  it('plays, pauses and resumes from one button', () => {
+    expect(STATES.map(toggleCommand)).toEqual(['start', 'pause', 'resume']);
+  });
+
+  it('takes play, pause and stop from the OS as the table says, never pausing on play', () => {
+    const table = Object.fromEntries(
+      MEDIA_ACTIONS.map((action) => [action, STATES.map((state) => mediaCommand(action, state))]),
+    );
+    expect(table).toEqual({
+      play: ['start', null, 'resume'],
+      pause: [null, 'pause', null],
+      stop: [null, 'stop', 'stop'],
+    });
+  });
+
+  it('loops a silent mono 8-bit WAV longer than the five seconds the media controls need', () => {
+    const wav = silentWav();
+    const view = new DataView(wav.buffer);
+    const text = (offset: number) => String.fromCharCode(...wav.subarray(offset, offset + 4));
+    expect([text(0), text(8), text(12), text(36)]).toEqual(['RIFF', 'WAVE', 'fmt ', 'data']);
+    expect(view.getUint32(4, true)).toBe(wav.length - 8);
+    expect(view.getUint16(22, true)).toBe(1);
+    expect(view.getUint32(24, true)).toBe(SILENCE.sampleRate);
+    expect(view.getUint16(34, true)).toBe(8);
+    const data = wav.subarray(44);
+    expect(data.length).toBe(view.getUint32(40, true));
+    expect(data.length / SILENCE.sampleRate).toBeGreaterThan(5);
+    expect(data.every((sample) => sample === SILENT_SAMPLE)).toBe(true);
   });
 });
 

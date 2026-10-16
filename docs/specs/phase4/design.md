@@ -466,21 +466,24 @@ function mediaCommand(action: MediaAction, state: PlaybackState): PlaybackComman
 
 メディアの `play` と `pause` を再生ボタンのような切り替えにしないのは、OS が「再生」と「一時停止」を別の操作として送ってくるためです。再生中に `play` が来ても一時停止しません。
 
-`start` は `Tone.start()` を待つ間に2度目が来ても、セッションを2つ作らないようにします。待っている間は `starting` を立て、ほかの命令を捨てます。メディア操作は画面のクリックより短い間隔で届くことがあるためです。
+`start` は `Tone.start()` を待った後で、セッションがまだないことを確かめてから始めます。ユーザーの操作を待っている間に2度目の `start`（メディア操作と画面のクリックなど）が来ると、同じ操作で両方の待ちが解け、セッションが2つできてしまうためです。
 
 ### メディア操作（`ui/media-session.ts`）
 
 ```ts
-interface MediaSessionLink { show(state: PlaybackState, seed: Seed | undefined): void }
+interface MediaSessionLink { show(state: PlaybackState, seed: Seed): void }
 function linkMediaSession(onAction: (action: MediaAction) => void): MediaSessionLink;
-function silentWav(seconds: number, sampleRate: number): Uint8Array;   // 8bit モノラルの無音の WAV
+const SILENCE = { seconds: 10, sampleRate: 8000 };
+function silentWav(): Uint8Array;   // SILENCE の長さの、8bit モノラルの無音の WAV
 ```
 
 - `navigator.mediaSession` がないブラウザでは、何もしない `MediaSessionLink` を返す
-- `show` は `playbackState` を `'none'`・`'playing'`・`'paused'` にし、`metadata` を `{ title: 'GenDnB', artist: 'シード {seed}' }` にする。停止中は `metadata` を消す。`setPositionState` は呼ばない（曲に終わりがないため）
-- 無音の `audio` 要素は、`silentWav(10, 8000)` の Blob の URL を `loop` で鳴らす。10秒にするのは、Chrome が5秒以下のメディアに通知を出さないためです。要素の `muted` と音量は変えない。消音した要素を、ブラウザがメディア操作の手がかりにしないためです
-- 再生中は `audio.play()`、一時停止中と停止では `audio.pause()` を呼ぶ。`play()` が拒否されても（自動再生の制限）、音は Web Audio API から出ているので無視する
-- 要素の `pause` イベントが、こちらから止めたのではないときに来たら（ヘッドホンが抜けたときなど）、メディアの `pause` として扱う
+- `show(state, seed)` は `playbackState` を `'none'`・`'playing'`・`'paused'` にし、`metadata` を `{ title: 'GenDnB', artist: 'シード {seed}' }` にする。停止中は `metadata` を消す。`setPositionState` は呼ばない（曲に終わりがないため）
+- 無音の `audio` 要素は、`silentWav()` の Blob の URL を `loop` で鳴らす。10秒にするのは、Chrome が5秒以下のメディアに通知を出さないためです。要素の `muted` と音量は変えない。消音した要素を、ブラウザがメディア操作の手がかりにしないためです
+- 要素は `hidden` にして文書に置く。メディアセッションをデスクトップにつなぐブラウザ拡張（KDE の Plasma Integration など）が、文書の外の要素を一度止めて鳴らし直し、それがブラウザによる一時停止に見えるためです
+- 再生中は `audio.play()`、一時停止中と停止では、鳴っているときだけ `audio.pause()` を呼ぶ。読み込む前の要素の `pause()` は読み込みを始め、直後の `play()` を `pause` イベントつきで中断させるためです。`play()` が拒否されても（自動再生の制限）、音は Web Audio API から出ているので無視する
+- 要素の `pause` イベントが、こちらから止めたのではないときに来たら（ヘッドホンが抜けたときなど）、メディアの `pause` として扱う。`play()` が拒否されたときは、この扱いをしない
+- ブラウザが知らない操作の `setActionHandler` は例外になるので、操作ごとに捕まえ、ほかの操作は登録する
 - 音を `MediaStreamAudioDestinationNode` から `audio` 要素に流す方法は採らない。音の経路と遅延が変わり、リミッターの後のクリップの検出（N-10）やクリック防止（N-17）を確かめ直すことになるためです
 
 ### 共有（`ui/share.ts`、`params/query.ts`）

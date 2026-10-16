@@ -5,7 +5,7 @@ import { initialParams } from './params/config.ts';
 import { loadConfig } from './params/load-config.ts';
 import { seedFromQuery } from './params/query.ts';
 import { createParamStore } from './params/store.ts';
-import { createControls } from './ui/controls.ts';
+import { createControls, type PlaybackState } from './ui/controls.ts';
 import { createStepGrid } from './ui/grid.ts';
 import { createOffCanvasMenu } from './ui/menu.ts';
 import { createMixerView } from './ui/mixer.ts';
@@ -14,6 +14,8 @@ import { createPositionView } from './ui/position.ts';
 import { createShareDialog } from './ui/share.ts';
 import { createSpectrumView } from './ui/spectrum.ts';
 import { createViews } from './ui/views.ts';
+import { linkMediaSession } from './ui/media-session.ts';
+import { mediaCommand, toggleCommand, type PlaybackCommand } from './ui/playback.ts';
 import './ui/style.css';
 
 const SAMPLE_BASE_URL = `${import.meta.env.BASE_URL}samples/drums/`;
@@ -42,9 +44,8 @@ async function boot(root: HTMLElement) {
   let session: PlaybackSession | null = null;
   // The seed field may change during playback and only applies from the next start, so a session shares its own.
   let sessionSeed = store.get().seed;
-  const share = createShareDialog(new URL(import.meta.env.BASE_URL, location.href).href, () =>
-    session === null ? store.get().seed : sessionSeed,
-  );
+  const playingSeed = () => (session === null ? store.get().seed : sessionSeed);
+  const share = createShareDialog(new URL(import.meta.env.BASE_URL, location.href).href, playingSeed);
   root.append(
     title,
     controls.element,
@@ -82,35 +83,52 @@ async function boot(root: HTMLElement) {
     else spectrum.halt();
   };
   views.onChange(drawSpectrum);
+  const playbackState = (): PlaybackState => session?.state ?? 'stopped';
+  const media = linkMediaSession((action) => {
+    const command = mediaCommand(action, playbackState());
+    if (command !== null) void run(command);
+  });
   const render = () => {
-    const state = session?.state ?? 'stopped';
+    const state = playbackState();
     controls.show(state);
     panel.show(state);
+    media.show(state, playingSeed());
     drawSpectrum();
   };
-  render();
-  controls.onPlay(async () => {
-    if (session === null) {
-      // Browsers only allow the AudioContext to start from a user gesture.
-      await Tone.start();
-      const { bpm, seed, initialKey } = store.get();
-      // Only a new session clears the peak and the clip count: they count from the start of playback.
-      mixerView.resetLevel();
-      sessionSeed = seed;
-      session = sequencer.start({ bpm, seed, initialKey, tuning: config.generation });
-    } else {
+  // The buttons and the OS media controls both come through here, so the page and the OS always show the same state.
+  const run = async (command: PlaybackCommand) => {
+    switch (command) {
+      case 'start': {
+        // Browsers only allow the AudioContext to start from a user gesture.
+        await Tone.start();
+        // A second start may have waited on the same gesture, and must not begin a second session.
+        if (session !== null) return;
+        const { bpm, seed, initialKey } = store.get();
+        // Only a new session clears the peak and the clip count: they count from the start of playback.
+        mixerView.resetLevel();
+        sessionSeed = seed;
+        session = sequencer.start({ bpm, seed, initialKey, tuning: config.generation });
+        break;
+      }
       // A paused session keeps the grid and the position where they stopped.
-      session = session.state === 'playing' ? session.pause() : session.resume();
+      case 'pause':
+        if (session?.state === 'playing') session = session.pause();
+        break;
+      case 'resume':
+        if (session?.state === 'paused') session = session.resume();
+        break;
+      case 'stop':
+        session?.stop();
+        session = null;
+        grid.highlight(null);
+        position.clear();
+        break;
     }
     render();
-  });
-  controls.onStop(() => {
-    session?.stop();
-    session = null;
-    grid.highlight(null);
-    position.clear();
-    render();
-  });
+  };
+  render();
+  controls.onPlay(() => void run(toggleCommand(playbackState())));
+  controls.onStop(() => void run('stop'));
 }
 
 const root = document.getElementById('app');
