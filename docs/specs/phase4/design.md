@@ -158,7 +158,7 @@ const MAIN_SKELETONS: readonly MainSkeleton[] = [
 ### 色付けの抽選
 
 ```ts
-// 確率は GenerationTuning の harmony から受け取る。既定値は tensionChance 0.5、borrowChance 0.4（設定ファイルで上書きできる）
+// 確率は GenerationTuning の harmony から受け取る。既定値は tensionChance 0.4、borrowChance 0.2（設定ファイルで上書きできる）
 function colorMain(skeleton: MainSkeleton, seed: Seed, harmony: HarmonyTuning): MainProgression;
 function colorTransition(skeleton: TransitionSkeleton, seed: Seed, harmony: HarmonyTuning): TransitionProgression;
 ```
@@ -176,7 +176,7 @@ function colorTransition(skeleton: TransitionSkeleton, seed: Seed, harmony: Harm
 
 判定が外れても、候補がなくても、4つとも引きます。主進行の先頭（i）の借用の判定も引いて捨てます。
 
-**値の根拠**: `BORROW_CHANCE = 0.4` では、iv か v を含む主進行（8つのうち4つ）のサイクルの約半分で、少なくとも1つの借用和音が鳴ります。転換進行は32bar ごとに選び直すので、借用和音は B でより多く鳴ります。主題（A 系）の借用和音はサイクルの「顔」としてときどき現れる程度に留め、B で色合いの変化を担わせる配分です。`TENSION_CHANCE = 0.5` は、テンションのあるコードとないコードが同じくらい混ざり、どちらかが当たり前に聞こえないようにする値です。どちらも試聴で確定します。
+**値の根拠**: 初めは `BORROW_CHANCE = 0.4`、`TENSION_CHANCE = 0.5` としましたが、設定ファイルで値を変えながら試聴し、`BORROW_CHANCE = 0.2`、`TENSION_CHANCE = 0.4` に確定しました。`BORROW_CHANCE = 0.2` では、iv か v を含む主進行（8つのうち4つ）のサイクルの約4分の1で、少なくとも1つの借用和音が鳴ります。転換進行は32bar ごとに選び直すので、借用和音は B でより多く鳴ります。音階の外に出る借用和音は、多すぎると調性の土台が揺らぐので、主題（A 系）ではまれな「顔」に留め、B で色合いの変化を担わせる配分です。`TENSION_CHANCE = 0.4` は、テンションのないコードをやや多くして地とし、テンションのあるコードを色として浮かせる値です。
 
 ### コンダクター
 
@@ -521,7 +521,7 @@ const DEFAULT_CONFIG: Config;
 
 | キー | 型と範囲 | 既定値 |
 | --- | --- | --- |
-| `harmony.tensionChance`、`harmony.borrowChance` | 0〜1 | 0.5、0.4 |
+| `harmony.tensionChance`、`harmony.borrowChance` | 0〜1 | 0.4、0.2 |
 | `harmony.modulationShare` | 0〜1 | 0.5 |
 | `energy.phrase`（`A`・`A'`・`B`・`A''`） | 0〜1 | 0.75、0.9、0.5、1.0 |
 | `energy.scene`（`intro`・`buildFirst`・`buildLast`・`breakdown`） | 0〜1 | 0.5、0.6、0.75、0.4 |

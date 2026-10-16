@@ -54,7 +54,7 @@ const unit = (x: number) => x as UnitInterval;
 const weight = (x: number) => x as Weight;
 
 export const DEFAULT_STRUCTURE_TUNING: StructureTuning = {
-  harmony: { tensionChance: unit(0.5), borrowChance: unit(0.4), modulationShare: unit(0.5) },
+  harmony: { tensionChance: unit(0.4), borrowChance: unit(0.2), modulationShare: unit(0.5) },
   energy: {
     // Low in the transition and highest in the last section, so the big fill leads into the next phrase at full energy.
     phrase: { 0: unit(0.75), 1: unit(0.9), 2: unit(0.5), 3: unit(1) },

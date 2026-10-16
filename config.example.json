@@ -80,8 +80,8 @@
   },
   "generation": {
     "harmony": {
-      "tensionChance": 0.5,
-      "borrowChance": 0.4,
+      "tensionChance": 0.4,
+      "borrowChance": 0.2,
       "modulationShare": 0.5
     },
     "energy": {
