@@ -351,6 +351,20 @@ button:disabled {
   background: var(--accent);
 }
 
+.bar-meter {
+  display: none;
+}
+
+@media (max-width: 560px) {
+  .pair-meter {
+    display: none;
+  }
+
+  .bar-meter {
+    display: grid;
+  }
+}
+
 /* Upcoming sections stay faint, so the shape of the rest of the cycle shows without hiding where playback is. */
 .scene-meter span[data-scene] {
   opacity: 0.3;
@@ -424,27 +438,19 @@ button:disabled {
   border-radius: 10px;
 }
 
-.grid > * {
-  grid-area: var(--wide-row) / var(--wide-column);
-}
-
-.grid-label.folded {
-  display: none;
-}
-
-/* A phone leaves cells of a few pixels for 32 steps in a line, so each bar gets a line of its own. */
+/*
+ * A phone leaves cells of a few pixels for 32 steps in a line, so it shows the bar playing alone. Seeing both bars
+ * of the pair at once is given up as a limit of the small screen.
+ */
 @media (max-width: 560px) {
   .grid {
     grid-template-columns: 3.2em repeat(16, minmax(0, 1fr));
     padding: 8px;
   }
 
-  .grid > * {
-    grid-area: var(--narrow-row) / var(--narrow-column);
-  }
-
-  .grid-label.folded {
-    display: block;
+  .grid[data-bar='0'] .grid-cell[data-bar='1'],
+  .grid[data-bar='1'] .grid-cell[data-bar='0'] {
+    display: none;
   }
 }
 

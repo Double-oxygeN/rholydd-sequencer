@@ -1,4 +1,4 @@
-import { STEPS_PER_BAR, type Step } from '../generators/types.ts';
+import { STEPS_PER_BAR, STEPS_PER_PAIR, type Step } from '../generators/types.ts';
 import { cycleScenes, type CycleLayout } from '../structure/arrangement.ts';
 import type { Context } from '../structure/conductor.ts';
 import { PAIRS_PER_SECTION } from '../structure/form.ts';
@@ -12,25 +12,28 @@ export interface PositionView {
 }
 
 /**
- * Bars and cycles played so far, and where playback stands within the cycle and its 8 bars. The sequencer already
- * shows the 2 bars playing, so the meters go no finer than that, and the scene colours stand in for scene names.
+ * Bars and cycles played so far, and where playback stands within the cycle and its 8 bars. The meters go no finer
+ * than what the sequencer shows: 2 bars, or the one bar playing on narrow screens (style.css picks the meter). The
+ * scene colours stand in for scene names.
  */
 export function createPositionView(): PositionView {
   const element = document.createElement('div');
   element.className = 'position';
   const cycle = sceneMeter();
-  const pairs = pairMeter();
-  element.append(cycle.element, pairs.element);
+  const pairs = sectionMeter(PAIRS_PER_SECTION, 'pair-meter');
+  const bars = sectionMeter(PAIRS_PER_SECTION * BARS_PER_PAIR, 'bar-meter');
+  element.append(cycle.element, pairs.element, bars.element);
 
   const counters = document.createElement('div');
   counters.className = 'counters';
-  const bars = counter('小節');
-  const cycles = counter('サイクル');
-  counters.append(bars.element, cycles.element);
+  const barCount = counter('小節');
+  const cycleCount = counter('サイクル');
+  counters.append(barCount.element, cycleCount.element);
 
   const clear = () => {
     cycle.clear();
     pairs.set(null);
+    bars.set(null);
     // Nothing has played yet in a session that has not started (F-83).
     counters.hidden = true;
   };
@@ -44,9 +47,11 @@ export function createPositionView(): PositionView {
         cycleScenes(ctx.layout).map((role) => role.scene),
         ctx.sectionInCycle,
       );
+      const barInPair = Math.floor(step / STEPS_PER_BAR);
       pairs.set(ctx.pairIn8);
-      bars.set(ctx.bar + Math.floor(step / STEPS_PER_BAR) + 1);
-      cycles.set(ctx.cycle + 1);
+      bars.set(ctx.pairIn8 * BARS_PER_PAIR + barInPair);
+      barCount.set(ctx.bar + barInPair + 1);
+      cycleCount.set(ctx.cycle + 1);
       counters.hidden = false;
     },
     clear,
@@ -110,12 +115,14 @@ function sceneMeter() {
   };
 }
 
-/** One cell per 2 bars of the 8 bars playing. */
-function pairMeter() {
+const BARS_PER_PAIR = STEPS_PER_PAIR / STEPS_PER_BAR;
+
+/** One cell per 2 bars, or per bar, of the 8 bars playing. */
+function sectionMeter(length: number, className: string) {
   const element = document.createElement('div');
-  element.className = 'meter';
-  element.style.gridTemplateColumns = `repeat(${PAIRS_PER_SECTION}, 1fr)`;
-  const cells = Array.from({ length: PAIRS_PER_SECTION }, () => document.createElement('span'));
+  element.className = `meter ${className}`;
+  element.style.gridTemplateColumns = `repeat(${length}, 1fr)`;
+  const cells = Array.from({ length }, () => document.createElement('span'));
   element.append(...cells);
   return {
     element,
