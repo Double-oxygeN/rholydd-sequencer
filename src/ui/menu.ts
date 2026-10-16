@@ -13,9 +13,10 @@ export interface OffCanvasMenu {
 }
 
 /**
- * The parameters and the mixer, in a panel that slides in from the right. Nothing covers the page while it is open,
- * so playback stays at hand while values change, and only the close button closes it: a stray click on the page
- * must not take the menu away mid-adjustment.
+ * The parameters and the mixer, in a panel that slides in from the right over the page, which keeps its width so
+ * that the grid and the spectrum do not change shape as the menu opens and closes. Nothing dims the rest of the
+ * page, so whatever the menu leaves in sight stays at hand while values change, and only the close button closes
+ * it: a stray click on the page must not take the menu away mid-adjustment.
  */
 export function createOffCanvasMenu(panes: Readonly<Record<MenuTab, HTMLElement>>): OffCanvasMenu {
   const element = document.createElement('aside');
@@ -50,7 +51,6 @@ export function createOffCanvasMenu(panes: Readonly<Record<MenuTab, HTMLElement>
   toggle.setAttribute('aria-controls', element.id);
   const show = (open: boolean) => {
     element.classList.toggle('open', open);
-    document.body.classList.toggle('menu-open', open);
     // Out of reach of the keyboard and screen readers while it is off screen.
     element.inert = !open;
     toggle.setAttribute('aria-expanded', String(open));

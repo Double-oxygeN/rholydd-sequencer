@@ -159,38 +159,6 @@ dialog.share::backdrop {
   transition: transform 0.2s ease;
 }
 
-/* Where the screen has room beside the menu, the page moves aside instead of hiding under it. */
-@media (min-width: 1100px) {
-  body.menu-open #app {
-    margin-right: min(640px, 100vw);
-  }
-}
-
-/*
- * From the right, the menu would cover the whole of a narrow page, playback included. From below, the top of the
- * page stays in sight, and the room added under the page lets the rest of it scroll up above the menu.
- */
-@media (max-width: 720px) {
-  .offcanvas {
-    top: auto;
-    left: 0;
-    width: auto;
-    height: 60dvh;
-    border-left: 0;
-    border-top: 1px solid var(--line);
-    box-shadow: 0 -8px 24px rgb(0 0 0 / 0.25);
-    transform: translateY(100%);
-  }
-
-  body.menu-open #app {
-    padding-bottom: calc(60dvh + 24px);
-  }
-
-  .menu-tabs {
-    padding-right: 0;
-  }
-}
-
 .menu-tabs {
   display: flex;
   gap: 4px;
