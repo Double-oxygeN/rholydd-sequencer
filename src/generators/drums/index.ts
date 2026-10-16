@@ -11,6 +11,7 @@ import { ornament } from './ornament.ts';
 import { cellAt, type Pattern } from './pattern.ts';
 import { thin } from './thin.ts';
 import { transitionPattern } from './transition.ts';
+import type { FillTuning } from '../tuning.ts';
 
 export interface PairLayers {
   /** Pattern of section A, rewritten only at 32-bar boundaries. */
@@ -38,7 +39,7 @@ export function drumOutcome(layers: PairLayers): DrumOutcome {
 }
 
 /** Call with consecutive contexts from one conductor. A new generator is needed to start over. */
-export function createDrumGenerator(): DrumGenerator {
+export function createDrumGenerator(tuning: FillTuning): DrumGenerator {
   let reference: Pattern | undefined;
   let sectionBase: Pattern | undefined;
   let base: Pattern | undefined;
@@ -54,7 +55,7 @@ export function createDrumGenerator(): DrumGenerator {
       sectionBase,
       base,
       ornaments: ornament(base, ctx.seeds.ornament, ctx.params.m2, ctx.energy),
-      fill: ctx.isSectionEnd ? closingFill(ctx, ctx.fillIntensity) : null,
+      fill: ctx.isSectionEnd ? closingFill(ctx, ctx.fillIntensity, tuning) : null,
     };
   }
 
@@ -64,10 +65,12 @@ export function createDrumGenerator(): DrumGenerator {
   };
 }
 
-function closingFill(ctx: Context, intensity: UnitInterval): Fill | null {
-  if (ctx.sectionRole.isPhraseEnd) return phraseFill(ctx.seeds.fill, intensity, leadsIntoDrop(ctx) ? 'intoDrop' : 'free');
+function closingFill(ctx: Context, intensity: UnitInterval, tuning: FillTuning): Fill | null {
+  if (ctx.sectionRole.isPhraseEnd) {
+    return phraseFill(ctx.seeds.fill, intensity, leadsIntoDrop(ctx) ? 'intoDrop' : 'free', tuning.phraseLength);
+  }
   const cue = !changesScene(ctx) ? 'chance' : ctx.sceneRole.scene === 'breakdown' ? 'drumsReturn' : 'certain';
-  return fill(ctx.seeds.fill, intensity, cue);
+  return fill(ctx.seeds.fill, intensity, cue, tuning.sectionLength);
 }
 
 function nextReference(previous: Pattern | undefined, ctx: Context): Pattern {

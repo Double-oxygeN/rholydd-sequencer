@@ -14,7 +14,8 @@ export function clampBpm(x: number): Bpm {
   return Math.round(Math.min(BPM_RANGE.max, Math.max(BPM_RANGE.min, x))) as Bpm;
 }
 
-const DEFAULT_BPM = 174 as Bpm;
+export const DEFAULT_BPM = 174 as Bpm;
+export const DEFAULT_VOLUME = 0.5 as UnitInterval;
 
 export interface Params extends LiveParams {
   readonly bpm: Bpm;
@@ -40,18 +41,6 @@ export const DEFAULT_LIVE_PARAMS: LiveParams = {
   fillIntensity: clampUnit(0.3),
   energyDepth: clampUnit(0.5),
 };
-
-export function defaultParams(): Params {
-  return {
-    ...DEFAULT_LIVE_PARAMS,
-    bpm: DEFAULT_BPM,
-    volume: clampUnit(0.5),
-    seed: randomSeed(),
-    initialKey: DEFAULT_KEY,
-    mixer: DEFAULT_MIXER,
-    ducking: DEFAULT_DUCKING,
-  };
-}
 
 export interface ParamStore {
   get(): Params;

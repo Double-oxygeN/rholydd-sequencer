@@ -17,6 +17,7 @@
     "samples": "node tools/make-samples.ts"
   },
   "dependencies": {
+    "lucide": "1.49.0",
     "tone": "^15.1.22"
   },
   "devDependencies": {

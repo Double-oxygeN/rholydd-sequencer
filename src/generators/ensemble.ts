@@ -1,6 +1,7 @@
 import type { Seed } from '../random/rng.ts';
 import { createConductor, type LiveParams } from '../structure/conductor.ts';
 import type { Key } from '../structure/key.ts';
+import type { GenerationTuning } from './tuning.ts';
 import { arrange } from './arrange.ts';
 import { createDrumGenerator, drumOutcome, type PairLayers } from './drums/index.ts';
 import { fxEvents, type FxEvent } from './fx/index.ts';
@@ -10,10 +11,11 @@ import { createStabGenerator, type StabLine } from './stab/index.ts';
 import { createSubGenerator, type SubLine } from './sub/index.ts';
 import type { ContextWithDrums, NoteEvent, PadChord } from './types.ts';
 
-/** Fixed for the whole session: changing either needs a new ensemble. */
+/** Fixed for the whole session: changing any of them needs a new ensemble. */
 export interface SessionSettings {
   readonly seed: Seed;
   readonly initialKey: Key;
+  readonly tuning: GenerationTuning;
 }
 
 export interface EnsemblePair {
@@ -39,13 +41,13 @@ export interface Ensemble {
  * The pitched parts never read each other: they agree by playing chord tones of the same chord, so adding or
  * removing one never changes the others.
  */
-export function createEnsemble({ seed, initialKey }: SessionSettings): Ensemble {
-  const conductor = createConductor(seed, initialKey);
-  const drums = createDrumGenerator();
-  const sub = createSubGenerator();
-  const reese = createReeseGenerator();
-  const stab = createStabGenerator();
-  const pad = createPadGenerator();
+export function createEnsemble({ seed, initialKey, tuning }: SessionSettings): Ensemble {
+  const conductor = createConductor({ seed, initialKey, tuning });
+  const drums = createDrumGenerator(tuning.fill);
+  const sub = createSubGenerator(tuning.lines);
+  const reese = createReeseGenerator(tuning.lines);
+  const stab = createStabGenerator(tuning.lines);
+  const pad = createPadGenerator(tuning.lines);
   return {
     next(live) {
       const structure = conductor.next(live);
@@ -57,7 +59,11 @@ export function createEnsemble({ seed, initialKey }: SessionSettings): Ensemble 
         stab: stab.generate(ctx),
         pad: pad.generate(ctx),
       };
-      const events = arrange(ctx, { sub: pair.sub.notes, reese: pair.reese.notes, stab: pair.stab.hits, pad: pair.pad });
+      const events = arrange(
+        ctx,
+        { sub: pair.sub.notes, reese: pair.reese.notes, stab: pair.stab.hits, pad: pair.pad },
+        tuning.lines.velocity.pickup,
+      );
       return { ctx, drumLayers, ...pair, events, fx: fxEvents(ctx, events) };
     },
   };

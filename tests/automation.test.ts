@@ -2,23 +2,23 @@ import { describe, expect, it } from 'vitest';
 import type { Seconds } from '../src/engine/ducking.ts';
 import {
   AUTOMATION_TARGETS,
-  HIGHPASS,
-  LOWPASS,
-  RESTING_VALUE,
-  RISER,
-  THROW_SEND,
   fxAutomation,
+  restingValue,
   type AutomationPoint,
   type AutomationTarget,
 } from '../src/engine/automation.ts';
+import { DEFAULT_SOUND_TUNING } from '../src/engine/tuning.ts';
 import { GAP_START, dropLeadIn, leadsIntoDrop } from '../src/structure/arrangement.ts';
 import { run } from './helpers.ts';
 
 const STEP = 0.1;
+const FX = DEFAULT_SOUND_TUNING.fx;
+const { riser: RISER, highpass: HIGHPASS, lowpass: LOWPASS, throwSend: THROW_SEND } = FX;
+const RESTING_VALUE = restingValue(FX);
 
 /** Automation of every 2 bars, laid end to end as playback would schedule it. */
 function automate(seed: number, bars: number) {
-  return run(seed, bars).map((pair, i) => ({ pair, points: fxAutomation(pair.fx, (i * 32 * STEP) as Seconds, STEP) }));
+  return run(seed, bars).map((pair, i) => ({ pair, points: fxAutomation(pair.fx, (i * 32 * STEP) as Seconds, STEP, FX) }));
 }
 
 const of = (points: readonly AutomationPoint[], target: AutomationTarget) => points.filter((p) => p.target === target);
@@ -100,7 +100,7 @@ describe('fx automation', () => {
   it('joins every effect up across 2-bar boundaries, whichever way the next 2 bars start a hair off', () => {
     const pairs = run(42, 2048);
     const lay = (shift: (i: number) => number) =>
-      pairs.flatMap((pair, i) => fxAutomation(pair.fx, (i * 32 * STEP + shift(i)) as Seconds, STEP));
+      pairs.flatMap((pair, i) => fxAutomation(pair.fx, (i * 32 * STEP + shift(i)) as Seconds, STEP, FX));
     const exact = lay(() => 0);
     // The transport times each 2 bars apart from the steps of the previous 2 bars, and rounding goes either way.
     const drifted = lay((i) => (i % 2 === 0 ? 0 : -1e-9) + (i % 4 === 0 ? 1e-9 : 0));

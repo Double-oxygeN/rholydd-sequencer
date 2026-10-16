@@ -1,112 +1,129 @@
-import { STEPS_PER_BAR, type Step } from '../generators/types.ts';
-import { BARS_PER_PAIR, PAIRS_PER_SECTION, SECTIONS_PER_PHRASE, type SectionIn32 } from '../structure/form.ts';
-import { chordOf, type Context } from '../structure/conductor.ts';
-import { chordName } from '../structure/harmony.ts';
-import { barsToNextScene, cycleScenes, sceneName } from '../structure/arrangement.ts';
-import { keyName } from '../structure/key.ts';
-
-const BARS_PER_SECTION = BARS_PER_PAIR * PAIRS_PER_SECTION;
-const BARS_PER_PHRASE = BARS_PER_SECTION * SECTIONS_PER_PHRASE;
-
-const SECTION_LABEL: Readonly<Record<SectionIn32, string>> = { 0: 'A', 1: "A'", 2: 'B', 3: "A''" };
+import { STEPS_PER_BAR, STEPS_PER_PAIR, type Step } from '../generators/types.ts';
+import { cycleScenes, type CycleLayout } from '../structure/arrangement.ts';
+import type { Context } from '../structure/conductor.ts';
+import { PAIRS_PER_SECTION } from '../structure/form.ts';
 
 export interface PositionView {
   readonly element: HTMLElement;
+  /** The counters and the meters, which stay as they are while paused. */
+  readonly counters: HTMLElement;
   show(ctx: Context, step: Step): void;
   clear(): void;
 }
 
+/**
+ * Bars and cycles played so far, and where playback stands within the cycle and its 8 bars. The meters go no finer
+ * than what the sequencer shows: 2 bars, or the one bar playing on narrow screens (style.css picks the meter). The
+ * scene colours stand in for scene names.
+ */
 export function createPositionView(): PositionView {
   const element = document.createElement('div');
   element.className = 'position';
-  const meters = [meter('8bar', BARS_PER_SECTION), meter('32bar', BARS_PER_PHRASE)];
   const cycle = sceneMeter();
-  const total = document.createElement('div');
-  total.className = 'position-total';
-  // Shown apart from the chord because a chord name alone hardly tells that the cycle has changed key.
-  const key = document.createElement('span');
-  key.className = 'position-key';
-  const chord = document.createElement('span');
-  chord.className = 'position-chord';
-  const scene = document.createElement('span');
-  scene.className = 'position-scene';
-  const text = document.createElement('span');
-  total.append(key, chord, scene, text);
-  element.append(...meters.map((m) => m.element), cycle.element, total);
+  const pairs = sectionMeter(PAIRS_PER_SECTION, 'pair-meter');
+  const bars = sectionMeter(PAIRS_PER_SECTION * BARS_PER_PAIR, 'bar-meter');
+  element.append(cycle.element, pairs.element, bars.element);
+
+  const counters = document.createElement('div');
+  counters.className = 'counters';
+  const barCount = counter('小節');
+  const cycleCount = counter('サイクル');
+  counters.append(barCount.element, cycleCount.element);
 
   const clear = () => {
-    for (const m of meters) m.set(null);
     cycle.clear();
-    key.textContent = '';
-    chord.textContent = '';
-    scene.textContent = '';
-    text.textContent = '停止中';
+    pairs.set(null);
+    bars.set(null);
+    // Nothing has played yet in a session that has not started (F-83).
+    counters.hidden = true;
   };
   clear();
 
   return {
     element,
+    counters,
     show(ctx, step) {
-      const bar = ctx.bar + Math.floor(step / STEPS_PER_BAR);
-      const inSection = bar % BARS_PER_SECTION;
-      const { sectionIn32 } = ctx.sectionRole;
-      const inPhrase = sectionIn32 * BARS_PER_SECTION + inSection;
-      meters[0]!.set(inSection);
-      meters[1]!.set(inPhrase);
-      const scenes = cycleScenes(ctx.layout);
-      cycle.show(scenes.map((role) => role.scene), ctx.sectionInCycle);
-      key.textContent = keyName(ctx.key);
-      chord.textContent = chordName(ctx.key, chordOf(ctx));
-      scene.textContent = `${sceneName(ctx.sceneRole)}（次のシーンまで ${barsToNextScene(scenes, ctx.sectionInCycle, inSection)} 小節）`;
-      text.textContent = `通算 ${bar + 1} 小節目 / 32bar 中 ${inPhrase + 1} 小節目（${SECTION_LABEL[sectionIn32]}） / 8bar 中 ${inSection + 1} 小節目${ctx.isSectionEnd ? '（フィル区間）' : ''}`;
+      cycle.show(
+        cycleScenes(ctx.layout).map((role) => role.scene),
+        ctx.sectionInCycle,
+      );
+      const barInPair = Math.floor(step / STEPS_PER_BAR);
+      pairs.set(ctx.pairIn8);
+      bars.set(ctx.pairIn8 * BARS_PER_PAIR + barInPair);
+      barCount.set(ctx.bar + barInPair + 1);
+      cycleCount.set(ctx.cycle + 1);
+      counters.hidden = false;
     },
     clear,
   };
 }
 
-/** One cell per 8 bars of the cycle, coloured by scene, so that the next drop can be seen coming. */
-function sceneMeter() {
-  const element = document.createElement('div');
-  element.className = 'meter scene-meter';
-  const title = document.createElement('span');
-  title.className = 'meter-label';
-  title.textContent = 'cycle';
-  let cells: HTMLElement[] = [];
-  let shape = '';
+function counter(unit: string) {
+  const element = document.createElement('span');
+  element.className = 'counter';
+  const value = document.createElement('strong');
+  element.append(value, unit);
   return {
     element,
-    show(scenes: readonly string[], current: number) {
-      // Rebuilt only when a new cycle brings a different layout.
-      if (scenes.join() !== shape) {
-        shape = scenes.join();
-        cells = scenes.map((scene) => {
-          const cell = document.createElement('span');
-          cell.dataset.scene = scene;
-          cell.title = `${BARS_PER_SECTION} 小節`;
-          return cell;
-        });
-        element.style.gridTemplateColumns = `4em repeat(${cells.length}, 1fr)`;
-        element.replaceChildren(title, ...cells);
-      }
-      cells.forEach((cell, i) => cell.classList.toggle('on', i <= current));
-    },
-    clear() {
-      shape = '';
-      cells = [];
-      element.replaceChildren(title);
+    set(n: number) {
+      value.textContent = String(n);
     },
   };
 }
 
-function meter(label: string, bars: number) {
+/**
+ * What the cycle meter shows before playback: a 128-bar cycle, all of it still to come, so the meter has its shape
+ * from the start. The lead-ins do not show on the meter.
+ */
+const PREVIEW_LAYOUT: CycleLayout = {
+  intro: 2,
+  breakdown: 2,
+  firstDrop: 1,
+  secondDrop: 1,
+  leadIns: { first: 'silence', second: 'straight' },
+};
+
+/** One cell per 8 bars of the cycle, coloured by scene, so that the next drop can be seen coming. */
+function sceneMeter() {
   const element = document.createElement('div');
-  element.className = 'meter';
-  element.style.gridTemplateColumns = `4em repeat(${bars}, 1fr)`;
-  const title = document.createElement('span');
-  title.className = 'meter-label';
-  title.textContent = label;
-  const cells = Array.from({ length: bars }, () => document.createElement('span'));
-  element.append(title, ...cells);
+  element.className = 'meter scene-meter';
+  let cells: HTMLElement[] = [];
+  let shape = '';
+  const show = (scenes: readonly string[], current: number) => {
+    // Rebuilt only when a new cycle brings a different layout.
+    if (scenes.join() !== shape) {
+      shape = scenes.join();
+      cells = scenes.map((scene) => {
+        const cell = document.createElement('span');
+        cell.dataset.scene = scene;
+        return cell;
+      });
+      element.style.gridTemplateColumns = `repeat(${cells.length}, 1fr)`;
+      element.replaceChildren(...cells);
+    }
+    cells.forEach((cell, i) => cell.classList.toggle('on', i <= current));
+  };
+  return {
+    element,
+    show,
+    clear() {
+      show(
+        cycleScenes(PREVIEW_LAYOUT).map((role) => role.scene),
+        -1,
+      );
+    },
+  };
+}
+
+const BARS_PER_PAIR = STEPS_PER_PAIR / STEPS_PER_BAR;
+
+/** One cell per 2 bars, or per bar, of the 8 bars playing. */
+function sectionMeter(length: number, className: string) {
+  const element = document.createElement('div');
+  element.className = `meter ${className}`;
+  element.style.gridTemplateColumns = `repeat(${length}, 1fr)`;
+  const cells = Array.from({ length }, () => document.createElement('span'));
+  element.append(...cells);
   return {
     element,
     set(current: number | null) {

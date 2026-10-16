@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { PICKUP } from '../src/generators/arrange.ts';
 import { DROP_LEAD_FILL_KINDS } from '../src/generators/drums/fill.ts';
 import type { FxEvent } from '../src/generators/fx/index.ts';
 import type { NoteEvent } from '../src/generators/types.ts';
@@ -38,8 +37,10 @@ import {
   STAB_PATCHES,
 } from '../src/engine/patches.ts';
 import { SECTIONS_PER_PHRASE } from '../src/structure/form.ts';
+import { chordOf } from '../src/structure/conductor.ts';
+import { isBorrowed } from '../src/structure/harmony.ts';
 import { clampUnit } from '../src/units.ts';
-import { DEFAULT_LIVE, PARAM_SETS, SEEDS, liveParams, run, type GeneratedPair } from './helpers.ts';
+import { DEFAULT_LIVE, PARAM_SETS, PICKUP, SEEDS, TUNING, liveParams, run, type GeneratedPair } from './helpers.ts';
 
 // Automated acceptance criteria from docs/specs/phase3/requirements.md.
 
@@ -356,7 +357,7 @@ describe('phase 3 acceptance: energy by scene', () => {
     for (const seed of SEEDS) {
       for (const depth of [0, 0.5, 1]) {
         const pairs = run(seed, BARS, () => liveParams(0.3, 0.35, 0.3, 0.6, depth));
-        const dropA = sceneEnergy({ scene: 'drop', drop: 'first', phrases: 1, phrase: 0 }, 0, clampUnit(depth));
+        const dropA = sceneEnergy({ scene: 'drop', drop: 'first', phrases: 1, phrase: 0 }, 0, clampUnit(depth), TUNING.energy);
         for (let i = 1; i < pairs.length; i++) {
           const [before, now] = [pairs[i - 1]!.ctx, pairs[i]!.ctx];
           if (depth === 0) expect(now.energy).toBe(1);
@@ -488,11 +489,13 @@ describe('phase 3 acceptance: modulation', () => {
     expect([...shifts].some((shift) => ![0, 5, 7].includes(shift))).toBe(true);
   });
 
-  it("plays every pitched note in the natural minor of the cycle's key", () => {
+  // Borrowed chords (phase 4) bring their own tones from outside the scale.
+  it("plays every pitched note in the natural minor of the cycle's key, apart from borrowed chords", () => {
     let modulated = 0;
     for (const { pairs } of runs) {
       for (const pair of pairs) {
         if (shiftOf(pair, DEFAULT_KEY) !== 0) modulated++;
+        if (isBorrowed(chordOf(pair.ctx))) continue;
         for (const event of pair.heard) {
           if (event.instrument === 'drums') continue;
           for (const pitch of 'pitch' in event ? [event.pitch] : event.voicing) {
@@ -586,7 +589,7 @@ describe('phase 3 acceptance: sounds per cycle', () => {
 
 describe('phase 3 acceptance: performance', () => {
   it('generates 2 bars, arrangement and effects included, in 5 ms or less on average', () => {
-    const ensemble = createEnsemble({ seed: toSeed(42), initialKey: DEFAULT_KEY });
+    const ensemble = createEnsemble({ seed: toSeed(42), initialKey: DEFAULT_KEY, tuning: TUNING });
     const pairs = 4096;
     const start = performance.now();
     for (let i = 0; i < pairs; i++) ensemble.next(DEFAULT_LIVE);

@@ -1,0 +1,200 @@
+{
+  "params": {
+    "m2": 0.3,
+    "m8": 0.35,
+    "m32": 0.6,
+    "fillIntensity": 0.3,
+    "energyDepth": 0.5,
+    "bpm": 174,
+    "volume": 0.5,
+    "initialKey": "F"
+  },
+  "mixer": {
+    "kick": {
+      "level": 0,
+      "muted": false,
+      "soloed": false
+    },
+    "snare": {
+      "level": 0,
+      "muted": false,
+      "soloed": false,
+      "pan": 0,
+      "send": 0.15
+    },
+    "hat": {
+      "level": 0,
+      "muted": false,
+      "soloed": false,
+      "pan": 0.2,
+      "send": 0.1
+    },
+    "ghost": {
+      "level": 0,
+      "muted": false,
+      "soloed": false,
+      "pan": -0.15,
+      "send": 0.1
+    },
+    "sub": {
+      "level": 0,
+      "muted": false,
+      "soloed": false
+    },
+    "reese": {
+      "level": 0,
+      "muted": false,
+      "soloed": false,
+      "pan": 0,
+      "send": 0
+    },
+    "stab": {
+      "level": 0,
+      "muted": false,
+      "soloed": false,
+      "pan": -0.2,
+      "send": 0.35
+    },
+    "pad": {
+      "level": 0,
+      "muted": false,
+      "soloed": false,
+      "pan": 0,
+      "send": 0.4
+    },
+    "fx": {
+      "level": 0,
+      "muted": false,
+      "soloed": false,
+      "pan": 0,
+      "send": 0.3
+    },
+    "reverbReturn": {
+      "level": 0,
+      "muted": false
+    }
+  },
+  "ducking": {
+    "depth": 0.6,
+    "release": 200
+  },
+  "generation": {
+    "harmony": {
+      "tensionChance": 0.4,
+      "borrowChance": 0.2,
+      "modulationShare": 0.5
+    },
+    "energy": {
+      "phrase": {
+        "A": 0.75,
+        "A'": 0.9,
+        "B": 0.5,
+        "A''": 1
+      },
+      "scene": {
+        "intro": 0.5,
+        "buildFirst": 0.6,
+        "buildLast": 0.75,
+        "breakdown": 0.4
+      }
+    },
+    "layout": {
+      "longIntroChance": 0.5,
+      "longBreakdownChance": 0.5,
+      "dropExtension": {
+        "none": 0.3333333333333333,
+        "first": 0.16666666666666666,
+        "second": 0.16666666666666666,
+        "both": 0.3333333333333333
+      }
+    },
+    "fill": {
+      "sectionLength": {
+        "4": 0.4,
+        "8": 0.4,
+        "16": 0.15,
+        "32": 0.05
+      },
+      "phraseLength": {
+        "16": 0.6,
+        "32": 0.4
+      }
+    },
+    "lines": {
+      "subOctaveJumpChance": 0.2,
+      "subToneWeights": {
+        "root": 0.5,
+        "third": 0.1,
+        "fifth": 0.15,
+        "seventh": 0.1
+      },
+      "reeseToneWeights": {
+        "root": 0.6,
+        "third": 0.1,
+        "fifth": 0.2,
+        "seventh": 0.1
+      },
+      "velocity": {
+        "sub": 0.8,
+        "reese": 0.8,
+        "stab": 0.7,
+        "pad": 0.6,
+        "pickup": 0.9
+      }
+    }
+  },
+  "sound": {
+    "trimDb": {
+      "kick": -8,
+      "snare": -10,
+      "hat": -14,
+      "ghost": -8,
+      "sub": -6,
+      "reese": -10,
+      "stab": -13,
+      "pad": -16,
+      "fx": -12
+    },
+    "duckRatio": {
+      "sub": 1,
+      "reese": 0.7,
+      "pad": 0.5
+    },
+    "reverb": {
+      "decay": 2.5,
+      "preDelay": 0.02
+    },
+    "dynamics": {
+      "drumBus": {
+        "threshold": -12,
+        "ratio": 3,
+        "attack": 0.01,
+        "release": 0.1
+      },
+      "masterBus": {
+        "threshold": -10,
+        "ratio": 2,
+        "attack": 0.02,
+        "release": 0.2
+      },
+      "limiterThresholdDb": -1
+    },
+    "fx": {
+      "riser": {
+        "peakGain": 0.5,
+        "lowHz": 300,
+        "highHz": 8000
+      },
+      "highpass": {
+        "openHz": 20,
+        "closedHz": 600
+      },
+      "lowpass": {
+        "closedHz": 400,
+        "openHz": 18000
+      },
+      "throwSend": 1,
+      "impactVolumeDb": -3
+    }
+  }
+}

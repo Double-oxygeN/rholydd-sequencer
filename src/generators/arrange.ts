@@ -10,19 +10,15 @@ export interface PitchedParts {
 }
 
 /** The one snare that breaks the silence of the gap, an 8th before the drop lands. */
-export const PICKUP: DrumHit = {
-  instrument: 'drums',
-  step: 30 as Step,
-  part: 'snare',
-  velocity: 0.9 as Velocity,
-  layer: 'fill',
-};
+export function pickupHit(velocity: Velocity): DrumHit {
+  return { instrument: 'drums', step: 30 as Step, part: 'snare', velocity, layer: 'fill' };
+}
 
 /**
  * What is heard of the 2 bars: the parts the scene plays, and what the drop's lead-in leaves of the last beat.
  * The generated parts stay untouched, so a part that comes back carries on from where its stream has got to.
  */
-export function arrange(ctx: ContextWithDrums, parts: PitchedParts): readonly NoteEvent[] {
+export function arrange(ctx: ContextWithDrums, parts: PitchedParts, pickupVelocity: Velocity): readonly NoteEvent[] {
   const role = ctx.sceneRole;
   // The breakdown's last fill brings the snare back early to announce the drums.
   const announcesDrums = role.scene === 'breakdown' && changesScene(ctx);
@@ -32,14 +28,19 @@ export function arrange(ctx: ContextWithDrums, parts: PitchedParts): readonly No
   const pitched = [...parts.sub, ...parts.reese, ...parts.stab, parts.pad].filter((event) => plays(role, event.instrument));
   const leadIn = dropLeadIn(ctx);
   if (leadIn === null || !hasGap(leadIn)) return [...drums, ...pitched];
-  return leaveGap(leadIn, drums, pitched);
+  return leaveGap(leadIn, drums, pitched, pickupVelocity);
 }
 
 // The pickup is added here rather than as a fill so that it stays when fills are turned off, as the gap does.
-function leaveGap(leadIn: GapLeadIn, drums: readonly DrumHit[], pitched: readonly PitchedEvent[]): readonly NoteEvent[] {
+function leaveGap(
+  leadIn: GapLeadIn,
+  drums: readonly DrumHit[],
+  pitched: readonly PitchedEvent[],
+  pickupVelocity: Velocity,
+): readonly NoteEvent[] {
   const before = drums.filter((hit) => hit.step < GAP_START);
   const held = pitched.flatMap((event) => (leadIn === 'padHold' && event.instrument === 'pad' ? [event] : cutAtGap(event)));
-  return leadIn === 'pickup' ? [...before, PICKUP, ...held] : [...before, ...held];
+  return leadIn === 'pickup' ? [...before, pickupHit(pickupVelocity), ...held] : [...before, ...held];
 }
 
 /** Drum hits of the arranged events, for the parts that need to know which kicks really sound. */

@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { hash } from '../src/random/rng.ts';
 import {
-  barsToNextScene,
   cycleScenes,
   cycleSections,
   DROP_LEAD_INS,
@@ -14,6 +13,7 @@ import {
   type SectionInCycle,
 } from '../src/structure/arrangement.ts';
 import { clampUnit } from '../src/units.ts';
+import { TUNING } from './helpers.ts';
 
 const LAYOUT: CycleLayout = {
   intro: 3,
@@ -52,7 +52,7 @@ describe('cycle layout', () => {
     let longBreakdowns = 0;
     const draws = 6000;
     for (let n = 0; n < draws; n++) {
-      const layout = drawLayout(hash(n));
+      const layout = drawLayout(hash(n), TUNING.layout);
       const bars = cycleSections(layout) * 8;
       lengths.set(bars, (lengths.get(bars) ?? 0) + 1);
       if (layout.intro === 3) longIntros++;
@@ -68,7 +68,7 @@ describe('cycle layout', () => {
     const counts = { first: new Map<string, number>(), second: new Map<string, number>() };
     const draws = 6000;
     for (let n = 0; n < draws; n++) {
-      const { leadIns } = drawLayout(hash(n));
+      const { leadIns } = drawLayout(hash(n), TUNING.layout);
       expect(leadIns.second).not.toBe(leadIns.first);
       for (const drop of ['first', 'second'] as const) counts[drop].set(leadIns[drop], (counts[drop].get(leadIns[drop]) ?? 0) + 1);
     }
@@ -76,15 +76,6 @@ describe('cycle layout', () => {
       expect([...counts[drop].keys()].sort()).toEqual([...DROP_LEAD_INS].sort());
       for (const count of counts[drop].values()) expect(count / draws).toBeCloseTo(1 / 4, 1);
     }
-  });
-
-  it('counts the bars to the next scene, treating an extended drop as one scene', () => {
-    const scenes = cycleScenes(LAYOUT);
-    const at = (section: number, bar: number) => barsToNextScene(scenes, section as SectionInCycle, bar);
-    expect(at(0, 0)).toBe(24);
-    expect(at(2, 5)).toBe(3);
-    expect(at(4, 0)).toBe(64);
-    expect(at(19, 7)).toBe(1);
   });
 });
 
@@ -106,7 +97,7 @@ describe('parts per scene', () => {
 
 describe('scene energy', () => {
   const full = clampUnit(1);
-  const energy = (role: SceneRole, sectionIn32: 0 | 1 | 2 | 3 = 0) => sceneEnergy(role, sectionIn32, full);
+  const energy = (role: SceneRole, sectionIn32: 0 | 1 | 2 | 3 = 0) => sceneEnergy(role, sectionIn32, full, TUNING.energy);
 
   it('rises through a build up to the drop\'s A', () => {
     expect(energy({ scene: 'build', leadIn: 'silence', sections: 2, index: 0 })).toBe(0.6);
@@ -120,6 +111,6 @@ describe('scene energy', () => {
   });
 
   it('keeps every scene at full energy when the depth is 0', () => {
-    for (const role of cycleScenes(LAYOUT)) expect(sceneEnergy(role, 2, clampUnit(0))).toBe(1);
+    for (const role of cycleScenes(LAYOUT)) expect(sceneEnergy(role, 2, clampUnit(0), TUNING.energy)).toBe(1);
   });
 });

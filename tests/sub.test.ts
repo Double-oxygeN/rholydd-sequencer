@@ -4,7 +4,7 @@ import { HIGHEST_PITCH, LOWEST_PITCH, subPitch } from '../src/generators/sub/pit
 import { SUB_STYLES, attackChance } from '../src/generators/sub/styles.ts';
 import { ALL_STEPS, type Step } from '../src/generators/types.ts';
 import { TAG, hash } from '../src/random/rng.ts';
-import { ALL_KEYS, KEY_NAMES, TONIC, degreeOf, parseKey, shiftDegree } from '../src/structure/key.ts';
+import { ALL_KEYS, KEY_NAMES, TONIC, degreeOf, parseKey, shiftDegree, type PitchClass } from '../src/structure/key.ts';
 
 describe('key', () => {
   it('parses note names with sharps, flats and enharmonic spellings', () => {
@@ -27,14 +27,14 @@ describe('key', () => {
 describe('subPitch', () => {
   it('folds the tonic of every key into F1 to E2 and jumps an octave up on request', () => {
     for (const key of ALL_KEYS) {
-      const low = subPitch(key, TONIC, false);
+      const low = subPitch(key, false);
       expect(low).toBeGreaterThanOrEqual(LOWEST_PITCH);
       expect(low).toBeLessThan(LOWEST_PITCH + 12);
-      expect(subPitch(key, TONIC, true)).toBe(low + 12);
-      expect(subPitch(key, TONIC, true)).toBeLessThanOrEqual(HIGHEST_PITCH);
+      expect(subPitch(key, true)).toBe(low + 12);
+      expect(subPitch(key, true)).toBeLessThanOrEqual(HIGHEST_PITCH);
       expect(degreeOf(key, low)).toBe(TONIC);
     }
-    expect(subPitch(parseKey('F')!, TONIC, false)).toBe(29);
+    expect(subPitch(parseKey('F')! as PitchClass, false)).toBe(29);
   });
 });
 

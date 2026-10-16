@@ -4,17 +4,23 @@ import type { PitchedEvent } from '../src/generators/types.ts';
 import { hash } from '../src/random/rng.ts';
 import { chordOf } from '../src/structure/conductor.ts';
 import {
-  MAIN_PROGRESSIONS,
-  TRANSITION_PROGRESSIONS,
+  DIATONIC_SYMBOLS,
+  MAIN_SKELETONS,
+  TRANSITION_SKELETONS,
+  chordClasses,
   chordName,
+  chordToneClass,
+  colorMain,
+  colorTransition,
   cycleMainProgression,
-  isChordTone,
   phraseTransitionProgression,
-  type Progression,
+  type MainSkeleton,
+  type TransitionSkeleton,
 } from '../src/structure/harmony.ts';
-import { ALL_KEYS, DEFAULT_KEY, degreeOf, parseKey } from '../src/structure/key.ts';
+import { ALL_KEYS, DEFAULT_KEY, parseKey } from '../src/structure/key.ts';
+import type { HarmonyTuning } from '../src/structure/tuning.ts';
 import { clampUnit } from '../src/units.ts';
-import { DEFAULT_LIVE, PARAM_SETS, SEEDS, liveParams, relativeShape, run, type GeneratedPair } from './helpers.ts';
+import { DEFAULT_LIVE, PARAM_SETS, SEEDS, TUNING, liveParams, relativeShape, run, type GeneratedPair } from './helpers.ts';
 
 // Automated acceptance criteria from docs/specs/phase2/requirements.md.
 
@@ -23,7 +29,7 @@ const BARS = 1024;
 describe('harmony', () => {
   it('names the diatonic seventh chords of F minor', () => {
     const f = parseKey('F')!;
-    expect([0, 2, 3, 4, 5, 6].map((root) => chordName(f, { root: root as 0 }))).toEqual([
+    expect(DIATONIC_SYMBOLS.map((symbol) => chordName(f, { symbol, tension: null }))).toEqual([
       'Fm7',
       'A♭maj7',
       'B♭m7',
@@ -31,31 +37,31 @@ describe('harmony', () => {
       'D♭maj7',
       'E♭7',
     ]);
-    expect(chordName(parseKey('C#')!, { root: 6 })).toBe('B7');
-    expect(chordName(parseKey('E')!, { root: 2 })).toBe('Gmaj7');
-    expect(chordName(parseKey('B')!, { root: 4 })).toBe('F♯m7');
+    expect(chordName(parseKey('C#')!, { symbol: 'VII', tension: null })).toBe('B7');
+    expect(chordName(parseKey('E')!, { symbol: 'III', tension: null })).toBe('Gmaj7');
+    expect(chordName(parseKey('B')!, { symbol: 'v', tension: null })).toBe('F♯m7');
   });
 
   it('starts every main progression on i, and no transition progression on i nor ends one on i', () => {
-    for (const p of MAIN_PROGRESSIONS) expect(p[0].root).toBe(0);
-    for (const p of TRANSITION_PROGRESSIONS) {
-      expect(p[0].root).not.toBe(0);
-      expect(p[3].root).not.toBe(0);
+    for (const p of MAIN_SKELETONS) expect(p[0]).toBe('i');
+    for (const p of TRANSITION_SKELETONS) {
+      expect(p[0]).not.toBe('i');
+      expect(p[3]).not.toBe('i');
     }
   });
 
   it('picks every progression, and changes the main one always at m32 = 1 and never at m32 = 0', () => {
-    const mains = new Set<Progression>();
-    const transitions = new Set<Progression>();
+    const mains = new Set<MainSkeleton>();
+    const transitions = new Set<TransitionSkeleton>();
     for (let n = 0; n < 500; n++) {
-      const first = cycleMainProgression(undefined, hash(n), clampUnit(0));
-      mains.add(first);
-      transitions.add(phraseTransitionProgression(hash(n)));
-      expect(cycleMainProgression(first, hash(n, 1), clampUnit(0))).toBe(first);
-      expect(cycleMainProgression(first, hash(n, 1), clampUnit(1))).not.toBe(first);
+      const first = cycleMainProgression(undefined, hash(n), clampUnit(0), TUNING.harmony);
+      mains.add(first.skeleton);
+      transitions.add(phraseTransitionProgression(hash(n), TUNING.harmony).skeleton);
+      expect(cycleMainProgression(first, hash(n, 1), clampUnit(0), TUNING.harmony)).toBe(first);
+      expect(cycleMainProgression(first, hash(n, 1), clampUnit(1), TUNING.harmony).skeleton).not.toBe(first.skeleton);
     }
-    expect(mains.size).toBe(MAIN_PROGRESSIONS.length);
-    expect(transitions.size).toBe(TRANSITION_PROGRESSIONS.length);
+    expect(mains.size).toBe(MAIN_SKELETONS.length);
+    expect(transitions.size).toBe(TRANSITION_SKELETONS.length);
   });
 });
 
@@ -66,14 +72,14 @@ describe('phase 2 acceptance: chord progression', () => {
     for (const pairs of runs) {
       for (let phrase = 0; phrase < pairs.length; phrase += 16) {
         const sections = [0, 4, 8, 12].map((offset) => pairs[phrase + offset]!.ctx.progression);
-        expect(MAIN_PROGRESSIONS).toContain(sections[0]);
-        expect(TRANSITION_PROGRESSIONS).toContain(sections[2]);
+        expect(MAIN_SKELETONS).toContain(sections[0]!.skeleton);
+        expect(TRANSITION_SKELETONS).toContain(sections[2]!.skeleton);
         expect(sections[1]).toBe(sections[0]);
         expect(sections[3]).toBe(sections[0]);
         for (let i = phrase; i < phrase + 16; i++) {
           const { ctx } = pairs[i]!;
           expect(ctx.progression).toBe(sections[Math.floor((i - phrase) / 4)]);
-          expect(chordOf(ctx)).toBe(ctx.progression[ctx.pairIn8]);
+          expect(chordOf(ctx)).toBe(ctx.progression.chords[ctx.pairIn8]);
         }
       }
     }
@@ -100,7 +106,8 @@ describe('phase 2 acceptance: chord progression', () => {
     for (const pairs of runs) {
       let run = 1;
       for (let i = 1; i < pairs.length; i++) {
-        run = chordOf(pairs[i]!.ctx).root === chordOf(pairs[i - 1]!.ctx).root ? run + 1 : 1;
+        const symbol = ({ ctx }: GeneratedPair) => ctx.progression.skeleton[ctx.pairIn8];
+        run = symbol(pairs[i]!) === symbol(pairs[i - 1]!) ? run + 1 : 1;
         expect(run).toBeLessThanOrEqual(2);
       }
     }
@@ -122,16 +129,15 @@ describe('phase 2 acceptance: parts on the chords', () => {
   const isPhraseEnd = ({ ctx }: GeneratedPair) => ctx.isSectionEnd && ctx.sectionRole.isPhraseEnd;
   const cutFrom = (pair: GeneratedPair) => (isPhraseEnd(pair) ? (pair.ctx.drums.fill?.from ?? 32) : 32);
 
-  it('plays only chord tones of the 2 bars, each part within its range', () => {
+  // Phase 4 lets the stab and the pad sound the chord's tension too.
+  it('plays only chord tones and tensions of the 2 bars, each part within its range', () => {
     for (const initialKey of ALL_KEYS) {
       for (const params of PARAM_SETS) {
         for (const pair of run(7, 256, () => params, initialKey)) {
           for (const event of pair.pitched) {
             const [lowest, highest] = RANGES[event.instrument];
             for (const pitch of pitchesOf(event)) {
-              const degree = degreeOf(pair.ctx.key, pitch);
-              expect(degree).toBeDefined();
-              expect(isChordTone(chordOf(pair.ctx), degree!)).toBe(true);
+              expect(chordClasses(pair.ctx.key, chordOf(pair.ctx))).toContain(pitch % 12);
               expect(pitch).toBeGreaterThanOrEqual(lowest);
               expect(pitch).toBeLessThanOrEqual(highest);
             }
@@ -146,7 +152,7 @@ describe('phase 2 acceptance: parts on the chords', () => {
       for (const first of [pair.sub.notes[0], pair.reese.notes[0]]) {
         if (first === undefined) continue;
         expect(first.step).toBe(0);
-        expect(degreeOf(pair.ctx.key, first.pitch)).toBe(chordOf(pair.ctx).root);
+        expect(first.pitch % 12).toBe(chordToneClass(pair.ctx.key, chordOf(pair.ctx), 'root'));
       }
     }
   });
@@ -230,11 +236,18 @@ describe('phase 2 acceptance: parts on the chords', () => {
 });
 
 describe('pad voicing', () => {
+  // Without tensions, as phase 2 voiced them.
+  const plain: HarmonyTuning = { ...TUNING.harmony, tensionChance: clampUnit(0), borrowChance: clampUnit(0) };
+
   it('starts each section in root position and moves the voices as little as the candidates allow', () => {
     for (const key of ALL_KEYS) {
-      for (const progression of [...MAIN_PROGRESSIONS, ...TRANSITION_PROGRESSIONS]) {
-        const voicings = sectionVoicings(key, progression);
-        expect(degreeOf(key, voicings[0]![0])).toBe(progression[0].root);
+      const progressions = [
+        ...MAIN_SKELETONS.map((s) => colorMain(s, hash(1), plain)),
+        ...TRANSITION_SKELETONS.map((s) => colorTransition(s, hash(1), plain)),
+      ];
+      for (const { chords } of progressions) {
+        const voicings = sectionVoicings(key, chords);
+        expect(voicings[0]![0] % 12).toBe(chordToneClass(key, chords[0], 'root'));
         for (const voicing of voicings) {
           expect(voicing).toHaveLength(4);
           expect([...voicing].sort((a, b) => a - b)).toEqual(voicing);
@@ -244,7 +257,8 @@ describe('pad voicing', () => {
         for (let n = 1; n < voicings.length; n++) {
           // Close voicings of seventh chords are at most a few semitones per voice apart once led well.
           const moved = voicings[n]!.reduce((sum, p, v) => sum + Math.abs(p - voicings[n - 1]![v]!), 0);
-          expect(moved).toBeLessThanOrEqual(8);
+          // 9 since phase 4 added i–iv–VII–III and i–VI–VII–v.
+          expect(moved).toBeLessThanOrEqual(9);
         }
       }
     }
@@ -254,7 +268,8 @@ describe('pad voicing', () => {
 const RANGES: Readonly<Record<PitchedEvent['instrument'], readonly [number, number]>> = {
   sub: [29, 52],
   reese: [41, 52],
-  stab: [60, 71],
+  // A tension stacks the stab above the octave from C4 (phase 4).
+  stab: [60, 85],
   pad: [53, 76],
 };
 

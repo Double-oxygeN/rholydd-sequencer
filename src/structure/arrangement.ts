@@ -2,6 +2,7 @@ import { TAG, createRng, hash, weightedIndex, type Seed } from '../random/rng.ts
 import { clampUnit, type Brand, type UnitInterval } from '../units.ts';
 import { sectionEnergy } from './energy.ts';
 import { SECTIONS_PER_PHRASE, type PairIn8, type SectionIn32 } from './form.ts';
+import { DROP_EXTENSIONS, type DropExtension, type EnergyTuning, type LayoutTuning } from './tuning.ts';
 
 /** Cycle count from the start of playback (0-based). */
 export type CycleIndex = Brand<number, 'CycleIndex'>;
@@ -53,20 +54,20 @@ export function cycleSections(layout: CycleLayout): number {
   return SECTIONS_PER_PHRASE * (2 + layout.firstDrop + layout.secondDrop);
 }
 
-// Equal chances of 128, 160 and 192 bars: no extension, either drop alone, or both.
-const DROP_EXTENSIONS: readonly (readonly [DropPhrases, DropPhrases, number])[] = [
-  [1, 1, 1 / 3],
-  [2, 1, 1 / 6],
-  [1, 2, 1 / 6],
-  [2, 2, 1 / 3],
-];
+const EXTENDED_DROPS: Readonly<Record<DropExtension, readonly [DropPhrases, DropPhrases]>> = {
+  none: [1, 1],
+  first: [2, 1],
+  second: [1, 2],
+  both: [2, 2],
+};
 
 /** Draws the intro length, the breakdown length and the drop extension, in that order, then the lead-ins. */
-export function drawLayout(cycleSeed: Seed): CycleLayout {
+export function drawLayout(cycleSeed: Seed, tuning: LayoutTuning): CycleLayout {
   const rng = createRng(hash(cycleSeed, TAG.layout));
-  const intro: LeadSections = rng.float() < 0.5 ? 3 : 2;
-  const breakdown: LeadSections = rng.float() < 0.5 ? 3 : 2;
-  const [firstDrop, secondDrop] = DROP_EXTENSIONS[weightedIndex(rng.float(), DROP_EXTENSIONS.map(([, , w]) => w)) ?? 0]!;
+  const intro: LeadSections = rng.float() < tuning.longIntroChance ? 3 : 2;
+  const breakdown: LeadSections = rng.float() < tuning.longBreakdownChance ? 3 : 2;
+  const extension = DROP_EXTENSIONS[weightedIndex(rng.float(), DROP_EXTENSIONS.map((e) => tuning.dropExtension[e])) ?? 0]!;
+  const [firstDrop, secondDrop] = EXTENDED_DROPS[extension];
   return { intro, breakdown, firstDrop, secondDrop, leadIns: drawLeadIns(cycleSeed) };
 }
 
@@ -130,21 +131,26 @@ function drop(which: DropOrdinal, phrases: DropPhrases): readonly SceneRole[] {
  * than the build before it; the tension of a build comes from the riser and the high-pass instead. Drops keep the
  * phase 1 curve so that their 32 bars still rise and fall as A A' B A''.
  */
-export function sceneEnergy(role: SceneRole, sectionIn32: SectionIn32, depth: UnitInterval): UnitInterval {
-  const curve = sceneCurve(role, sectionIn32);
+export function sceneEnergy(
+  role: SceneRole,
+  sectionIn32: SectionIn32,
+  depth: UnitInterval,
+  tuning: EnergyTuning,
+): UnitInterval {
+  const curve = sceneCurve(role, sectionIn32, tuning);
   return clampUnit(1 - depth * (1 - curve));
 }
 
-function sceneCurve(role: SceneRole, sectionIn32: SectionIn32): number {
+function sceneCurve(role: SceneRole, sectionIn32: SectionIn32, { phrase, scene }: EnergyTuning): number {
   switch (role.scene) {
     case 'intro':
-      return 0.5;
+      return scene.intro;
     case 'build':
-      return role.index === role.sections - 1 ? 0.75 : 0.6;
+      return role.index === role.sections - 1 ? scene.buildLast : scene.buildFirst;
     case 'drop':
-      return sectionEnergy(sectionIn32, clampUnit(1));
+      return sectionEnergy(sectionIn32, clampUnit(1), phrase);
     case 'breakdown':
-      return 0.4;
+      return scene.breakdown;
   }
 }
 
@@ -229,23 +235,4 @@ export function opensDrop(ctx: { readonly sceneRole: SceneRole; readonly section
  */
 export function refreshesReference(role: SceneRole): boolean {
   return role.scene === 'intro' || (role.scene === 'drop' && !(role.drop === 'first' && role.phrase === 0));
-}
-
-export const SCENE_LABEL: Readonly<Record<Scene, string>> = {
-  intro: 'イントロ',
-  build: 'ビルド',
-  drop: 'ドロップ',
-  breakdown: 'ブレイクダウン',
-};
-
-export function sceneName(role: SceneRole): string {
-  return role.scene === 'drop' ? `${SCENE_LABEL.drop}${role.drop === 'first' ? 1 : 2}` : SCENE_LABEL[role.scene];
-}
-
-/** Bars from the given bar of the cycle to the start of the next scene, which may be the next cycle's intro. */
-export function barsToNextScene(scenes: readonly SceneRole[], section: SectionInCycle, barInSection: number): number {
-  const current = scenes[section]!.scene;
-  let next = section + 1;
-  while (next < scenes.length && scenes[next]!.scene === current) next++;
-  return (next - section) * BARS_PER_SECTION - barInSection;
 }

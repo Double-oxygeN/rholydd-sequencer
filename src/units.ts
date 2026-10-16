@@ -13,3 +13,6 @@ export function clampUnit(x: number): UnitInterval {
 export function isUnit(x: number): x is UnitInterval {
   return x >= 0 && x <= 1;
 }
+
+/** Relative weight of one choice among others: non-negative, and only meaningful against the weights beside it. */
+export type Weight = Brand<number, 'Weight'>;

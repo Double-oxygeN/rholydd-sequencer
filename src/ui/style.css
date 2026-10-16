@@ -10,6 +10,7 @@
   --ornament: #1a9e74;
   --fill: #e08a1e;
   --bass: #7a4fd6;
+  --solo: #e6c229;
   color-scheme: light;
 }
 
@@ -26,6 +27,7 @@
     --ornament: #45cf9f;
     --fill: #ffb24d;
     --bass: #b18cff;
+    --solo: #f2d75c;
     color-scheme: dark;
   }
 }
@@ -46,6 +48,8 @@ body {
   margin: 0 auto;
   padding: 24px 16px 48px;
   display: grid;
+  /* An auto column would widen to the step grid's minimum content and push the page past a phone's width. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 20px;
 }
 
@@ -55,10 +59,127 @@ h1 {
   letter-spacing: 0.04em;
 }
 
+.menu-toggle {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  /* Above the menu, so that the same spot that opened it closes it. */
+  z-index: 20;
+  background: var(--panel);
+}
+
+.share-toggle {
+  position: fixed;
+  top: 16px;
+  right: 62px;
+  /* Under the menu, which takes the whole width on narrow screens. */
+  z-index: 5;
+  background: var(--panel);
+}
+
+dialog.share {
+  width: min(480px, calc(100vw - 32px));
+  /* The contents carry the padding, so that only clicks on the backdrop land on the dialog itself. */
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--fg);
+}
+
+dialog.share::backdrop {
+  background: rgb(0 0 0 / 0.45);
+}
+
+.share-body {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.share-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.share-header h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.share-url {
+  display: flex;
+  gap: 8px;
+}
+
+.share-copy {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.share-include {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.share-status {
+  margin: 0;
+  min-height: 1.4em;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.offcanvas {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
+  width: min(640px, 100vw);
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 12px;
+  padding: 16px 16px 24px;
+  background: var(--bg);
+  border-left: 1px solid var(--line);
+  box-shadow: -8px 0 24px rgb(0 0 0 / 0.25);
+  transform: translateX(100%);
+  visibility: hidden;
+  transition:
+    transform 0.2s ease,
+    visibility 0s linear 0.2s;
+}
+
+.offcanvas.open {
+  transform: none;
+  visibility: visible;
+  transition: transform 0.2s ease;
+}
+
+.menu-tabs {
+  display: flex;
+  gap: 4px;
+  /* Leaves the corner to the close button. */
+  padding-right: 54px;
+}
+
+.menu-body {
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.menu-body > [hidden] {
+  display: none;
+}
+
 .panel {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 16px;
+  /* One value per line: the menu has room to spare downwards, and the sliders get the full width. */
+  grid-template-columns: 1fr;
+  gap: 14px;
   padding: 16px;
   background: var(--panel);
   border: 1px solid var(--line);
@@ -69,6 +190,11 @@ h1 {
   display: grid;
   gap: 4px;
   align-content: start;
+}
+
+.panel .field {
+  grid-template-columns: 9em minmax(0, 1fr);
+  align-items: center;
 }
 
 .field-label {
@@ -84,6 +210,8 @@ h1 {
 
 .row input[type='range'] {
   flex: 1;
+  /* Browsers give ranges a minimum width that would push the values out of narrow columns. */
+  min-width: 0;
   accent-color: var(--accent);
 }
 
@@ -122,9 +250,23 @@ button {
   cursor: pointer;
 }
 
+.icon {
+  display: block;
+  flex: none;
+}
+
+.icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+}
+
 button.play {
-  font-size: 1.1rem;
-  font-weight: 700;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
   background: var(--accent);
   border-color: var(--accent);
   color: #fff;
@@ -134,6 +276,58 @@ button.play.playing {
   background: var(--fg);
   border-color: var(--fg);
   color: var(--bg);
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.volume {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  color: var(--muted);
+}
+
+.volume-slider {
+  position: relative;
+  display: flex;
+}
+
+.volume-value {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  /* Over the thumb, which travels 16px short of the slider's width. */
+  left: calc(8px + var(--value) * (100% - 16px));
+  transform: translateX(-50%);
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--fg);
+  color: var(--bg);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.volume-slider:hover .volume-value,
+.volume-slider.adjusting .volume-value {
+  opacity: 1;
+}
+
+.volume input {
+  width: 140px;
+  accent-color: var(--accent);
 }
 
 .position {
@@ -147,12 +341,7 @@ button.play.playing {
   align-items: center;
 }
 
-.meter-label {
-  font-size: 0.8rem;
-  color: var(--muted);
-}
-
-.meter span:not(.meter-label) {
+.meter span {
   height: 10px;
   border-radius: 2px;
   background: var(--cell);
@@ -160,6 +349,20 @@ button.play.playing {
 
 .meter span.on {
   background: var(--accent);
+}
+
+.bar-meter {
+  display: none;
+}
+
+@media (max-width: 560px) {
+  .pair-meter {
+    display: none;
+  }
+
+  .bar-meter {
+    display: grid;
+  }
 }
 
 /* Upcoming sections stay faint, so the shape of the rest of the cycle shows without hiding where playback is. */
@@ -187,41 +390,92 @@ button.play.playing {
   background: var(--ornament);
 }
 
-.position-scene {
-  color: var(--fg);
-  font-weight: 600;
-}
-
-.position-total {
+.counters {
   display: flex;
-  gap: 12px;
+  gap: 16px;
+  margin-left: auto;
   align-items: baseline;
-  font-size: 0.9rem;
   color: var(--muted);
+  font-size: 0.9rem;
   font-variant-numeric: tabular-nums;
 }
 
-.position-key {
-  color: var(--fg);
-  font-weight: 600;
-  white-space: nowrap;
+.counters[hidden] {
+  display: none;
 }
 
-.position-chord {
-  min-width: 5em;
-  font-size: 1.2rem;
-  font-weight: 700;
+.counter strong {
+  margin-right: 4px;
+  font-size: 1.4rem;
   color: var(--fg);
+}
+
+.views {
+  display: grid;
+  gap: 8px;
+}
+
+.view-tabs {
+  display: flex;
+  gap: 4px;
+}
+
+.menu-tabs button[aria-selected='true'],
+.mixer-modes button[aria-selected='true'],
+.view-tabs button[aria-selected='true'] {
+  background: var(--fg);
+  border-color: var(--fg);
+  color: var(--bg);
 }
 
 .grid {
   display: grid;
-  grid-template-columns: 4em repeat(32, 1fr);
+  grid-template-columns: 4em repeat(32, minmax(0, 1fr));
   gap: 3px;
   padding: 12px;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 10px;
+}
+
+/*
+ * A phone leaves cells of a few pixels for 32 steps in a line, so it shows the bar playing alone. Seeing both bars
+ * of the pair at once is given up as a limit of the small screen.
+ */
+@media (max-width: 560px) {
+  .grid {
+    grid-template-columns: 3.2em repeat(16, minmax(0, 1fr));
+    padding: 8px;
+  }
+
+  .grid[data-bar='0'] .grid-cell[data-bar='1'],
+  .grid[data-bar='1'] .grid-cell[data-bar='0'] {
+    display: none;
+  }
+}
+
+.grid[hidden],
+.spectrum[hidden] {
+  display: none;
+}
+
+.spectrum {
+  padding: 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.spectrum canvas {
+  display: block;
+  width: 100%;
+  height: 260px;
+}
+
+@media (max-width: 560px) {
+  .spectrum canvas {
+    height: 180px;
+  }
 }
 
 .grid-label {
@@ -231,6 +485,7 @@ button.play.playing {
 }
 
 .grid-cell {
+  min-width: 0;
   aspect-ratio: 1 / 1.6;
   border-radius: 2px;
   background: var(--cell);
@@ -240,20 +495,18 @@ button.play.playing {
   box-shadow: inset 2px 0 0 var(--line);
 }
 
-.grid-cell.bar {
-  box-shadow: inset 3px 0 0 var(--muted);
+/*
+ * Only where both bars show. Showing one bar, its head is the left edge, and the bar counter tells the second bar
+ * from the first, so its first step looks like any other beat.
+ */
+@media (width > 560px) {
+  .grid-cell.bar {
+    box-shadow: inset 3px 0 0 var(--muted);
+  }
 }
 
-.grid-cell[data-layer='base'] {
+.grid-cell[data-layer='hit'] {
   background: color-mix(in srgb, var(--base) calc(var(--velocity) * 100%), var(--cell));
-}
-
-.grid-cell[data-layer='ornament'] {
-  background: color-mix(in srgb, var(--ornament) calc(var(--velocity) * 100% + 30%), var(--cell));
-}
-
-.grid-cell[data-layer='fill'] {
-  background: color-mix(in srgb, var(--fill) calc(var(--velocity) * 100%), var(--cell));
 }
 
 .grid-cell[data-layer='note'] {
@@ -280,13 +533,13 @@ button.play.playing {
 
 .mixer-table {
   display: grid;
-  grid-template-columns: 7em repeat(3, minmax(0, 1fr)) auto;
-  gap: 6px 12px;
+  grid-template-columns: 6em minmax(0, 1fr) auto auto;
+  gap: 6px 10px;
   align-items: center;
 }
 
-.mixer-head {
-  font-size: 0.8rem;
+.mixer-none {
+  font-size: 0.85rem;
   color: var(--muted);
 }
 
@@ -296,13 +549,24 @@ button.play.playing {
 }
 
 .mixer .row output {
+  width: 3.4em;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.mixer-modes {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.mixer-ducking .row output {
   width: 4.5em;
-  font-size: 0.85rem;
 }
 
 .mixer-ducking {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
   gap: 16px;
   padding-top: 12px;
   border-top: 1px solid var(--line);
@@ -337,7 +601,8 @@ button.play.playing {
   font-weight: 700;
 }
 
-button.mute {
+button.mute,
+button.solo {
   width: 2.2em;
   padding: 4px 0;
   font-weight: 700;
@@ -349,14 +614,59 @@ button.mute.on {
   color: #fff;
 }
 
+button.solo.on {
+  background: var(--solo);
+  border-color: var(--solo);
+  color: #000;
+}
+
 @media (max-width: 640px) {
   .mixer-table {
-    grid-template-columns: 5.5em repeat(3, minmax(0, 1fr)) auto;
+    grid-template-columns: 5.5em minmax(0, 1fr) auto auto;
     gap: 6px;
   }
 
   .mixer .row output {
     display: none;
+  }
+}
+
+/* On a phone, padding and labels give up width so that the sliders keep some. */
+@media (max-width: 480px) {
+  #app {
+    padding: 20px 12px 40px;
+  }
+
+  .offcanvas {
+    padding: 12px 12px 16px;
+  }
+
+  .panel,
+  .mixer {
+    padding: 12px;
+  }
+
+  .panel .field {
+    grid-template-columns: 7.5em minmax(0, 1fr);
+  }
+
+  .mixer-table {
+    grid-template-columns: 5em minmax(0, 1fr) auto auto;
+  }
+
+  button.mute,
+  button.solo {
+    width: 2em;
+  }
+
+  .level {
+    grid-template-columns: auto auto;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .level > .field {
+    grid-column: 1 / -1;
   }
 }
 

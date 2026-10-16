@@ -50,6 +50,7 @@ export const TAG = {
   modulation: 21,
   timbre: 22,
   dropLeadIn: 23,
+  harmonyColor: 24,
 } as const;
 export const REL = { repeat: 1, variant: 2 } as const;
 
