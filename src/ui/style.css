@@ -495,8 +495,14 @@ button:disabled {
   box-shadow: inset 2px 0 0 var(--line);
 }
 
-.grid-cell.bar {
-  box-shadow: inset 3px 0 0 var(--muted);
+/*
+ * Only where both bars show. Showing one bar, its head is the left edge, and the bar counter tells the second bar
+ * from the first, so its first step looks like any other beat.
+ */
+@media (width > 560px) {
+  .grid-cell.bar {
+    box-shadow: inset 3px 0 0 var(--muted);
+  }
 }
 
 .grid-cell[data-layer='hit'] {
