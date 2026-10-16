@@ -6,6 +6,7 @@ import {
   audibleChannels,
   isSending,
   type ChannelId,
+  type Decibels,
   type DuckingSettings,
   type MixerSettings,
 } from '../params/mixer.ts';
@@ -123,6 +124,7 @@ export async function loadInstruments(
 ): Promise<Instruments> {
   const resting = restingValue(sound.fx);
   const listening = new Tone.Volume().toDestination();
+  let volume: UnitInterval | null = null;
   // Notes scheduled within the look-ahead window keep playing after Transport.stop, so stop needs a gate.
   // It sits last so that it also cuts the reverb tail.
   const gate = new Tone.Gain(0).connect(listening);
@@ -196,7 +198,8 @@ export async function loadInstruments(
   // Taken after the snare's trim but before its fader, so a throw never depends on the snare's level. It still
   // follows the snare's mute and the solos: a throw from a silenced snare would sound like a fault.
   const throwSend = new Tone.Gain(resting.throwSend).connect(reverbIn);
-  const throwGate = new Tone.Gain(audibleChannels(mixer).snare ? 1 : 0).connect(throwSend);
+  let throwing = audibleChannels(mixer).snare;
+  const throwGate = new Tone.Gain(throwing ? 1 : 0).connect(throwSend);
   strips.snare.input.connect(throwGate);
   const automated: Readonly<Record<AutomationTarget, readonly Automatable[]>> = {
     riserGain: [riserGain.gain],
@@ -277,14 +280,17 @@ export async function loadInstruments(
       for (const reese of Object.values(voices.reese)) reese.triggerRelease(now);
       for (const chord of [...Object.values(voices.stab), ...Object.values(voices.pad)]) chord.releaseAll(now);
     },
-    setVolume(volume) {
-      listening.volume.rampTo(Tone.gainToDb(volume), MIXER_RAMP_SECONDS);
+    setVolume(next) {
+      if (next === volume) return;
+      glide(listening.volume, Tone.gainToDb(next));
+      volume = next;
     },
     setMixer(next) {
       const audible = audibleChannels(next);
       for (const id of CHANNEL_IDS) strips[id].apply(next[id], audible[id]);
       // Kept apart from the throw's own send, so that the mixer and the automation never move the same parameter.
-      throwGate.gain.rampTo(audible.snare ? 1 : 0, MIXER_RAMP_SECONDS);
+      if (audible.snare !== throwing) glide(throwGate.gain, audible.snare ? 1 : 0);
+      throwing = audible.snare;
     },
     fx(events, pairStart, stepSeconds, from = 0 as Step) {
       for (const point of fxAutomation(events, pairStart, stepSeconds, sound.fx, from)) {
@@ -326,6 +332,39 @@ interface Automatable {
   cancelScheduledValues(time: number): unknown;
 }
 
+type MixerParam = Tone.Param<'decibels' | 'audioRange' | 'gain'>;
+
+const settling = new WeakMap<MixerParam, ReturnType<typeof setTimeout>>();
+
+/**
+ * Moves a mixer parameter to the value over MIXER_RAMP_SECONDS from now, then sets it once more at the audio's
+ * current time when the ramp is over. Chrome sometimes never applies a value scheduled ahead of the audio's current
+ * time, and a part then kept sounding after a solo silenced it; a value set at the current time was always applied.
+ * Tone's rampTo and mute are not used, as both only schedule ahead. A mixer move is not tied to the beat, so it
+ * starts now rather than a look-ahead later.
+ */
+function glide(param: MixerParam, value: number): void {
+  const start = Tone.immediate();
+  clearTimeout(settling.get(param));
+  // Before the first play the audio's clock stands still, so a ramp would never end; nothing sounds yet to click.
+  if (Tone.getContext().state !== 'running') {
+    param.cancelScheduledValues(start);
+    param.setValueAtTime(value, start);
+    return;
+  }
+  const end = start + MIXER_RAMP_SECONDS;
+  const from = param.getValueAtTime(start);
+  param.cancelScheduledValues(start);
+  param.setValueAtTime(from, start);
+  param.linearRampToValueAtTime(value, end);
+  const settle = () => {
+    const now = Tone.immediate();
+    if (now < end) settling.set(param, setTimeout(settle, (end - now) * 1000));
+    else param.setValueAtTime(value, now);
+  };
+  settling.set(param, setTimeout(settle, MIXER_RAMP_SECONDS * 1000));
+}
+
 function apply(param: Automatable, { time, value, ramp }: AutomationPoint): void {
   switch (ramp) {
     case 'set':
@@ -364,24 +403,30 @@ function createStrips(mixer: MixerSettings, trimDb: SoundTuning['trimDb'], buses
     CHANNEL_IDS.map((id) => {
       const settings = mixer[id];
       // Tone's own solo is not used: it solos one channel at a time and silences the reverb return with the rest.
-      const channel = new Tone.Channel({ volume: settings.level, mute: !audible[id], pan: 0 });
+      // A silenced channel is a fader at −∞ rather than Tone's mute, for the reason given at glide.
+      const fader = (level: Decibels, sounds: boolean) => (sounds ? level : -Infinity);
+      const pan = isSending(settings) ? settings.pan : 0;
+      const channel = new Tone.Channel({ volume: fader(settings.level, audible[id]), pan });
       channel.connect(DRUM_CHANNELS.includes(id) ? buses.drums : buses.mix);
       // Taken after the fader so that pulling a part down also pulls down its reverb.
       const send = isSending(settings) ? new Tone.Gain(settings.send) : null;
       if (send !== null) channel.chain(send, buses.reverb);
       const input = id === 'reverbReturn' ? channel : new Tone.Volume(trimDb[id as SourceId]).connect(channel);
+      // Every mixer change reaches every strip, so each one only schedules what changed for it.
+      let applied = { settings, sounds: audible[id] };
       const strip: Strip = {
         input,
         apply(next, sounds) {
-          channel.volume.rampTo(next.level, MIXER_RAMP_SECONDS);
-          channel.mute = !sounds;
-          if (isSending(next)) {
-            channel.pan.rampTo(next.pan, MIXER_RAMP_SECONDS);
-            send?.gain.rampTo(next.send, MIXER_RAMP_SECONDS);
+          if (next.level !== applied.settings.level || sounds !== applied.sounds) {
+            glide(channel.volume, fader(next.level, sounds));
           }
+          if (isSending(next) && isSending(applied.settings)) {
+            if (next.pan !== applied.settings.pan) glide(channel.pan, next.pan);
+            if (next.send !== applied.settings.send && send !== null) glide(send.gain, next.send);
+          }
+          applied = { settings: next, sounds };
         },
       };
-      strip.apply(settings, audible[id]);
       return [id, strip];
     }),
   ) as Record<ChannelId, Strip>;
