@@ -26,16 +26,19 @@ tools/simulate ──▶ generators/ensemble
 | `src/engine/transport.ts` | 再生・一時停止・再開・停止。開始は「ステップ0からの再開」として同じ経路で扱う | あり |
 | `src/engine/audio.ts` | 一時停止、再開位置の値からの開始、ソロ、リバーブスローの消音、スペクトラムアナライザーの取り出し | あり |
 | `src/params/mixer.ts` | ソロの欄と、鳴らすチャンネルの判定 `audibleChannels` | なし |
-| `src/params/query.ts` | クエリ文字列から初期シードを読む | なし |
+| `src/params/query.ts` | クエリ文字列から初期シードを読む。共有する URL を作る | なし |
 | `src/structure/tuning.ts` | 生成の調整用の数値の型と既定値（`GenerationTuning`） | なし |
 | `src/engine/tuning.ts` | 音の調整用の数値の型と既定値（`SoundTuning`） | なし |
 | `src/params/config.ts` | 設定ファイルの型、既定値、JSON の検証と既定値との合成 | なし |
 | `src/params/load-config.ts` | ブラウザで `config.json` を取りに行く | なし（`fetch` だけ） |
 | `src/ui/controls.ts` | 再生・一時停止・再開のボタン、停止のボタン、音量 | なし |
+| `src/ui/playback.ts` | 再生の状態と操作（ボタンかメディア操作か）から、実行する命令を決める | なし |
+| `src/ui/media-session.ts` | Media Session API への状態の受け渡しと、無音の `audio` 要素 | なし |
+| `src/ui/share.ts` | 共有のボタンとダイアログ | なし |
 | `src/ui/icons.ts` | Lucide（`lucide` 1.49.0 に固定）のアイコンと、アイコンだけのボタン | なし |
 | `src/ui/menu.ts` | 右上のボタンで開閉するオフキャンバスのメニューと、パラメーター・ミキサーのタブ | なし |
 | `src/ui/position.ts` | 累計の数値と2行のメーター | なし |
-| `src/ui/grid.ts` | スネアとゴーストを1つのレーンにまとめる | なし |
+| `src/ui/grid.ts` | スネアとゴーストを1つのレーンにまとめる。狭い画面で1小節ずつ2段に折り返す | なし |
 | `src/ui/spectrum.ts` | セグメントメーター型のスペクトラムアナライザーの描画 | なし |
 | `src/ui/views.ts` | シーケンサーとスペクトラムアナライザーの切り替え | なし |
 | `src/ui/panel.ts`、`src/ui/mixer.ts` | 折りたたみのメニューにする。ミキサーにソロ | なし |
@@ -421,8 +424,12 @@ position のメーター2行
 views（切り替えボタン、grid か spectrum）
 aside.offcanvas （タブ: パラメーター | ミキサー）
 button.menu-toggle（右上に固定。メニューより上に重ね、開いている間は閉じるボタンになる）
+button.share-toggle（menu-toggle の左に固定。メニューより下に置く）
+dialog.share
 status
 ```
+
+再生の操作は、画面のボタンとメディア操作の両方から、`main.ts` の1つの関数 `run(command)` を通します。どちらから操作しても `render()` が画面とメディア操作の表示を同じ状態で描き直すためです。
 
 メニューは、背景を覆わない固定のオフキャンバス（`aside`）です。閉じている間は `inert` にし、隠れた操作部品にフォーカスが移らないようにします。開閉のボタンは1つで、開くとアイコンと名前を「閉じる」に替えます。幅 1100px 以上の画面では、開いている間 `#app` の右の余白をメニューの幅にして、本体を隠しません。
 
@@ -439,6 +446,68 @@ status
 マスターのピークとクリップの回数（`resetLevel`）は、停止から再生したときだけ消し、再開では消しません。ミキサーのメニューで「再生を始めてからの値」を確かめられるようにするためです。
 
 音量スライダーは `output` を重ね、`:hover` の間と、`pointerdown` から `pointerup` までの間（`adjusting` クラス）、キー操作の後1秒の間だけ、つまみの上に百分率を出します。
+
+### 再生の命令（`ui/playback.ts`）
+
+```ts
+type PlaybackCommand = 'start' | 'pause' | 'resume' | 'stop';
+type MediaAction = 'play' | 'pause' | 'stop';                       // Media Session API の操作のうち受けるもの
+function toggleCommand(state: PlaybackState): Exclude<PlaybackCommand, 'stop'>;      // 再生ボタン
+function mediaCommand(action: MediaAction, state: PlaybackState): PlaybackCommand | null;
+```
+
+| 操作 | 停止 | 再生中 | 一時停止中 |
+| --- | --- | --- | --- |
+| 再生ボタン | `start` | `pause` | `resume` |
+| 停止ボタン | （押せない） | `stop` | `stop` |
+| メディアの `play` | `start` | なし | `resume` |
+| メディアの `pause` | なし | `pause` | なし |
+| メディアの `stop` | なし | `stop` | `stop` |
+
+メディアの `play` と `pause` を再生ボタンのような切り替えにしないのは、OS が「再生」と「一時停止」を別の操作として送ってくるためです。再生中に `play` が来ても一時停止しません。
+
+`start` は `Tone.start()` を待つ間に2度目が来ても、セッションを2つ作らないようにします。待っている間は `starting` を立て、ほかの命令を捨てます。メディア操作は画面のクリックより短い間隔で届くことがあるためです。
+
+### メディア操作（`ui/media-session.ts`）
+
+```ts
+interface MediaSessionLink { show(state: PlaybackState, seed: Seed | undefined): void }
+function linkMediaSession(onAction: (action: MediaAction) => void): MediaSessionLink;
+function silentWav(seconds: number, sampleRate: number): Uint8Array;   // 8bit モノラルの無音の WAV
+```
+
+- `navigator.mediaSession` がないブラウザでは、何もしない `MediaSessionLink` を返す
+- `show` は `playbackState` を `'none'`・`'playing'`・`'paused'` にし、`metadata` を `{ title: 'GenDnB', artist: 'シード {seed}' }` にする。停止中は `metadata` を消す。`setPositionState` は呼ばない（曲に終わりがないため）
+- 無音の `audio` 要素は、`silentWav(10, 8000)` の Blob の URL を `loop` で鳴らす。10秒にするのは、Chrome が5秒以下のメディアに通知を出さないためです。要素の `muted` と音量は変えない。消音した要素を、ブラウザがメディア操作の手がかりにしないためです
+- 再生中は `audio.play()`、一時停止中と停止では `audio.pause()` を呼ぶ。`play()` が拒否されても（自動再生の制限）、音は Web Audio API から出ているので無視する
+- 要素の `pause` イベントが、こちらから止めたのではないときに来たら（ヘッドホンが抜けたときなど）、メディアの `pause` として扱う
+- 音を `MediaStreamAudioDestinationNode` から `audio` 要素に流す方法は採らない。音の経路と遅延が変わり、リミッターの後のクリップの検出（N-10）やクリック防止（N-17）を確かめ直すことになるためです
+
+### 共有（`ui/share.ts`、`params/query.ts`）
+
+```ts
+function shareUrl(page: string, seed: Seed | undefined): string;   // クエリ文字列とフラグメントを除き、seed があれば ?seed= を付ける
+function createShareDialog(seedToShare: () => Seed): { readonly toggle: HTMLButtonElement; readonly element: HTMLDialogElement };
+```
+
+- ページの URL は `new URL(import.meta.env.BASE_URL, location.href)` とする。`location` を読むのは `main.ts` だけにし、`shareUrl` は Node.js 上でテストする
+- `seedToShare` は、セッションがあればそのセッションを始めたシード、なければストアのシードを返す。`main.ts` が `start` のときにシードを控える
+- ダイアログは `<dialog>` を `showModal()` で開く。開くたびに、その時点のシードで URL を作り直す。Esc キーでは、ブラウザの既定の動作で閉じる
+- **外側のクリック**: `dialog` の余白を 0 にして中身を内側の要素に入れ、`pointerdown` と `click` の対象がどちらも `dialog` 自身のときだけ閉じる。モーダルの `dialog` では、背景のクリックの対象が `dialog` になるためです。`pointerdown` も確かめるのは、URL の欄で文字を選びながら外までドラッグしたときに閉じないようにするためです
+- **コピー**: `navigator.clipboard.writeText` を使う。ない（HTTPS でない配布先や、開発サーバーに LAN の IP で接続したとき）か失敗したときは、URL の欄を選択して「選択した URL をコピーしてください」と出す。`document.execCommand('copy')` は非推奨なので使わない
+- 結果の表示は `aria-live="polite"` の要素に出し、URL かチェックボックスが変わったら消す
+- アイコンは Lucide の `Share2`（共有のボタン）、`Copy`（コピー）、`X`（閉じる）
+
+### 狭い画面（`ui/style.css`、`ui/grid.ts`）
+
+幅 320px までを対象にします。
+
+- `#app` の列を `minmax(0, 1fr)` にする。暗黙の列（`auto`）のままでは、中身の最小幅（ステップグリッドのマスの `aspect-ratio` から決まる最小幅）でページが横に広がるためです。ステップグリッドの列も `minmax(0, 1fr)` にし、マスの `min-width` を 0 にする
+- **シーケンサーの折り返し**: 幅 560px 以下で、32ステップを1小節ずつ上下2段にする。1段のままでは幅 320px でマスが約 3px になるためです。各マスと各ラベルに、広い画面と狭い画面での行と列を CSS の変数（`--wide-row`、`--wide-column`、`--narrow-row`、`--narrow-column`）で持たせ、メディアクエリで `grid-area` に使う変数を選ぶ。要素の並び（`columns[step]` によるハイライト）は変えない。2段目のラベルは別の要素で持ち、広い画面では隠す。2段の間には空の行を1つ挟む
+- **メニュー**: 幅 720px 以下で、右からではなく下から出す（高さ 60dvh）。開いている間は `#app` の下の余白をメニューの高さだけ足し、本体の全体をメニューの上にスクロールできるようにする。720px は、右から出す幅 640px のメニューの左に、再生の操作が残る幅です
+- **パラメーター**: 幅 480px 以下で、`.field` のラベルの列を 9em から 6.5em に詰める。ミキサーの表とダッキングは、既存の 640px 以下の指定（数値の表示を消す）のまま、ダッキングの最小幅を外す
+- **スペクトラムアナライザー**: 幅 560px 以下で、高さを 260px から 180px にする
+- **共有のダイアログ**: 幅を `min(480px, 100vw − 32px)` にし、URL の欄は折り返さずに欄の中でスクロールさせる
 
 ### メニューの中身
 
@@ -633,5 +702,7 @@ async function loadConfig(url: string): Promise<Decoded<Config>>;
 | 設定ファイルと再現性 | 同じ `GenerationTuning` で2回生成した `events` が一致する。`borrowChance` を 0 と 1 にしたシミュレーションで、借用和音の数が 0 と、iv・v の位置すべてになる |
 | 読み込み | `loadConfig` を、`fetch` を差し替えて、表の5つの状況で確かめる |
 | 5ms 以内 | アンサンブルの `next` の平均時間（色付けを含む） |
+| 共有する URL | `shareUrl` に、クエリ文字列・フラグメント・パスのある URL と、シードあり・なしを渡す。結果を `seedFromQuery` で読むと、渡したシードか `undefined` に戻る |
+| メディア操作 | `toggleCommand` と `mediaCommand` を、操作と状態の表と照合する。`silentWav` の長さと、ヘッダーのサンプルレート、データがすべて無音（128）であること |
 
-試聴・UI の確認・長時間動作の基準は、`npm run dev` で開いた画面で確かめます。
+試聴・UI の確認・長時間動作の基準は、`npm run dev` で開いた画面で確かめます。狭い画面の確認は、ブラウザの開発者ツールで幅 320px と 375px にして行います。メディア操作は、ページのスクリーンショットでは確かめられないので、実機の OS の表示で確かめます。
