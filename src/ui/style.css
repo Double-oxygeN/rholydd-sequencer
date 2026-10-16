@@ -48,6 +48,8 @@ body {
   margin: 0 auto;
   padding: 24px 16px 48px;
   display: grid;
+  /* An auto column would widen to the step grid's minimum content and push the page past a phone's width. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 20px;
 }
 
@@ -97,6 +99,31 @@ h1 {
 @media (min-width: 1100px) {
   body.menu-open #app {
     margin-right: min(640px, 100vw);
+  }
+}
+
+/*
+ * From the right, the menu would cover the whole of a narrow page, playback included. From below, the top of the
+ * page stays in sight, and the room added under the page lets the rest of it scroll up above the menu.
+ */
+@media (max-width: 720px) {
+  .offcanvas {
+    top: auto;
+    left: 0;
+    width: auto;
+    height: 60dvh;
+    border-left: 0;
+    border-top: 1px solid var(--line);
+    box-shadow: 0 -8px 24px rgb(0 0 0 / 0.25);
+    transform: translateY(100%);
+  }
+
+  body.menu-open #app {
+    padding-bottom: calc(60dvh + 24px);
+  }
+
+  .menu-tabs {
+    padding-right: 0;
   }
 }
 
@@ -357,12 +384,36 @@ button:disabled {
 
 .grid {
   display: grid;
-  grid-template-columns: 4em repeat(32, 1fr);
+  grid-template-columns: 4em repeat(32, minmax(0, 1fr));
   gap: 3px;
   padding: 12px;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 10px;
+}
+
+.grid > * {
+  grid-area: var(--wide-row) / var(--wide-column);
+}
+
+.grid-label.folded {
+  display: none;
+}
+
+/* A phone leaves cells of a few pixels for 32 steps in a line, so each bar gets a line of its own. */
+@media (max-width: 560px) {
+  .grid {
+    grid-template-columns: 3.2em repeat(16, minmax(0, 1fr));
+    padding: 8px;
+  }
+
+  .grid > * {
+    grid-area: var(--narrow-row) / var(--narrow-column);
+  }
+
+  .grid-label.folded {
+    display: block;
+  }
 }
 
 .grid[hidden],
@@ -383,6 +434,12 @@ button:disabled {
   height: 260px;
 }
 
+@media (max-width: 560px) {
+  .spectrum canvas {
+    height: 180px;
+  }
+}
+
 .grid-label {
   font-size: 0.8rem;
   color: var(--muted);
@@ -390,6 +447,7 @@ button:disabled {
 }
 
 .grid-cell {
+  min-width: 0;
   aspect-ratio: 1 / 1.6;
   border-radius: 2px;
   background: var(--cell);
@@ -464,7 +522,7 @@ button:disabled {
 
 .mixer-ducking {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
   gap: 16px;
   padding-top: 12px;
   border-top: 1px solid var(--line);
@@ -526,6 +584,45 @@ button.solo.on {
 
   .mixer .row output {
     display: none;
+  }
+}
+
+/* On a phone, padding and labels give up width so that the sliders keep some. */
+@media (max-width: 480px) {
+  #app {
+    padding: 20px 12px 40px;
+  }
+
+  .offcanvas {
+    padding: 12px 12px 16px;
+  }
+
+  .panel,
+  .mixer {
+    padding: 12px;
+  }
+
+  .panel .field {
+    grid-template-columns: 7.5em minmax(0, 1fr);
+  }
+
+  .mixer-table {
+    grid-template-columns: 5em minmax(0, 1fr) auto auto;
+  }
+
+  button.mute,
+  button.solo {
+    width: 2em;
+  }
+
+  .level {
+    grid-template-columns: auto auto;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .level > .field {
+    grid-column: 1 / -1;
   }
 }
 

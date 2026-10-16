@@ -21,27 +21,64 @@ export interface StepGrid {
   highlight(step: Step | null): void;
 }
 
+/** A cell's line numbers in the CSS grid, counted from 1. */
+interface GridArea {
+  readonly row: number;
+  readonly column: number;
+}
+
+const BARS_PER_PAIR = STEPS_PER_PAIR / STEPS_PER_BAR;
+
+/**
+ * Where a lane's cell goes on wide screens, all 32 steps in one line, and on narrow ones, one bar under the other
+ * with an empty row between them: 32 steps in one line leave cells of a few pixels on a phone.
+ */
+function cellAreas(lane: number, step: number): Readonly<Record<'wide' | 'narrow', GridArea>> {
+  const bar = Math.floor(step / STEPS_PER_BAR);
+  return {
+    wide: { row: lane + 1, column: step + 2 },
+    narrow: { row: bar * (ROWS.length + 1) + lane + 1, column: (step % STEPS_PER_BAR) + 2 },
+  };
+}
+
+function place(element: HTMLElement, areas: Readonly<Record<'wide' | 'narrow', GridArea>>): void {
+  for (const [layout, area] of Object.entries(areas)) {
+    element.style.setProperty(`--${layout}-row`, String(area.row));
+    element.style.setProperty(`--${layout}-column`, String(area.column));
+  }
+}
+
 export function createStepGrid(): StepGrid {
   const element = document.createElement('div');
   element.className = 'grid';
   const cells = new Map<string, HTMLElement>();
   const columns: HTMLElement[][] = Array.from({ length: STEPS_PER_PAIR }, () => []);
 
-  for (const row of ROWS) {
-    const label = document.createElement('div');
-    label.className = 'grid-label';
-    label.textContent = ROW_LABEL[row];
-    element.append(label);
+  ROWS.forEach((row, lane) => {
+    for (let bar = 0; bar < BARS_PER_PAIR; bar++) {
+      const label = document.createElement('div');
+      label.className = 'grid-label';
+      // The later bars' labels only show where the bars are folded under one another.
+      if (bar > 0) label.classList.add('folded');
+      label.textContent = ROW_LABEL[row];
+      const first = cellAreas(lane, bar * STEPS_PER_BAR);
+      place(label, {
+        wide: { row: first.wide.row, column: 1 },
+        narrow: { row: first.narrow.row, column: 1 },
+      });
+      element.append(label);
+    }
     for (let step = 0; step < STEPS_PER_PAIR; step++) {
       const cell = document.createElement('div');
       cell.className = 'grid-cell';
       if (step % 4 === 0) cell.classList.add('beat');
       if (step === STEPS_PER_BAR) cell.classList.add('bar');
+      place(cell, cellAreas(lane, step));
       cells.set(`${row}:${step}`, cell);
       columns[step]!.push(cell);
       element.append(cell);
     }
-  }
+  });
 
   const paint = (row: Row, step: number, layer: string, velocity: number, title = '') => {
     const cell = cells.get(`${row}:${step}`);
