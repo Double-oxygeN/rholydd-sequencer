@@ -11,6 +11,7 @@ import { createOffCanvasMenu } from './ui/menu.ts';
 import { createMixerView } from './ui/mixer.ts';
 import { createPanel } from './ui/panel.ts';
 import { createPositionView } from './ui/position.ts';
+import { createShareDialog } from './ui/share.ts';
 import { createSpectrumView } from './ui/spectrum.ts';
 import { createViews } from './ui/views.ts';
 import './ui/style.css';
@@ -38,7 +39,23 @@ async function boot(root: HTMLElement) {
   status.className = 'status';
   status.textContent = 'サンプルを読み込み中…';
   const menu = createOffCanvasMenu({ parameters: panel.element, mixer: mixerView.element });
-  root.append(title, controls.element, position.element, views.element, status, menu.element, menu.toggle);
+  let session: PlaybackSession | null = null;
+  // The seed field may change during playback and only applies from the next start, so a session shares its own.
+  let sessionSeed = store.get().seed;
+  const share = createShareDialog(new URL(import.meta.env.BASE_URL, location.href).href, () =>
+    session === null ? store.get().seed : sessionSeed,
+  );
+  root.append(
+    title,
+    controls.element,
+    position.element,
+    views.element,
+    status,
+    menu.element,
+    menu.toggle,
+    share.toggle,
+    share.element,
+  );
 
   const instruments = await loadInstruments(SAMPLE_BASE_URL, store.get().mixer, config.sound);
   status.textContent = warnings.length > 0 ? '設定ファイルの一部の値を無視しました（詳細はコンソール）' : '';
@@ -59,7 +76,6 @@ async function boot(root: HTMLElement) {
     },
   });
 
-  let session: PlaybackSession | null = null;
   // The spectrum only draws while it is shown and something plays (N-16).
   const drawSpectrum = () => {
     if (views.current() === 'spectrum' && session?.state === 'playing') spectrum.run(instruments.spectrum);
@@ -80,6 +96,7 @@ async function boot(root: HTMLElement) {
       const { bpm, seed, initialKey } = store.get();
       // Only a new session clears the peak and the clip count: they count from the start of playback.
       mixerView.resetLevel();
+      sessionSeed = seed;
       session = sequencer.start({ bpm, seed, initialKey, tuning: config.generation });
     } else {
       // A paused session keeps the grid and the position where they stopped.

@@ -4,7 +4,7 @@ import { STAB_LOWEST, STAB_SPAN } from '../src/generators/stab/index.ts';
 import { DEFAULT_CONFIG, decodeConfig, initialParams, parseConfigText } from '../src/params/config.ts';
 import { loadConfig } from '../src/params/load-config.ts';
 import { CHANNEL_IDS, DEFAULT_MIXER, SOLOABLE_IDS, audibleChannels, type MixerSettings } from '../src/params/mixer.ts';
-import { seedFromQuery } from '../src/params/query.ts';
+import { seedFromQuery, shareUrl } from '../src/params/query.ts';
 import { BAND_CENTERS, FLOOR_DB, SEGMENTS, bandLevels, holdPeaks, litSegments } from '../src/ui/spectrum.ts';
 import type { PitchedEvent } from '../src/generators/types.ts';
 import { toSeed } from '../src/random/rng.ts';
@@ -235,6 +235,29 @@ describe('phase 4 acceptance: initial seed', () => {
     expect(initialParams(withSeed, undefined).seed).toBe(7);
     const drawn = new Set(Array.from({ length: 8 }, () => initialParams(DEFAULT_CONFIG, undefined).seed));
     expect(drawn.size).toBeGreaterThan(1);
+  });
+});
+
+describe('phase 4 acceptance: sharing', () => {
+  const pages = [
+    'https://example.com/',
+    'https://example.com/gendnb/?seed=1&bpm=170#menu',
+    'http://192.168.0.2:5173/?seed=99',
+  ];
+
+  it('shares the page without its query and fragment, with the seed only when asked to', () => {
+    expect(shareUrl(pages[1]!, toSeed(12345))).toBe('https://example.com/gendnb/?seed=12345');
+    expect(shareUrl(pages[1]!, undefined)).toBe('https://example.com/gendnb/');
+    expect(shareUrl(pages[2]!, undefined)).toBe('http://192.168.0.2:5173/');
+  });
+
+  it('gives back the shared seed, or none, when the link is opened', () => {
+    for (const page of pages) {
+      for (const seed of [toSeed(0), toSeed(12345), toSeed(4294967295)]) {
+        expect(seedFromQuery(new URL(shareUrl(page, seed)).search)).toBe(seed);
+      }
+      expect(seedFromQuery(new URL(shareUrl(page, undefined)).search)).toBeUndefined();
+    }
   });
 });
 

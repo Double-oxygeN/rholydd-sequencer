@@ -68,6 +68,70 @@ h1 {
   background: var(--panel);
 }
 
+.share-toggle {
+  position: fixed;
+  top: 16px;
+  right: 62px;
+  /* Under the menu, which takes the whole width on narrow screens. */
+  z-index: 5;
+  background: var(--panel);
+}
+
+dialog.share {
+  width: min(480px, calc(100vw - 32px));
+  /* The contents carry the padding, so that only clicks on the backdrop land on the dialog itself. */
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--fg);
+}
+
+dialog.share::backdrop {
+  background: rgb(0 0 0 / 0.45);
+}
+
+.share-body {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.share-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.share-header h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.share-url {
+  display: flex;
+  gap: 8px;
+}
+
+.share-copy {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.share-include {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.share-status {
+  margin: 0;
+  min-height: 1.4em;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
 .offcanvas {
   position: fixed;
   top: 0;
