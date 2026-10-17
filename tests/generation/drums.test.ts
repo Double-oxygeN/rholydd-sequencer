@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { canonicalPattern, initialPattern } from '../src/generators/drums/base.ts';
-import { satisfiesConstraints } from '../src/generators/drums/constraints.ts';
-import { compose } from '../src/generators/drums/compose.ts';
+import { canonicalPattern, initialPattern } from '../../src/generators/drums/base.ts';
+import { compose } from '../../src/generators/drums/compose.ts';
+import { satisfiesConstraints } from '../../src/generators/drums/constraints.ts';
 import {
   DROP_LEAD_FILL_KINDS,
   FILL_KINDS,
@@ -9,19 +9,30 @@ import {
   fill,
   phraseFill,
   type FillKind,
-} from '../src/generators/drums/fill.ts';
-import { mutate, mutationCount } from '../src/generators/drums/mutate.ts';
-import { ORNAMENT_PARTS, ornament } from '../src/generators/drums/ornament.ts';
-import { cellAt, motifCell, patternsEqual } from '../src/generators/drums/pattern.ts';
-import { PROFILES, isAnchorStep, slotsOf, stepWeight } from '../src/generators/drums/weights.ts';
-import { ALL_STEPS, PARTS } from '../src/generators/types.ts';
-import { createRng, hash, toSeed } from '../src/random/rng.ts';
-import { clampUnit } from '../src/units.ts';
-import { SEEDS, TUNING, liveParams, run, type GeneratedPair } from './helpers.ts';
+} from '../../src/generators/drums/fill.ts';
+import { mutate, mutationCount } from '../../src/generators/drums/mutate.ts';
+import { ORNAMENT_PARTS, ornament } from '../../src/generators/drums/ornament.ts';
+import { cellAt, motifCell, patternsEqual } from '../../src/generators/drums/pattern.ts';
+import { PROFILES, isAnchorStep, slotsOf, stepWeight } from '../../src/generators/drums/weights.ts';
+import { ALL_STEPS, PARTS, type Step } from '../../src/generators/types.ts';
+import { createRng, hash, toSeed } from '../../src/random/rng.ts';
+import { changesScene, leadsIntoDrop } from '../../src/structure/arrangement.ts';
+import { clampUnit } from '../../src/units.ts';
+import { PARAM_SETS, SEEDS, TUNING, eventsAt, liveParams, run, type GeneratedPair } from '../support/helpers.ts';
 
 const inCategory = (w: number) => w === 0 || w === 1 || (w >= 0.1 && w <= 0.3) || (w >= 0.5 && w <= 0.8);
 
-describe('weight table', () => {
+const BARS = 1024;
+
+const LONG_BARS = 2048;
+
+const runs = SEEDS.flatMap((seed) => PARAM_SETS.map((params) => ({ params, pairs: run(seed, LONG_BARS, () => params) })));
+
+function isBreakdownEnd({ ctx }: GeneratedPair): boolean {
+  return ctx.sceneRole.scene === 'breakdown' && changesScene(ctx);
+}
+
+describe('drums: weight table', () => {
   it('uses only the four weight categories', () => {
     for (const part of PARTS) expect(PROFILES[part].weights.every(inCategory)).toBe(true);
   });
@@ -46,13 +57,13 @@ describe('weight table', () => {
   });
 });
 
-describe('initialPattern', () => {
+describe('drums: initialPattern', () => {
   it('always satisfies the constraints', () => {
     for (let i = 0; i < 500; i++) expect(satisfiesConstraints(initialPattern(hash(i)))).toBe(true);
   });
 });
 
-describe('mutate', () => {
+describe('drums: mutate', () => {
   it('keeps the constraints over many accumulated mutations', () => {
     let pattern = canonicalPattern();
     for (let section = 0; section < 2000; section++) {
@@ -98,7 +109,7 @@ describe('mutate', () => {
   });
 });
 
-describe('ornament', () => {
+describe('drums: ornament', () => {
   it('adds only hats and ghosts to steps 24 to 31 with velocity 0.3 to 0.6', () => {
     const base = canonicalPattern();
     for (let i = 0; i < 200; i++) {
@@ -117,7 +128,7 @@ describe('ornament', () => {
   });
 });
 
-describe('fill', () => {
+describe('drums: fill', () => {
   it('fires according to the intensity', () => {
     for (let i = 0; i < 50; i++) {
       expect(fill(hash(i), clampUnit(0), 'chance', TUNING.fill.sectionLength)).toBeNull();
@@ -150,7 +161,7 @@ describe('fill', () => {
   });
 });
 
-describe('fill cues', () => {
+describe('drums: fill cues', () => {
   it('always fills a scene change unless the intensity is 0, keeping the drawn kind and length', () => {
     for (let i = 0; i < 200; i++) {
       expect(fill(hash(i), clampUnit(0), 'certain', TUNING.fill.sectionLength)).toBeNull();
@@ -180,7 +191,7 @@ describe('fill cues', () => {
   });
 });
 
-describe('phraseFill', () => {
+describe('drums: phraseFill', () => {
   it('always plays unless the intensity is 0', () => {
     for (let i = 0; i < 50; i++) {
       expect(phraseFill(hash(i), clampUnit(0), 'free', TUNING.fill.phraseLength)).toBeNull();
@@ -228,13 +239,16 @@ describe('phraseFill', () => {
   });
 });
 
-describe('compose with a fill', () => {
+describe('drums: compose with a fill', () => {
   const closing = SEEDS.flatMap((seed) => run(seed, 2048, () => liveParams(0.5, 0.5, 1))).filter(
     (pair) => pair.layers.fill !== null,
   );
+
   const inFill = (pair: GeneratedPair, events = pair.events) =>
     events.filter((e) => pair.layers.fill!.steps.includes(e.step));
+
   const withoutFill = (pair: GeneratedPair) => compose(pair.layers.base, pair.layers.ornaments, null);
+
   const ofKind = (kind: FillKind) => {
     const pairs = closing.filter((pair) => pair.layers.fill!.kind === kind);
     expect(pairs.length).toBeGreaterThan(0);
@@ -270,6 +284,155 @@ describe('compose with a fill', () => {
     for (const pair of ofKind('ghostRush')) {
       for (const event of inFill(pair)) {
         expect(event.part).toBe(isAnchorStep('snare', event.step) ? 'snare' : 'ghost');
+      }
+    }
+  });
+});
+
+describe('drums: the beat', () => {
+  // Fills may silence the backbeat on purpose (dropout and solos), so they are excluded.
+  it('plays the snare on beats 2 and 4 of every bar outside fills', () => {
+    for (const seed of SEEDS) {
+      for (const params of PARAM_SETS) {
+        for (const { events, layers } of run(seed, BARS, () => params)) {
+          for (const step of [4, 12, 20, 28]) {
+            if (layers.fill?.steps.includes(step as Step)) continue;
+            expect(eventsAt(events, 'snare', step)).toHaveLength(1);
+          }
+        }
+      }
+    }
+  });
+
+  it('plays the snare only on beats 2 and 4 outside fills, without ever mutating it', () => {
+    for (const seed of SEEDS) {
+      for (const params of PARAM_SETS) {
+        for (const { events, layers } of run(seed, BARS, () => params)) {
+          const outsideFill = (step: number) => !layers.fill?.steps.includes(step as Step);
+          const snares = events.filter((e) => e.part === 'snare' && outsideFill(e.step)).map((e) => e.step);
+          expect(snares).toEqual([4, 12, 20, 28].filter(outsideFill));
+        }
+      }
+    }
+  });
+
+  it('repeats one beat of hi-hat across the 2 bars apart from ornaments and fills', () => {
+    for (const seed of SEEDS) {
+      for (const params of PARAM_SETS) {
+        for (const { events, layers } of run(seed, BARS, () => params)) {
+          const fillSteps = new Set<number>(layers.fill?.steps ?? []);
+          const hats = events.filter((e) => e.part === 'hat' && e.layer === 'base' && !fillSteps.has(e.step));
+          const beatOf = (offset: number) =>
+            hats.filter((e) => e.step >= offset && e.step < offset + 4).map((e) => [e.step - offset, e.velocity]);
+          const reference = [0, 4, 8, 12, 16, 20, 24, 28].find((offset) => !fillSteps.has(offset + 3));
+          if (reference === undefined) continue;
+          for (let offset = 0; offset < 32; offset += 4) {
+            if ([0, 1, 2, 3].some((i) => fillSteps.has(offset + i))) continue;
+            expect(beatOf(offset)).toEqual(beatOf(reference));
+          }
+        }
+      }
+    }
+  });
+
+  it('never plays the kick and the snare on the same step', () => {
+    for (const seed of SEEDS) {
+      for (const params of PARAM_SETS) {
+        for (const { events } of run(seed, BARS, () => params)) {
+          for (const step of ALL_STEPS) {
+            expect(eventsAt(events, 'kick', step).length * eventsAt(events, 'snare', step).length).toBe(0);
+          }
+        }
+      }
+    }
+  });
+
+  it('does not carry ornaments over to the next 2 bars', () => {
+    for (const seed of SEEDS) {
+      for (const params of PARAM_SETS) {
+        const pairs = run(seed, BARS, () => params);
+        let ornamentsSeen = 0;
+        for (let i = 0; i + 1 < pairs.length; i++) {
+          const current = pairs[i]!;
+          const next = pairs[i + 1]!;
+          ornamentsSeen += current.layers.ornaments.length;
+          if (next.ctx.isSectionStart) continue;
+          for (const { part, step } of current.layers.ornaments) {
+            expect(cellAt(next.layers.base, part, step)).toBeNull();
+            expect(next.events.filter((e) => e.part === part && e.step === step && e.layer === 'base')).toEqual([]);
+          }
+        }
+        if (params.m2 > 0) expect(ornamentsSeen).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('changes the base pattern only at 8-bar boundaries', () => {
+    for (const seed of SEEDS) {
+      for (const params of PARAM_SETS) {
+        const pairs = run(seed, BARS, () => params);
+        let changes = 0;
+        for (let i = 1; i < pairs.length; i++) {
+          if (!patternsEqual(pairs[i - 1]!.layers.base, pairs[i]!.layers.base)) {
+            changes++;
+            expect(pairs[i]!.ctx.isSectionStart).toBe(true);
+          }
+        }
+        if (params.m8 >= 0.5) expect(changes).toBeGreaterThan(0);
+      }
+    }
+  });
+});
+
+describe('drums: fills at scene boundaries', () => {
+  it('leads into every drop with a roll, and always fills a scene change unless fills are off', () => {
+    for (const { params, pairs } of runs) {
+      for (const { ctx, layers } of pairs) {
+        if (!changesScene(ctx)) continue;
+        if (params.fillIntensity === 0) {
+          expect(layers.fill).toBeNull();
+          continue;
+        }
+        expect(layers.fill).not.toBeNull();
+        if (leadsIntoDrop(ctx)) expect(DROP_LEAD_FILL_KINDS).toContain(layers.fill!.kind);
+        if (ctx.sceneRole.scene === 'breakdown') expect(layers.fill!.kind).toBe('snareRoll');
+      }
+    }
+  });
+
+  it('sounds the snare roll at the end of a breakdown', () => {
+    let returns = 0;
+    for (const { pairs } of runs.filter(({ params }) => params.fillIntensity > 0)) {
+      for (const { heard } of pairs.filter(isBreakdownEnd)) {
+        returns++;
+        expect(heard.some((event) => event.instrument === 'drums' && event.part === 'snare')).toBe(true);
+      }
+    }
+    expect(returns).toBeGreaterThan(50);
+  });
+
+  it('keeps the fills of sections within a scene to chance', () => {
+    const fills = (intensity: number) =>
+      run(42, LONG_BARS, () => liveParams(0.3, 0.35, intensity)).filter(
+        ({ ctx }) => ctx.isSectionEnd && !changesScene(ctx) && !ctx.sectionRole.isPhraseEnd,
+      );
+    expect(fills(0.3).some(({ layers }) => layers.fill === null)).toBe(true);
+    expect(fills(1).every(({ layers }) => layers.fill !== null)).toBe(true);
+  });
+});
+
+describe('drums: snare and ghost', () => {
+  it('never puts a snare and a ghost on the same step of what is heard', () => {
+    const overlap = (pair: GeneratedPair) =>
+      pair.heard.some(
+        (e) =>
+          e.instrument === 'drums' &&
+          e.part === 'snare' &&
+          pair.heard.some((g) => g.instrument === 'drums' && g.part === 'ghost' && g.step === e.step),
+      );
+    for (const seed of [1, 2, 3, 4]) {
+      for (const fill of [0, 0.3, 1]) {
+        expect(run(seed, 8192, () => liveParams(0.3, 0.35, fill)).some(overlap)).toBe(false);
       }
     }
   });

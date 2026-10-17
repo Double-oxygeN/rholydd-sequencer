@@ -1,18 +1,18 @@
-import type { PairLayers } from '../src/generators/drums/index.ts';
-import { pickupHit } from '../src/generators/arrange.ts';
-import { createEnsemble } from '../src/generators/ensemble.ts';
-import { DEFAULT_GENERATION_TUNING, type GenerationTuning } from '../src/generators/tuning.ts';
-import type { FxEvent } from '../src/generators/fx/index.ts';
-import type { ReeseLine } from '../src/generators/reese/index.ts';
-import type { StabLine } from '../src/generators/stab/index.ts';
-import type { SubLine } from '../src/generators/sub/index.ts';
-import type { ContextWithDrums, DrumHit, NoteEvent, PadChord, PitchedEvent } from '../src/generators/types.ts';
-import { DEFAULT_LIVE_PARAMS } from '../src/params/store.ts';
-import { toSeed } from '../src/random/rng.ts';
-import { chordOf, type LiveParams } from '../src/structure/conductor.ts';
-import { CHORD_TONES, chordToneClass } from '../src/structure/chords.ts';
-import { DEFAULT_KEY, type Key } from '../src/structure/key.ts';
-import { clampUnit } from '../src/units.ts';
+import type { PairLayers } from '../../src/generators/drums/index.ts';
+import { pickupHit } from '../../src/generators/arrange.ts';
+import { createEnsemble } from '../../src/generators/ensemble.ts';
+import { DEFAULT_GENERATION_TUNING, type GenerationTuning } from '../../src/generators/tuning.ts';
+import type { FxEvent } from '../../src/generators/fx/index.ts';
+import type { ReeseLine } from '../../src/generators/reese/index.ts';
+import type { StabLine } from '../../src/generators/stab/index.ts';
+import type { SubLine } from '../../src/generators/sub/index.ts';
+import type { ContextWithDrums, DrumHit, NoteEvent, PadChord, PitchedEvent } from '../../src/generators/types.ts';
+import { DEFAULT_LIVE_PARAMS } from '../../src/params/store.ts';
+import { toSeed } from '../../src/random/rng.ts';
+import { chordOf, type LiveParams } from '../../src/structure/conductor.ts';
+import { CHORD_TONES, chordToneClass } from '../../src/structure/chords.ts';
+import { DEFAULT_KEY, type Key } from '../../src/structure/key.ts';
+import { clampUnit } from '../../src/units.ts';
 
 export function liveParams(
   m2: number,

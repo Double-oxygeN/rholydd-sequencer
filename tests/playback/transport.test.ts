@@ -7,22 +7,23 @@ import {
   restingValue,
   type AutomationPoint,
   type AutomationTarget,
-} from '../src/engine/automation.ts';
-import type { Seconds } from '../src/engine/ducking.ts';
-import { NOTHING_PENDING, locate, pairSource, type ScheduledPair } from '../src/engine/playhead.ts';
-import { eventsFrom } from '../src/engine/resume.ts';
-import { DEFAULT_SOUND_TUNING } from '../src/engine/tuning.ts';
-import { createEnsemble, type EnsemblePair } from '../src/generators/ensemble.ts';
-import { ALL_STEPS, type NoteEvent } from '../src/generators/types.ts';
-import { toSeed } from '../src/random/rng.ts';
-import { DEFAULT_KEY } from '../src/structure/key.ts';
-import { DEFAULT_LIVE, TUNING, run } from './helpers.ts';
-
-// Automated acceptance criteria for pausing and resuming, from docs/specs/phase4/requirements.md.
+} from '../../src/engine/automation.ts';
+import type { Seconds } from '../../src/engine/ducking.ts';
+import { NOTHING_PENDING, locate, pairSource, type ScheduledPair } from '../../src/engine/playhead.ts';
+import { eventsFrom } from '../../src/engine/resume.ts';
+import { DEFAULT_SOUND_TUNING } from '../../src/engine/tuning.ts';
+import { createEnsemble, type EnsemblePair } from '../../src/generators/ensemble.ts';
+import { ALL_STEPS, type NoteEvent } from '../../src/generators/types.ts';
+import { toSeed } from '../../src/random/rng.ts';
+import { DEFAULT_KEY } from '../../src/structure/key.ts';
+import { DEFAULT_LIVE, TUNING, run } from '../support/helpers.ts';
 
 const STEP = 0.1;
+
 const PAIR = 32 * STEP;
+
 const FX = DEFAULT_SOUND_TUNING.fx;
+
 const at = (pair: number, step: number) => pair * PAIR + step * STEP;
 
 /** The values parameters take under scheduled points, following Web Audio's rules for set and ramps. */
@@ -66,6 +67,7 @@ const pairs = run(42, 1024).map((pair) => pair.fx);
  * opens slowly after a gap only so that the tail of the chord it cut does not come back; resuming leaves no tail,
  * so the gate opens at once there.
  */
+
 const COMPARED = (timeline: ReturnType<typeof timelineOf>, time: number): readonly AutomationTarget[] => {
   const pair = Math.floor(time / PAIR + 1e-9);
   const reopening =
@@ -74,9 +76,10 @@ const COMPARED = (timeline: ReturnType<typeof timelineOf>, time: number): readon
     (target) => !(target === 'riserFrequency' && timeline('riserGain', time) === 0) && !(target === 'padGate' && reopening),
   );
 };
+
 const uninterrupted = timelineOf(pairs.flatMap((fx, i) => fxAutomation(fx, at(i, 0) as Seconds, STEP, FX)));
 
-describe('resuming the events of 2 bars', () => {
+describe('transport: resuming the events of 2 bars', () => {
   it('keeps what starts from the step on, replays what sounds across it for the rest, and drops the rest', () => {
     for (const { heard } of run(7, 256)) {
       for (const from of ALL_STEPS) {
@@ -93,7 +96,7 @@ describe('resuming the events of 2 bars', () => {
   });
 });
 
-describe('the effects at a resumed step', () => {
+describe('transport: the effects at a resumed step', () => {
   it('match what the uninterrupted automation holds at the start of every step but the first of each 2 bars', () => {
     pairs.forEach((fx, i) => {
       for (const step of ALL_STEPS.slice(1)) {
@@ -129,9 +132,11 @@ describe('the effects at a resumed step', () => {
   });
 });
 
-describe('the point to resume from', () => {
+describe('transport: the point to resume from', () => {
   const fake = (n: number) => ({ n }) as unknown as EnsemblePair;
+
   const scheduled: ScheduledPair[] = [0, 1, 2].map((n) => ({ start: at(n, 0) as Seconds, pair: fake(n) }));
+
   const cut = (time: number) => locate(scheduled, time as Seconds, STEP);
 
   it('is the first step not yet heard, with every pair from its own on', () => {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { REL, TAG, createRng, hash, parseSeed, pickWeighted, toSeed } from '../src/random/rng.ts';
+import { REL, TAG, createRng, hash, parseSeed, pickWeighted, toSeed } from '../../src/random/rng.ts';
 
-describe('hash', () => {
+describe('random: hash', () => {
   // Recorded from the first implementation. A change here silently changes every generated beat.
   it('matches the recorded test vectors', () => {
     expect(hash(0)).toBe(1684164658);
@@ -11,7 +11,7 @@ describe('hash', () => {
   });
 });
 
-describe('createRng', () => {
+describe('random: createRng', () => {
   it('matches the recorded test vectors', () => {
     const vectors: [number, number[]][] = [
       [0, [1664216021, 3479288465, 3033988455, 3613202701]],
@@ -39,7 +39,7 @@ describe('createRng', () => {
   });
 });
 
-describe('pickWeighted', () => {
+describe('random: pickWeighted', () => {
   it('never picks a zero weight and returns undefined when all weights are zero', () => {
     const rng = createRng(toSeed(1));
     for (let i = 0; i < 1000; i++) expect(pickWeighted(rng, [0, 1, 0, 2])).not.toBe(0);
@@ -47,7 +47,7 @@ describe('pickWeighted', () => {
   });
 });
 
-describe('parseSeed', () => {
+describe('random: parseSeed', () => {
   it('accepts only 32-bit unsigned decimal integers', () => {
     expect(parseSeed(' 42 ')).toBe(42);
     expect(parseSeed('4294967295')).toBe(4294967295);

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { toSeed } from '../src/random/rng.ts';
-import { simulate } from '../tools/simulation/report.ts';
-import { DEFAULT_LIVE, liveParams } from './helpers.ts';
+import { toSeed } from '../../src/random/rng.ts';
+import { simulate } from '../../tools/simulation/report.ts';
+import { DEFAULT_LIVE, liveParams } from '../support/helpers.ts';
 
-describe('simulate', () => {
+describe('simulation: report', () => {
   it('reports the backbeat density and the built-in repetition of each 8 bars', () => {
     const report = simulate({ bars: 512, seed: toSeed(42), live: DEFAULT_LIVE });
     expect(report.bars).toBe(512);
