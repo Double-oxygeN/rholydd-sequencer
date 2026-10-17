@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { toSeed } from '../src/random/rng.ts';
-import { simulate } from '../tools/simulate.ts';
+import { simulate } from '../tools/simulation/report.ts';
 import { DEFAULT_LIVE, liveParams } from './helpers.ts';
 
 describe('simulate', () => {

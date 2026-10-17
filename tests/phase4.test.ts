@@ -25,7 +25,7 @@ import {
 import { BORROWINGS } from '../src/structure/harmony.ts';
 import { ALL_KEYS, DEFAULT_KEY, degreeOf } from '../src/structure/key.ts';
 import { clampUnit } from '../src/units.ts';
-import { simulate } from '../tools/simulate.ts';
+import { simulate } from '../tools/simulation/report.ts';
 import { DEFAULT_LIVE, PARAM_SETS, SEEDS, TUNING, liveParams, run, type GeneratedPair } from './helpers.ts';
 
 // Automated acceptance criteria from docs/specs/phase4/requirements.md.
