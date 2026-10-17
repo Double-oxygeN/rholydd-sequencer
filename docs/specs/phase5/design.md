@@ -45,11 +45,12 @@
 | `src/structure/arrangement.ts`（238行） | サイクルのレイアウトとシーン、シーンのエネルギー、シーンごとに鳴らすパート、ドロップの入り方の判定 | `sceneEnergy` を `structure/energy.ts` に、`Voice`・`plays`・`playsHit` を `structure/scene-parts.ts` に移す。レイアウト・シーン・入り方の判定は `arrangement.ts` に残す |
 | `src/ui/mixer.ts`（293行） | ミキサーの表と切り替え、レベルメーター、ダッキングの操作、DOM の小さな部品 | `ui/mixer.ts`（表と行）、`ui/level-meter.ts`、`ui/ducking.ts`。`field`・`row`・`range`・`cell` は `ui/panel.ts` と重複しているので `ui/dom.ts` にまとめる |
 | タブの並び（`ui/views.ts`・`ui/menu.ts`・`ui/mixer.ts` に3つ） | 同じ `role="tablist"` の作りを3か所で持つ | `ui/tabs.ts` の `createTabs` にまとめる（「タブの並び」の節）。矢印キーの操作を3か所に書かないため |
-| `src/ui/style.css`（676行） | 配色、全体の配置、部品ごとの見た目、狭い画面 | `src/ui/styles/` に、`tokens.css`（配色）、`base.css`、部品ごとのファイル（`controls`・`position`・`grid`・`spectrum`・`menu`・`mixer`・`share`）に分け、`main.ts` から今の記述順で読む。狭い画面の指定は部品ごとのファイルに置く。記述順を変えると詳細度の同じ規則の勝ち負けが変わるため、順番は保つ |
+| `src/ui/style.css`（676行） | 配色、全体の配置、部品ごとの見た目、狭い画面 | `src/ui/styles/` に、`tokens.css`（配色）、`base.css`、部品ごとのファイル（`share`・`menu`・`form`・`controls`・`position`・`views`・`grid`・`spectrum`・`mixer`）に分け、`index.css` の `@import` で今の記述順に読む。狭い画面の指定は部品ごとのファイルに置く。記述順を変えると詳細度の同じ規則の勝ち負けが変わるため、順番は保つ。分ける前後で、明暗の配色・5つの幅・メニューの開閉の20の状態について、全要素の計算済みスタイルが一致することを確かめた |
 | `tools/simulate.ts`（674行） | 集計、表示用の整形、コマンドラインの読み取り | `tools/simulation/report.ts`（`simulate`・`SimulationReport`）、`tools/simulation/format.ts`（`formatReport` など）、`tools/simulate.ts`（引数と `--config` の読み取り、出力） |
 
 - `engine/patches.ts`・`engine/automation.ts`・`engine/ducking.ts` など、すでに1つの役割のファイルは変えない
 - 分けるたびに、基準のテストと既存の単体テストを通してからコミットする。再生側は単体テストで確かめられない部分（ノードのつなぎ方）があるので、`engine/` を分けた後に v0.5.0 と同じシードで聴き比べる
+- `tools/simulate.ts` は、分ける前後で同じ引数の出力が、生成の時間を除いて一致することを確かめた
 
 ### テストの並べ替え
 
