@@ -10,7 +10,10 @@ export interface Envelope {
   readonly release: Seconds;
 }
 
-/** Detuned copies of one waveform. The count is capped per part by the type argument (N-12). */
+/**
+ * Detuned copies of one waveform. The count is capped per part by the type argument: every copy is one more
+ * oscillator, and too many make the sound drop out on slower machines.
+ */
 export interface FatOscillator<C extends number> {
   readonly type: 'fatsawtooth' | 'fatsquare' | 'fattriangle';
   readonly count: C;
@@ -55,8 +58,9 @@ const envelope = (attack: number, decay: number, sustain: number, release: numbe
   release: release as Seconds,
 });
 
-// The first sound of every table is the one phase 2 played. The trims and the limiter's headroom were set with
-// those, so they stay at 0 dB and every other sound is only ever turned down to match: a boost could clip (N-10).
+// The first sound of every table is the one each part had before it had a table. The trims and the limiter's
+// headroom were set with those, so they stay at 0 dB and every other sound is only ever turned down to match: a boost
+// could push the output past 0 dBFS.
 // The corrections match the RMS of an offline render through the part's fixed filter to that of the first sound,
 // to be settled by listening. Tone scales a fat oscillator down by its copies but plays FM at full scale, which is
 // why the FM sounds need the deepest cuts. Sounds quieter than the first one stay at 0 dB rather than being boosted.

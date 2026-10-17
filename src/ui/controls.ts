@@ -2,6 +2,7 @@ import { Pause, Play, Square, Volume2, VolumeX, type IconNode } from 'lucide';
 import type { PlaybackSession } from '../engine/transport.ts';
 import type { ParamStore } from '../params/store.ts';
 import { clampUnit } from '../units.ts';
+import { showValue } from './dom.ts';
 import { icon, iconButton, setIcon } from './icons.ts';
 
 /** Where playback stands: no session while stopped. */
@@ -43,7 +44,7 @@ export function createControls(store: ParamStore): Controls {
   const render = () => {
     const { volume: level } = store.get();
     volume.value = String(level);
-    value.textContent = `${Math.round(level * 100)}%`;
+    showValue(volume, value, `${Math.round(level * 100)}%`);
     slider.style.setProperty('--value', String(level));
     volumeIcon.replaceChildren(icon(level > 0 ? Volume2 : VolumeX));
   };

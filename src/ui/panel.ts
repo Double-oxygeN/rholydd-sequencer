@@ -1,5 +1,6 @@
 import { Dices } from 'lucide';
 import type { PlaybackState } from './controls.ts';
+import { field, row, showValue } from './dom.ts';
 import { iconButton } from './icons.ts';
 import { BPM_RANGE, clampBpm, randomSeed, type ParamStore, type Params } from '../params/store.ts';
 import { parseSeed } from '../random/rng.ts';
@@ -79,7 +80,7 @@ function slider(store: ParamStore, key: UnitKey): HTMLElement {
   const output = document.createElement('output');
   const render = (params: Params) => {
     range.value = String(params[key]);
-    output.textContent = formatPercent(params[key]);
+    showValue(range, output, formatPercent(params[key]));
   };
   range.addEventListener('input', () => store.update({ [key]: clampUnit(Number(range.value)) }));
   store.subscribe(render);
@@ -89,23 +90,6 @@ function slider(store: ParamStore, key: UnitKey): HTMLElement {
 
 function formatPercent(value: UnitInterval): string {
   return `${Math.round(value * 100)}%`;
-}
-
-function field(label: string, control: HTMLElement): HTMLElement {
-  const wrapper = document.createElement('label');
-  wrapper.className = 'field';
-  const title = document.createElement('span');
-  title.className = 'field-label';
-  title.textContent = label;
-  wrapper.append(title, control);
-  return wrapper;
-}
-
-function row(...children: HTMLElement[]): HTMLElement {
-  const div = document.createElement('div');
-  div.className = 'row';
-  div.append(...children);
-  return div;
 }
 
 type InputProps = Partial<Pick<HTMLInputElement, 'type' | 'min' | 'max' | 'step' | 'inputMode' | 'spellcheck'>>;

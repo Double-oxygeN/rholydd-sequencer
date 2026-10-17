@@ -22,6 +22,10 @@ export function createPositionView(): PositionView {
   const cycle = sceneMeter();
   const pairs = sectionMeter(PAIRS_PER_SECTION, 'pair-meter');
   const bars = sectionMeter(PAIRS_PER_SECTION * BARS_PER_PAIR, 'bar-meter');
+  // Pictures of the place in the piece: the counters say it in words, so screen readers hear only what each shows.
+  picture(cycle.element, 'サイクルの位置');
+  picture(pairs.element, '8小節の位置');
+  picture(bars.element, '8小節の位置');
   element.append(cycle.element, pairs.element, bars.element);
 
   const counters = document.createElement('div');
@@ -34,7 +38,7 @@ export function createPositionView(): PositionView {
     cycle.clear();
     pairs.set(null);
     bars.set(null);
-    // Nothing has played yet in a session that has not started (F-83).
+    // A session that has not started has no place in the piece to count.
     counters.hidden = true;
   };
   clear();
@@ -82,6 +86,11 @@ const PREVIEW_LAYOUT: CycleLayout = {
   secondDrop: 1,
   leadIns: { first: 'silence', second: 'straight' },
 };
+
+function picture(element: HTMLElement, label: string): void {
+  element.setAttribute('role', 'img');
+  element.setAttribute('aria-label', label);
+}
 
 /** One cell per 8 bars of the cycle, coloured by scene, so that the next drop can be seen coming. */
 function sceneMeter() {

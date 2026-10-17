@@ -1,0 +1,69 @@
+.grid {
+  display: grid;
+  grid-template-columns: 4em repeat(32, minmax(0, 1fr));
+  gap: 3px;
+  padding: 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+/*
+ * A phone leaves cells of a few pixels for 32 steps in a line, so it shows the bar playing alone. Seeing both bars
+ * of the pair at once is given up as a limit of the small screen.
+ */
+@media (max-width: 560px) {
+  .grid {
+    grid-template-columns: 3.2em repeat(16, minmax(0, 1fr));
+    padding: 8px;
+  }
+
+  .grid[data-bar='0'] .grid-cell[data-bar='1'],
+  .grid[data-bar='1'] .grid-cell[data-bar='0'] {
+    display: none;
+  }
+}
+
+.grid-label {
+  font-size: 0.8rem;
+  color: var(--muted);
+  align-self: center;
+}
+
+.grid-cell {
+  min-width: 0;
+  aspect-ratio: 1 / 1.6;
+  border-radius: 2px;
+  background: var(--cell);
+}
+
+.grid-cell.beat {
+  box-shadow: inset 2px 0 0 var(--line);
+}
+
+/*
+ * Only where both bars show. Showing one bar, its head is the left edge, and the bar counter tells the second bar
+ * from the first, so its first step looks like any other beat.
+ */
+@media (width > 560px) {
+  .grid-cell.bar {
+    box-shadow: inset 3px 0 0 var(--muted);
+  }
+}
+
+.grid-cell[data-layer='hit'] {
+  background: color-mix(in srgb, var(--base) calc(var(--velocity) * 100%), var(--cell));
+}
+
+.grid-cell[data-layer='note'] {
+  background: var(--bass);
+}
+
+.grid-cell[data-layer='sustain'] {
+  background: color-mix(in srgb, var(--bass) 40%, var(--cell));
+}
+
+.grid-cell.now {
+  outline: 2px solid var(--fg);
+  outline-offset: -1px;
+}

@@ -1,4 +1,5 @@
 import * as Tone from 'tone';
+import { APP_NAME } from './app-name.ts';
 import { configureAudioContext, loadInstruments } from './engine/audio.ts';
 import { createSequencer, type PlaybackSession } from './engine/transport.ts';
 import { initialParams } from './params/config.ts';
@@ -15,8 +16,8 @@ import { createShareDialog } from './ui/share.ts';
 import { createSpectrumView } from './ui/spectrum.ts';
 import { createViews } from './ui/views.ts';
 import { linkMediaSession } from './ui/media-session.ts';
-import { mediaCommand, toggleCommand, type PlaybackCommand } from './ui/playback.ts';
-import './ui/style.css';
+import { interruptionCommand, mediaCommand, toggleCommand, type AudioState, type PlaybackCommand } from './ui/playback.ts';
+import './ui/styles/index.css';
 
 const SAMPLE_BASE_URL = `${import.meta.env.BASE_URL}samples/drums/`;
 const CONFIG_URL = `${import.meta.env.BASE_URL}config.json`;
@@ -36,9 +37,11 @@ async function boot(root: HTMLElement) {
   const mixerView = createMixerView(store);
 
   const title = document.createElement('h1');
-  title.textContent = 'GenDnB';
+  title.textContent = APP_NAME;
   const status = document.createElement('p');
   status.className = 'status';
+  // In the page from the start, so that screen readers read out what is written into it later.
+  status.setAttribute('role', 'status');
   status.textContent = 'サンプルを読み込み中…';
   const menu = createOffCanvasMenu({ parameters: panel.element, mixer: mixerView.element });
   let session: PlaybackSession | null = null;
@@ -46,17 +49,11 @@ async function boot(root: HTMLElement) {
   let sessionSeed = store.get().seed;
   const playingSeed = () => (session === null ? store.get().seed : sessionSeed);
   const share = createShareDialog(new URL(import.meta.env.BASE_URL, location.href).href, playingSeed);
-  root.append(
-    title,
-    controls.element,
-    position.element,
-    views.element,
-    status,
-    menu.element,
-    menu.toggle,
-    share.toggle,
-    share.element,
-  );
+  // The buttons fixed at the top right come right after the heading, as they appear, so that Tab reaches them in
+  // the order the page reads; the menu follows its button, to be next once it opens.
+  const header = document.createElement('header');
+  header.append(title, share.toggle, menu.toggle);
+  root.append(header, menu.element, controls.element, position.element, views.element, status, share.element);
 
   const instruments = await loadInstruments(SAMPLE_BASE_URL, store.get().mixer, config.sound);
   status.textContent = warnings.length > 0 ? '設定ファイルの一部の値を無視しました（詳細はコンソール）' : '';
@@ -77,7 +74,7 @@ async function boot(root: HTMLElement) {
     },
   });
 
-  // The spectrum only draws while it is shown and something plays (N-16).
+  // The spectrum only draws while it is shown and something plays, so that nothing is drawn that no one sees.
   const drawSpectrum = () => {
     if (views.current() === 'spectrum' && session?.state === 'playing') spectrum.run(instruments.spectrum);
     else spectrum.halt();
@@ -115,6 +112,8 @@ async function boot(root: HTMLElement) {
         if (session?.state === 'playing') session = session.pause();
         break;
       case 'resume':
+        // A pause that the system's interruption forced leaves the AudioContext suspended until a gesture wakes it.
+        await Tone.start();
         if (session?.state === 'paused') session = session.resume();
         break;
       case 'stop':
@@ -127,6 +126,10 @@ async function boot(root: HTMLElement) {
     render();
   };
   render();
+  Tone.getContext().on('statechange', (audio: AudioState) => {
+    const command = interruptionCommand(audio, playbackState());
+    if (command !== null) void run(command);
+  });
   controls.onPlay(() => void run(toggleCommand(playbackState())));
   controls.onStop(() => void run('stop'));
 }

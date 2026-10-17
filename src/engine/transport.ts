@@ -145,7 +145,7 @@ export function createSequencer(
 
   return {
     start(settings) {
-      // A fresh ensemble per session replays the same seed from the very beginning (F-02).
+      // A fresh ensemble per session replays the same seed from the very beginning, so stop and play gives the same piece.
       const ensemble = createEnsemble(settings);
       const generate = () => {
         const { ducking: _ducking, ...live } = readParams();
@@ -156,7 +156,7 @@ export function createSequencer(
   };
 }
 
-/** Copies just the generation parameters, so that nothing about the sound reaches the ensemble (N-11). */
+/** Copies just the generation parameters, so that no mixer or ducking move can change what a seed generates. */
 function liveOnly({ m2, m8, m32, fillIntensity, energyDepth }: LiveParams): LiveParams {
   return { m2, m8, m32, fillIntensity, energyDepth };
 }

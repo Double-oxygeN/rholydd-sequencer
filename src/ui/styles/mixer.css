@@ -1,0 +1,133 @@
+.mixer {
+  display: grid;
+  gap: 16px;
+  padding: 16px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.mixer-table {
+  display: grid;
+  grid-template-columns: 6em minmax(0, 1fr) auto auto;
+  gap: 6px 10px;
+  align-items: center;
+}
+
+.mixer-none {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.mixer-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.mixer .row output {
+  width: 3.4em;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.mixer-modes {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.mixer-ducking .row output {
+  width: 4.5em;
+}
+
+.mixer-ducking {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+  gap: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.level {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 16px;
+  align-items: end;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.level-bar {
+  height: 10px;
+  border-radius: 2px;
+  background: var(--cell);
+  overflow: hidden;
+}
+
+.level-fill {
+  height: 100%;
+  width: 0;
+  background: var(--ornament);
+}
+
+.level-clips.on {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+button.mute,
+button.solo {
+  width: 2.2em;
+  padding: 4px 0;
+  font-weight: 700;
+}
+
+button.mute.on {
+  background: var(--fill);
+  border-color: var(--fill);
+  color: var(--on-fill);
+}
+
+button.solo.on {
+  background: var(--solo);
+  border-color: var(--solo);
+  color: var(--on-solo);
+}
+
+@media (max-width: 640px) {
+  .mixer-table {
+    grid-template-columns: 5.5em minmax(0, 1fr) auto auto;
+    gap: 6px;
+  }
+
+  .mixer .row output {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .mixer {
+    padding: 12px;
+  }
+
+  .mixer-table {
+    grid-template-columns: 5em minmax(0, 1fr) auto auto;
+  }
+
+  button.mute,
+  button.solo {
+    width: 2em;
+  }
+
+  .level {
+    grid-template-columns: auto auto;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .level > .field {
+    grid-column: 1 / -1;
+  }
+}

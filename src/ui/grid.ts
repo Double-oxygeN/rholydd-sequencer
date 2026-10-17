@@ -24,6 +24,9 @@ export interface StepGrid {
 export function createStepGrid(): StepGrid {
   const element = document.createElement('div');
   element.className = 'grid';
+  // Read out step by step, the grid would talk over the music it shows.
+  element.setAttribute('role', 'img');
+  element.setAttribute('aria-label', 'シーケンサー');
   const cells = new Map<string, HTMLElement>();
   const columns: HTMLElement[][] = Array.from({ length: STEPS_PER_PAIR }, () => []);
 

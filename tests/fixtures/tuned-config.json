@@ -1,0 +1,75 @@
+{
+  "params": {
+    "m2": 0.7,
+    "m8": 0.6,
+    "m32": 0.2,
+    "fillIntensity": 0.8,
+    "energyDepth": 0.9,
+    "initialKey": "C"
+  },
+  "generation": {
+    "harmony": {
+      "tensionChance": 0.8,
+      "borrowChance": 0.6,
+      "modulationShare": 0.2
+    },
+    "energy": {
+      "phrase": {
+        "A": 0.8,
+        "A'": 0.85,
+        "B": 0.4,
+        "A''": 0.95
+      },
+      "scene": {
+        "intro": 0.3,
+        "buildFirst": 0.5,
+        "buildLast": 0.7,
+        "breakdown": 0.2
+      }
+    },
+    "layout": {
+      "longIntroChance": 0.8,
+      "longBreakdownChance": 0.2,
+      "dropExtension": {
+        "none": 1,
+        "first": 2,
+        "second": 0,
+        "both": 1
+      }
+    },
+    "fill": {
+      "sectionLength": {
+        "4": 0.1,
+        "8": 0.3,
+        "16": 0.3,
+        "32": 0.3
+      },
+      "phraseLength": {
+        "16": 0.3,
+        "32": 0.7
+      }
+    },
+    "lines": {
+      "subOctaveJumpChance": 0.5,
+      "subToneWeights": {
+        "root": 0.3,
+        "third": 0.2,
+        "fifth": 0.3,
+        "seventh": 0.2
+      },
+      "reeseToneWeights": {
+        "root": 0.4,
+        "third": 0.2,
+        "fifth": 0.2,
+        "seventh": 0.2
+      },
+      "velocity": {
+        "sub": 0.9,
+        "reese": 0.7,
+        "stab": 0.6,
+        "pad": 0.5,
+        "pickup": 0.8
+      }
+    }
+  }
+}

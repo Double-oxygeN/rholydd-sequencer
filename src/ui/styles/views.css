@@ -1,0 +1,17 @@
+.views {
+  display: grid;
+  gap: 8px;
+}
+
+.view-tabs {
+  display: flex;
+  gap: 4px;
+}
+
+.menu-tabs button[aria-selected='true'],
+.mixer-modes button[aria-selected='true'],
+.view-tabs button[aria-selected='true'] {
+  background: var(--fg);
+  border-color: var(--fg);
+  color: var(--bg);
+}

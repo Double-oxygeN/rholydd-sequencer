@@ -1,5 +1,6 @@
 import { Menu, X } from 'lucide';
 import { iconButton, setIcon } from './icons.ts';
+import { createTabs } from './tabs.ts';
 
 export const MENU_TABS = ['parameters', 'mixer'] as const;
 export type MenuTab = (typeof MENU_TABS)[number];
@@ -23,40 +24,72 @@ export function createOffCanvasMenu(panes: Readonly<Record<MenuTab, HTMLElement>
   element.className = 'offcanvas';
   element.id = 'menu';
   element.setAttribute('aria-label', 'メニュー');
-  const tabs = document.createElement('div');
-  tabs.className = 'menu-tabs';
-  tabs.setAttribute('role', 'tablist');
-  const buttons = MENU_TABS.map((tab) => {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.textContent = TAB_LABEL[tab];
-    button.setAttribute('role', 'tab');
-    button.addEventListener('click', () => select(tab));
-    return button;
+  const tabs = createTabs({
+    ids: MENU_TABS,
+    label: 'メニューの表示',
+    button(tab) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = TAB_LABEL[tab];
+      return button;
+    },
+    panel: (tab) => panes[tab],
+    initial: 'parameters',
+    onSelect: (tab) => MENU_TABS.forEach((t) => (panes[t].hidden = t !== tab)),
   });
-  const select = (tab: MenuTab) => {
-    MENU_TABS.forEach((t, i) => {
-      buttons[i]!.setAttribute('aria-selected', String(t === tab));
-      panes[t].hidden = t !== tab;
-    });
-  };
-  tabs.append(...buttons);
+  tabs.element.className = 'menu-tabs';
   const body = document.createElement('div');
   body.className = 'menu-body';
   body.append(...MENU_TABS.map((tab) => panes[tab]));
-  element.append(tabs, body);
-  select('parameters');
+  element.append(tabs.element, body);
 
   const toggle = iconButton(Menu, 'メニューを開く', 'menu-toggle');
   toggle.setAttribute('aria-controls', element.id);
+  let covered: readonly HTMLElement[] = [];
+  const uncover = () => {
+    for (const control of covered) control.inert = false;
+    covered = [];
+  };
+  // A control hidden under the menu would take the focus out of sight, so the keyboard skips whatever it covers.
+  const cover = () => {
+    uncover();
+    covered = coveredControls(element, toggle);
+    for (const control of covered) control.inert = true;
+  };
+  const isOpen = () => element.classList.contains('open');
   const show = (open: boolean) => {
     element.classList.toggle('open', open);
     // Out of reach of the keyboard and screen readers while it is off screen.
     element.inert = !open;
     toggle.setAttribute('aria-expanded', String(open));
     setIcon(toggle, open ? X : Menu, open ? 'メニューを閉じる' : 'メニューを開く');
+    if (open) {
+      cover();
+      tabs.focus();
+    } else {
+      uncover();
+    }
   };
-  toggle.addEventListener('click', () => show(!element.classList.contains('open')));
+  toggle.addEventListener('click', () => show(!isOpen()));
+  window.addEventListener('resize', () => {
+    if (isOpen()) cover();
+  });
   show(false);
   return { toggle, element };
+}
+
+const FOCUSABLE = 'button, input, select, textarea, a[href], [tabindex]';
+
+/**
+ * Controls outside the menu that lie wholly within its width. The menu runs the full height of the window, so the
+ * width alone decides; it is taken from where the menu ends up rather than from where it is while sliding in.
+ */
+function coveredControls(menu: HTMLElement, keep: HTMLElement): HTMLElement[] {
+  const right = document.documentElement.clientWidth;
+  const left = right - menu.offsetWidth;
+  return [...document.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((control) => {
+    if (control === keep || menu.contains(control)) return false;
+    const rect = control.getBoundingClientRect();
+    return rect.width > 0 && rect.left >= left && rect.right <= right;
+  });
 }

@@ -1,4 +1,4 @@
-import { chordToneClass, tensionClass, type ColoredChord } from '../../structure/harmony.ts';
+import { chordToneClass, tensionClass, type ColoredChord } from '../../structure/chords.ts';
 import type { Context } from '../../structure/conductor.ts';
 import type { Key, PitchClass } from '../../structure/key.ts';
 import { stackUp } from '../pitch.ts';

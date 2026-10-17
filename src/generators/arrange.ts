@@ -1,4 +1,5 @@
-import { GAP_START, changesScene, dropLeadIn, hasGap, plays, playsHit, type GapLeadIn } from '../structure/arrangement.ts';
+import { GAP_START, changesScene, dropLeadIn, hasGap, type GapLeadIn } from '../structure/arrangement.ts';
+import { plays, playsHit } from '../structure/scene-parts.ts';
 import type { PadChord, ContextWithDrums, DrumHit, NoteEvent, PitchedEvent, Step, StepLength, Velocity } from './types.ts';
 
 /** Every pitched part as generated for the 2 bars, before the scene decides what is heard. */

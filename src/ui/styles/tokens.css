@@ -1,0 +1,50 @@
+/*
+ * Text keeps 4.5:1 against what it sits on, and control borders, the focus ring and every fill that means something
+ * keep 3:1, in both schemes. tests/interface/contrast.test.ts checks each pairing, so a colour changed here is
+ * checked there too. The sequencer's hits and notes are left out on purpose: their shading by velocity is what they
+ * show, and lifting the softest hit to 3:1 squeezed the shades too close together to tell apart.
+ */
+:root {
+  --bg: #f6f6f4;
+  --fg: #1d1d1f;
+  --muted: #6b6b70;
+  --panel: #ffffff;
+  /* Dividers only: they mean nothing, so they stay faint to keep the page light. */
+  --line: #d9d9dd;
+  --control-border: #8a8a92;
+  --focus: #1f5fd1;
+  --cell: #ececef;
+  --accent: #c4245f;
+  --on-accent: #ffffff;
+  --base: #2f6fdf;
+  --ornament: #13805b;
+  --fill: #b05a00;
+  --on-fill: #ffffff;
+  --bass: #7a4fd6;
+  --solo: #a68600;
+  --on-solo: #000000;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #141416;
+    --fg: #ececf0;
+    --muted: #9a9aa3;
+    --panel: #1d1d21;
+    --line: #34343a;
+    --control-border: #74747e;
+    --focus: #8ab4ff;
+    --cell: #26262b;
+    --accent: #ff6b9c;
+    --on-accent: #000000;
+    --base: #6b9cff;
+    --ornament: #45cf9f;
+    --fill: #ffb24d;
+    --on-fill: #000000;
+    --bass: #b18cff;
+    --solo: #f2d75c;
+    --on-solo: #000000;
+    color-scheme: dark;
+  }
+}

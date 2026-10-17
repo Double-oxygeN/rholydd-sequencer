@@ -8,7 +8,7 @@ export function seedFromQuery(search: string): Seed | undefined {
 
 /**
  * The page's address to share: without its query and fragment, with ?seed= only when a seed is shared. The seed is
- * the only setting a link can carry (F-91), so nothing else from the address goes along.
+ * the only setting the page reads from its address, so nothing else from the address goes along.
  */
 export function shareUrl(page: string, seed: Seed | undefined): string {
   const url = new URL(page);

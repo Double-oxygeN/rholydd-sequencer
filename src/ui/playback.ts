@@ -28,3 +28,14 @@ const MEDIA: Readonly<Record<MediaAction, Readonly<Record<PlaybackState, Playbac
 export function mediaCommand(action: MediaAction, state: PlaybackState): PlaybackCommand | null {
   return MEDIA[action][state];
 }
+
+/** States an AudioContext reports. Safari on iOS adds 'interrupted', which the standard does not list. */
+export type AudioState = AudioContextState | 'interrupted';
+
+/**
+ * iOS stops the audio when the screen locks or another app comes forward, while the page and the OS would go on
+ * showing playback. Pausing makes both show what is heard, and a resume plays on from the step where it stopped.
+ */
+export function interruptionCommand(audio: AudioState, state: PlaybackState): PlaybackCommand | null {
+  return audio !== 'running' && state === 'playing' ? 'pause' : null;
+}

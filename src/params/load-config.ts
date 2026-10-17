@@ -1,4 +1,5 @@
-import { DEFAULT_CONFIG, parseConfigText, type Config, type Decoded } from './config.ts';
+import { DEFAULT_CONFIG, parseConfigText, type Config } from './config.ts';
+import type { Decoded } from './decode.ts';
 
 const NONE: Decoded<Config> = { value: DEFAULT_CONFIG, warnings: [] };
 
