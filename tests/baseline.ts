@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { DEFAULT_GENERATION_TUNING, type GenerationTuning } from '../src/generators/tuning.ts';
-import { parseConfigText, type Config, type Decoded } from '../src/params/config.ts';
+import { parseConfigText, type Config } from '../src/params/config.ts';
+import type { Decoded } from '../src/params/decode.ts';
 import { chordOf, type LiveParams } from '../src/structure/conductor.ts';
 import { DEFAULT_KEY, type Key } from '../src/structure/key.ts';
 import { DEFAULT_LIVE, liveParams, run, type GeneratedPair } from './helpers.ts';
