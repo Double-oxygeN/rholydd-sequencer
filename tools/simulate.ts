@@ -21,14 +21,13 @@ import {
   DROP_LEAD_INS,
   cycleSections,
   dropLeadIn,
-  plays,
-  playsHit,
   refreshesReference,
   type CycleLayout,
   type DropLeadIn,
   type DropOrdinal,
   type Scene,
 } from '../src/structure/arrangement.ts';
+import { plays, playsHit } from '../src/structure/scene-parts.ts';
 import { chordOf, type Context, type LiveParams } from '../src/structure/conductor.ts';
 import { SECTIONS_PER_PHRASE, type SectionIn32 } from '../src/structure/form.ts';
 import {

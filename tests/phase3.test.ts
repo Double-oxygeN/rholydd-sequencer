@@ -13,8 +13,8 @@ import {
   cycleSections,
   dropLeadIn,
   leadsIntoDrop,
-  sceneEnergy,
 } from '../src/structure/arrangement.ts';
+import { sceneEnergy } from '../src/structure/energy.ts';
 import {
   ALL_KEYS,
   AT_INITIAL_KEY,

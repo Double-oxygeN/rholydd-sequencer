@@ -4,13 +4,13 @@ import {
   cycleScenes,
   cycleSections,
   drawLayout,
-  sceneEnergy,
   type CycleIndex,
   type CycleLayout,
   type Scene,
   type SceneRole,
   type SectionInCycle,
 } from './arrangement.ts';
+import { sceneEnergy } from './energy.ts';
 import type { ColoredChord } from './chords.ts';
 import {
   cycleMainProgression,

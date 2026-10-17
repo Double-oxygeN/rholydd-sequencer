@@ -5,13 +5,12 @@ import {
   cycleSections,
   DROP_LEAD_INS,
   drawLayout,
-  plays,
-  playsHit,
-  sceneEnergy,
   type CycleLayout,
   type SceneRole,
   type SectionInCycle,
 } from '../src/structure/arrangement.ts';
+import { sceneEnergy } from '../src/structure/energy.ts';
+import { plays, playsHit } from '../src/structure/scene-parts.ts';
 import { clampUnit } from '../src/units.ts';
 import { TUNING } from './helpers.ts';
 
