@@ -13,7 +13,8 @@ import {
 } from '../params/mixer.ts';
 import type { ParamStore } from '../params/store.ts';
 import { clampUnit, type UnitInterval } from '../units.ts';
-import { cell, range, row } from './dom.ts';
+import { cell, range, row, showValue } from './dom.ts';
+import { createTabs } from './tabs.ts';
 import { createDuckingControls } from './ducking.ts';
 import { createLevelMeter } from './level-meter.ts';
 
@@ -49,7 +50,7 @@ export function createMixerView(store: ParamStore): MixerView {
   const table = document.createElement('div');
   table.className = 'mixer-table';
   const rows = CHANNEL_IDS.map((id) => channelRow(store, id, table));
-  const modes = modeSwitch((mode) => {
+  const modes = modeSwitch(table, (mode) => {
     for (const r of rows) r.show(mode);
   });
   const ducking = createDuckingControls(store);
@@ -72,25 +73,22 @@ export function createMixerView(store: ParamStore): MixerView {
  * One switch for all channels, so that each row needs a single slider that can take the whole width, and the
  * channels compare at a glance on the same quantity.
  */
-function modeSwitch(onChange: (mode: MixerMode) => void): HTMLElement {
-  const element = document.createElement('div');
-  element.className = 'mixer-modes';
-  element.setAttribute('role', 'tablist');
-  const buttons = MIXER_MODES.map((mode) => {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.textContent = MODE_LABEL[mode];
-    button.setAttribute('role', 'tab');
-    button.addEventListener('click', () => select(mode));
-    return button;
+function modeSwitch(table: HTMLElement, onChange: (mode: MixerMode) => void): HTMLElement {
+  const tabs = createTabs({
+    ids: MIXER_MODES,
+    label: 'ミキサーの調整の対象',
+    button(mode) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = MODE_LABEL[mode];
+      return button;
+    },
+    panel: () => table,
+    initial: 'level',
+    onSelect: onChange,
   });
-  const select = (mode: MixerMode) => {
-    MIXER_MODES.forEach((m, i) => buttons[i]!.setAttribute('aria-selected', String(m === mode)));
-    onChange(mode);
-  };
-  element.append(...buttons);
-  select('level');
-  return element;
+  tabs.element.className = 'mixer-modes';
+  return tabs.element;
 }
 
 interface ChannelRow {
@@ -105,14 +103,16 @@ function channelRow(store: ParamStore, id: ChannelId, table: HTMLElement): Chann
   };
   const initial = store.get().mixer[id];
 
+  const name = CHANNEL_LABEL[id];
   const level = range(LEVEL_RANGE.min, LEVEL_RANGE.max, 1);
+  level.setAttribute('aria-label', `${name} ${MODE_LABEL.level}`);
   level.addEventListener('input', () => update({ level: clampLevel(Number(level.value)) }));
   const levelOut = document.createElement('output');
 
-  const mute = toggle('M', 'mute', 'ミュート');
+  const mute = toggle('M', 'mute', 'ミュート', name);
   mute.addEventListener('click', () => update({ muted: !store.get().mixer[id].muted }));
 
-  const solo = toggle('S', 'solo', 'ソロ');
+  const solo = toggle('S', 'solo', 'ソロ', name);
   solo.addEventListener('click', () => {
     const settings = store.get().mixer[id];
     if (isSoloable(settings)) update({ soloed: !settings.soloed });
@@ -127,7 +127,7 @@ function channelRow(store: ParamStore, id: ChannelId, table: HTMLElement): Chann
   };
   const slot = document.createElement('div');
   slot.className = 'mixer-slot';
-  table.append(cell('mixer-label', CHANNEL_LABEL[id]), slot, mute, soloCell);
+  table.append(cell('mixer-label', name), slot, mute, soloCell);
   const show = (mode: MixerMode) => slot.replaceChildren(slots[mode]);
   if (!isSending(initial)) {
     return {
@@ -135,7 +135,7 @@ function channelRow(store: ParamStore, id: ChannelId, table: HTMLElement): Chann
       render(mixer) {
         const settings = mixer[id];
         level.value = String(settings.level);
-        levelOut.textContent = formatLevel(settings.level);
+        showValue(level, levelOut, formatLevel(settings.level));
         showOn(mute, settings.muted);
         if (isSoloable(settings)) showOn(solo, settings.soloed);
       },
@@ -143,11 +143,13 @@ function channelRow(store: ParamStore, id: ChannelId, table: HTMLElement): Chann
   }
 
   const pan = range(-1, 1, 0.05);
+  pan.setAttribute('aria-label', `${name} ${MODE_LABEL.pan}`);
   pan.addEventListener('input', () => update({ pan: clampPan(Number(pan.value)) }));
   // Double-click recentres, as on a hardware desk.
   pan.addEventListener('dblclick', () => update({ pan: clampPan(0) }));
   const panOut = document.createElement('output');
   const send = range(0, 1, 0.01);
+  send.setAttribute('aria-label', `${name} ${MODE_LABEL.send}`);
   send.addEventListener('input', () => update({ send: clampUnit(Number(send.value)) }));
   const sendOut = document.createElement('output');
   slots.pan = row(pan, panOut);
@@ -158,14 +160,14 @@ function channelRow(store: ParamStore, id: ChannelId, table: HTMLElement): Chann
     render(mixer) {
       const settings = mixer[id];
       level.value = String(settings.level);
-      levelOut.textContent = formatLevel(settings.level);
+      showValue(level, levelOut, formatLevel(settings.level));
       showOn(mute, settings.muted);
       if (isSoloable(settings)) showOn(solo, settings.soloed);
       if (!isSending(settings)) return;
       pan.value = String(settings.pan);
-      panOut.textContent = formatPan(settings.pan);
+      showValue(pan, panOut, formatPan(settings.pan));
       send.value = String(settings.send);
-      sendOut.textContent = `${Math.round(settings.send * 100)}%`;
+      showValue(send, sendOut, `${Math.round(settings.send * 100)}%`);
     },
   };
 }
@@ -175,12 +177,14 @@ function showOn(button: HTMLButtonElement, on: boolean): void {
   button.setAttribute('aria-pressed', String(on));
 }
 
-function toggle(text: string, className: string, title: string): HTMLButtonElement {
+/** Shows a letter, as on a hardware desk, while screen readers hear which channel it belongs to. */
+function toggle(text: string, className: string, title: string, channel: string): HTMLButtonElement {
   const button = document.createElement('button');
   button.type = 'button';
   button.className = className;
   button.textContent = text;
   button.title = title;
+  button.setAttribute('aria-label', `${channel} ${title}`);
   return button;
 }
 

@@ -46,7 +46,7 @@ export function createShareDialog(page: string, seedToShare: () => Seed): ShareD
 
   const status = document.createElement('p');
   status.className = 'share-status';
-  status.setAttribute('aria-live', 'polite');
+  status.setAttribute('role', 'status');
 
   const body = document.createElement('div');
   body.className = 'share-body';
@@ -93,5 +93,7 @@ export function createShareDialog(page: string, seedToShare: () => Seed): ShareD
     render();
     element.showModal();
   });
+  // Some browsers leave the focus on the page itself once a dialog closes, losing the place on the page.
+  element.addEventListener('close', () => toggle.focus());
   return { toggle, element };
 }

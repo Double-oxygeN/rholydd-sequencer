@@ -1,7 +1,7 @@
 import { RELEASE_RANGE, clampRelease, type DuckingSettings } from '../params/mixer.ts';
 import type { ParamStore } from '../params/store.ts';
 import { clampUnit } from '../units.ts';
-import { field, range, row } from './dom.ts';
+import { field, range, row, showValue } from './dom.ts';
 
 export interface DuckingControls {
   readonly element: HTMLElement;
@@ -24,9 +24,9 @@ export function createDuckingControls(store: ParamStore): DuckingControls {
     element,
     render(settings) {
       depth.value = String(settings.depth);
-      depthOut.textContent = `${Math.round(settings.depth * 100)}%`;
+      showValue(depth, depthOut, `${Math.round(settings.depth * 100)}%`);
       release.value = String(settings.release);
-      releaseOut.textContent = `${settings.release} ms`;
+      showValue(release, releaseOut, `${settings.release} ms`);
     },
   };
 }

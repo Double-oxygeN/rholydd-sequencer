@@ -1,5 +1,6 @@
 import { AudioLines, LayoutGrid, type IconNode } from 'lucide';
 import { iconButton } from './icons.ts';
+import { createTabs } from './tabs.ts';
 
 /** What fills the main area: the step grid or the spectrum, never both, to keep the screen to one picture. */
 export const VIEWS = ['sequencer', 'spectrum'] as const;
@@ -19,31 +20,30 @@ export interface Views {
 export function createViews(panes: Readonly<Record<View, HTMLElement>>): Views {
   const element = document.createElement('section');
   element.className = 'views';
-  const tabs = document.createElement('div');
-  tabs.className = 'view-tabs';
-  tabs.setAttribute('role', 'tablist');
-  let current: View = 'sequencer';
   const handlers: ((view: View) => void)[] = [];
-  const buttons = VIEWS.map((view) => {
-    const button = iconButton(...VIEW_BUTTON[view]);
-    button.setAttribute('role', 'tab');
-    button.addEventListener('click', () => select(view));
-    return button;
-  });
-  const select = (view: View) => {
-    current = view;
-    VIEWS.forEach((v, i) => {
-      buttons[i]!.setAttribute('aria-selected', String(v === view));
-      panes[v].hidden = v !== view;
-    });
-    for (const handler of handlers) handler(view);
+  // Wrapped, since each pane is itself a picture for screen readers and cannot also be the tab's panel.
+  const wrap = (pane: HTMLElement) => {
+    const panel = document.createElement('div');
+    panel.append(pane);
+    return panel;
   };
-  tabs.append(...buttons);
-  element.append(tabs, ...VIEWS.map((view) => panes[view]));
-  select(current);
+  const panels: Readonly<Record<View, HTMLElement>> = { sequencer: wrap(panes.sequencer), spectrum: wrap(panes.spectrum) };
+  const tabs = createTabs({
+    ids: VIEWS,
+    label: '表示',
+    button: (view) => iconButton(...VIEW_BUTTON[view]),
+    panel: (view) => panels[view],
+    initial: 'sequencer',
+    onSelect(view) {
+      VIEWS.forEach((v) => (panels[v].hidden = v !== view));
+      for (const handler of handlers) handler(view);
+    },
+  });
+  tabs.element.className = 'view-tabs';
+  element.append(tabs.element, ...VIEWS.map((view) => panels[view]));
   return {
     element,
-    current: () => current,
+    current: tabs.current,
     onChange(handler) {
       handlers.push(handler);
     },

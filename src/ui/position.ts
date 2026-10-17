@@ -22,6 +22,10 @@ export function createPositionView(): PositionView {
   const cycle = sceneMeter();
   const pairs = sectionMeter(PAIRS_PER_SECTION, 'pair-meter');
   const bars = sectionMeter(PAIRS_PER_SECTION * BARS_PER_PAIR, 'bar-meter');
+  // Pictures of the place in the piece: the counters say it in words, so screen readers hear only what each shows.
+  picture(cycle.element, 'サイクルの位置');
+  picture(pairs.element, '8小節の位置');
+  picture(bars.element, '8小節の位置');
   element.append(cycle.element, pairs.element, bars.element);
 
   const counters = document.createElement('div');
@@ -84,6 +88,11 @@ const PREVIEW_LAYOUT: CycleLayout = {
 };
 
 /** One cell per 8 bars of the cycle, coloured by scene, so that the next drop can be seen coming. */
+function picture(element: HTMLElement, label: string): void {
+  element.setAttribute('role', 'img');
+  element.setAttribute('aria-label', label);
+}
+
 function sceneMeter() {
   const element = document.createElement('div');
   element.className = 'meter scene-meter';

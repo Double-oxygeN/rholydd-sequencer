@@ -1,7 +1,3 @@
-.spectrum[hidden] {
-  display: none;
-}
-
 .spectrum {
   padding: 12px;
   background: var(--panel);

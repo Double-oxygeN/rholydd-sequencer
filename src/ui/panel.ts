@@ -1,6 +1,6 @@
 import { Dices } from 'lucide';
 import type { PlaybackState } from './controls.ts';
-import { field, row } from './dom.ts';
+import { field, row, showValue } from './dom.ts';
 import { iconButton } from './icons.ts';
 import { BPM_RANGE, clampBpm, randomSeed, type ParamStore, type Params } from '../params/store.ts';
 import { parseSeed } from '../random/rng.ts';
@@ -80,7 +80,7 @@ function slider(store: ParamStore, key: UnitKey): HTMLElement {
   const output = document.createElement('output');
   const render = (params: Params) => {
     range.value = String(params[key]);
-    output.textContent = formatPercent(params[key]);
+    showValue(range, output, formatPercent(params[key]));
   };
   range.addEventListener('input', () => store.update({ [key]: clampUnit(Number(range.value)) }));
   store.subscribe(render);

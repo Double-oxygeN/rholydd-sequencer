@@ -72,6 +72,8 @@ export function createSpectrumView(): SpectrumView {
   const element = document.createElement('div');
   element.className = 'spectrum';
   const canvas = document.createElement('canvas');
+  canvas.setAttribute('role', 'img');
+  canvas.setAttribute('aria-label', 'スペクトラムアナライザー');
   element.append(canvas);
   let frame: number | null = null;
   let peaks: readonly HeldPeak[] = [];

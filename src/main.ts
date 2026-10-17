@@ -40,6 +40,8 @@ async function boot(root: HTMLElement) {
   title.textContent = APP_NAME;
   const status = document.createElement('p');
   status.className = 'status';
+  // In the page from the start, so that screen readers read out what is written into it later.
+  status.setAttribute('role', 'status');
   status.textContent = 'サンプルを読み込み中…';
   const menu = createOffCanvasMenu({ parameters: panel.element, mixer: mixerView.element });
   let session: PlaybackSession | null = null;
@@ -47,17 +49,11 @@ async function boot(root: HTMLElement) {
   let sessionSeed = store.get().seed;
   const playingSeed = () => (session === null ? store.get().seed : sessionSeed);
   const share = createShareDialog(new URL(import.meta.env.BASE_URL, location.href).href, playingSeed);
-  root.append(
-    title,
-    controls.element,
-    position.element,
-    views.element,
-    status,
-    menu.element,
-    menu.toggle,
-    share.toggle,
-    share.element,
-  );
+  // The buttons fixed at the top right come right after the heading, as they appear, so that Tab reaches them in
+  // the order the page reads; the menu follows its button, to be next once it opens.
+  const header = document.createElement('header');
+  header.append(title, share.toggle, menu.toggle);
+  root.append(header, menu.element, controls.element, position.element, views.element, status, share.element);
 
   const instruments = await loadInstruments(SAMPLE_BASE_URL, store.get().mixer, config.sound);
   status.textContent = warnings.length > 0 ? '設定ファイルの一部の値を無視しました（詳細はコンソール）' : '';
