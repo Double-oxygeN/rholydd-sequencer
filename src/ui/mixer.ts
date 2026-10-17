@@ -1,21 +1,21 @@
+import type { LevelReport } from '../engine/clip.ts';
 import {
   CHANNEL_IDS,
   LEVEL_RANGE,
-  RELEASE_RANGE,
   clampLevel,
-  clampRelease,
   clampPan,
   isSending,
   isSoloable,
   type ChannelId,
   type Decibels,
-  type DuckingSettings,
   type MixerSettings,
   type Pan,
 } from '../params/mixer.ts';
-import { peakDbfs, type LevelReport } from '../engine/clip.ts';
 import type { ParamStore } from '../params/store.ts';
 import { clampUnit, type UnitInterval } from '../units.ts';
+import { cell, range, row } from './dom.ts';
+import { createDuckingControls } from './ducking.ts';
+import { createLevelMeter } from './level-meter.ts';
 
 const CHANNEL_LABEL: Readonly<Record<ChannelId, string>> = {
   kick: 'キック',
@@ -52,8 +52,8 @@ export function createMixerView(store: ParamStore): MixerView {
   const modes = modeSwitch((mode) => {
     for (const r of rows) r.show(mode);
   });
-  const ducking = duckingControls(store);
-  const level = levelMeter();
+  const ducking = createDuckingControls(store);
+  const level = createLevelMeter();
   element.append(modes, table, ducking.element, level.element);
 
   const render = (mixer: MixerSettings) => {
@@ -68,85 +68,6 @@ export function createMixerView(store: ParamStore): MixerView {
   return { element, showLevel: level.show, resetLevel: level.reset };
 }
 
-// The meter's floor; anything quieter shows as empty.
-const METER_FLOOR_DB = -48;
-
-function levelMeter() {
-  const element = document.createElement('div');
-  element.className = 'level';
-  const bar = document.createElement('div');
-  bar.className = 'level-bar';
-  const fill = document.createElement('div');
-  fill.className = 'level-fill';
-  bar.append(fill);
-  const peakText = document.createElement('span');
-  const clipText = document.createElement('span');
-  clipText.className = 'level-clips';
-  element.append(field('マスターのピーク', bar), peakText, clipText);
-
-  let held = 0;
-  let clips = 0;
-  const render = (current: number) => {
-    const db = peakDbfs(current);
-    fill.style.width = `${Math.max(0, Math.min(1, 1 - db / METER_FLOOR_DB)) * 100}%`;
-    peakText.textContent = `最大 ${formatDbfs(held)}`;
-    clipText.textContent = `クリップ ${clips} サンプル`;
-    clipText.classList.toggle('on', clips > 0);
-  };
-  render(0);
-  return {
-    element,
-    show(report: LevelReport) {
-      held = Math.max(held, report.peak);
-      clips += report.clips;
-      render(report.peak);
-    },
-    reset() {
-      held = 0;
-      clips = 0;
-      render(0);
-    },
-  };
-}
-
-function formatDbfs(peak: number): string {
-  return peak <= 0 ? '−∞ dBFS' : `${peakDbfs(peak).toFixed(1).replace('-', '−')} dBFS`;
-}
-
-function duckingControls(store: ParamStore) {
-  const update = (patch: Partial<DuckingSettings>) => store.update({ ducking: { ...store.get().ducking, ...patch } });
-  const depth = range(0, 1, 0.01);
-  depth.addEventListener('input', () => update({ depth: clampUnit(Number(depth.value)) }));
-  const depthOut = document.createElement('output');
-  const release = range(RELEASE_RANGE.min, RELEASE_RANGE.max, 5);
-  release.addEventListener('input', () => update({ release: clampRelease(Number(release.value)) }));
-  const releaseOut = document.createElement('output');
-
-  const element = document.createElement('div');
-  element.className = 'mixer-ducking';
-  element.append(field('ダッキング量', row(depth, depthOut)), field('ダッキングの戻り時間', row(release, releaseOut)));
-  return {
-    element,
-    render(settings: DuckingSettings) {
-      depth.value = String(settings.depth);
-      depthOut.textContent = `${Math.round(settings.depth * 100)}%`;
-      release.value = String(settings.release);
-      releaseOut.textContent = `${settings.release} ms`;
-    },
-  };
-}
-
-function field(label: string, control: HTMLElement): HTMLElement {
-  const wrapper = document.createElement('label');
-  wrapper.className = 'field';
-  const title = document.createElement('span');
-  title.className = 'field-label';
-  title.textContent = label;
-  wrapper.append(title, control);
-  return wrapper;
-}
-
-/** Appends one row of controls and returns how to show new settings in it. */
 /**
  * One switch for all channels, so that each row needs a single slider that can take the whole width, and the
  * channels compare at a glance on the same quantity.
@@ -270,24 +191,4 @@ function formatLevel(level: Decibels): string {
 function formatPan(pan: Pan): string {
   const amount = Math.round(Math.abs(pan) * 100);
   return amount === 0 ? 'C' : `${pan < 0 ? 'L' : 'R'}${amount}`;
-}
-
-function range(min: number, max: number, step: number): HTMLInputElement {
-  const el = document.createElement('input');
-  Object.assign(el, { type: 'range', min: String(min), max: String(max), step: String(step) });
-  return el;
-}
-
-function cell(className: string, text: string): HTMLElement {
-  const el = document.createElement('div');
-  el.className = className;
-  el.textContent = text;
-  return el;
-}
-
-function row(...children: HTMLElement[]): HTMLElement {
-  const div = document.createElement('div');
-  div.className = 'row';
-  div.append(...children);
-  return div;
 }
