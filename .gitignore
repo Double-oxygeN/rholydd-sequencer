@@ -5,3 +5,5 @@ dist/
 public/config.json
 test-results/
 playwright-report/
+# Made per machine by `npm run cert`; the key must never leave it.
+.cert/

@@ -92,6 +92,11 @@ npm run dev
 
 E2E テストを動かすときは、`npx playwright install` でブラウザを入れてください。
 
+**スマートフォンで試す**: 音の処理（AudioWorklet）は安全な接続（https か localhost）でしか動かないので、`npm run dev -- --host` で開いた LAN の http のアドレスでは起動しません。
+
+- Android: USB でつなぎ、`adb reverse tcp:5173 tcp:5173` を実行してから、端末の Chrome で `http://localhost:5173/` を開く
+- iOS（Android でも可）: `npm run cert` で証明書を作り、表示された `rootCA.pem` を端末にインストールして信頼する（iOS は「設定 → 一般 → 情報 → 証明書信頼設定」で有効にする）。`npm run dev:https` を起動し、表示された `https://〈LAN のアドレス〉:5173/` を開く。LAN のアドレスが変わったら `npm run cert` をやり直す
+
 ## 設定ファイル
 
 `public/config.json`（配布するときは `index.html` と同じ場所の `config.json`）を置くと、ページを開いたときに読み込み、パラメーターとミキサーの初期値や、生成と音の調整用の数値を上書きします。書き方は `config.example.json` を参照してください。書いたキーだけが上書きされ、ファイルがない場合や書かれていないキーはコードの既定値を使います。型や範囲の合わない値は無視し、ブラウザのコンソールに警告を出します。同じシードでも、設定ファイルの生成の数値が違えば別の展開になります。公開しているページには設定ファイルを置いていません。
@@ -101,6 +106,8 @@ E2E テストを動かすときは、`npx playwright install` でブラウザを
 | コマンド | 内容 |
 | --- | --- |
 | `npm run dev` | 開発サーバーを起動 |
+| `npm run cert` | LAN の実機で試すための証明書を `.cert/` に作る（[mkcert](https://github.com/FiloSottile/mkcert) が必要） |
+| `npm run dev:https` | 開発サーバーを LAN に HTTPS で公開する（先に `npm run cert`） |
 | `npm run build` | 配布用のビルド（base path は `/rholydd-sequencer/`。`npm run build -- --base /path/` で変えられる） |
 | `npm run preview` | ビルドしたページを配る |
 | `npm test` | 単体テスト |
