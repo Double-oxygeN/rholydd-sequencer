@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MEDIA_ACTIONS, mediaCommand, toggleCommand } from '../../src/ui/playback.ts';
+import { MEDIA_ACTIONS, interruptionCommand, mediaCommand, toggleCommand } from '../../src/ui/playback.ts';
 import { BAND_CENTERS, FLOOR_DB, SEGMENTS, bandLevels, holdPeaks, litSegments } from '../../src/ui/spectrum.ts';
 
 describe('screen: playback commands', () => {
@@ -17,6 +17,21 @@ describe('screen: playback commands', () => {
       play: ['start', null, 'resume'],
       pause: [null, 'pause', null],
       stop: [null, 'stop', 'stop'],
+    });
+  });
+
+  it('pauses when the system stops the audio during playback, and does nothing otherwise', () => {
+    const table = Object.fromEntries(
+      (['running', 'suspended', 'interrupted', 'closed'] as const).map((audio) => [
+        audio,
+        STATES.map((state) => interruptionCommand(audio, state)),
+      ]),
+    );
+    expect(table).toEqual({
+      running: [null, null, null],
+      suspended: [null, 'pause', null],
+      interrupted: [null, 'pause', null],
+      closed: [null, 'pause', null],
     });
   });
 });

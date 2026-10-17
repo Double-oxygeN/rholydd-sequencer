@@ -16,7 +16,7 @@ import { createShareDialog } from './ui/share.ts';
 import { createSpectrumView } from './ui/spectrum.ts';
 import { createViews } from './ui/views.ts';
 import { linkMediaSession } from './ui/media-session.ts';
-import { mediaCommand, toggleCommand, type PlaybackCommand } from './ui/playback.ts';
+import { interruptionCommand, mediaCommand, toggleCommand, type AudioState, type PlaybackCommand } from './ui/playback.ts';
 import './ui/styles/index.css';
 
 const SAMPLE_BASE_URL = `${import.meta.env.BASE_URL}samples/drums/`;
@@ -112,6 +112,8 @@ async function boot(root: HTMLElement) {
         if (session?.state === 'playing') session = session.pause();
         break;
       case 'resume':
+        // A pause that the system's interruption forced leaves the AudioContext suspended until a gesture wakes it.
+        await Tone.start();
         if (session?.state === 'paused') session = session.resume();
         break;
       case 'stop':
@@ -124,6 +126,10 @@ async function boot(root: HTMLElement) {
     render();
   };
   render();
+  Tone.getContext().on('statechange', (audio: AudioState) => {
+    const command = interruptionCommand(audio, playbackState());
+    if (command !== null) void run(command);
+  });
   controls.onPlay(() => void run(toggleCommand(playbackState())));
   controls.onStop(() => void run('stop'));
 }
