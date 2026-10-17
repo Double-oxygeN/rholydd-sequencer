@@ -379,7 +379,7 @@
 | 　読み上げ | [interface/screen.md](./interface/screen.md)（アクセシビリティ） |
 | 　コントラスト | [interface/screen.md](./interface/screen.md)（アクセシビリティ） |
 | ブラウザの確認 | [quality/release-checklist.md](./quality/release-checklist.md)（ブラウザ） |
-| 　調べてから手当てすること | [interface/integration.md](./interface/integration.md)（システムによる中断）（実機で確かめた結果と手当て）。バックグラウンドから戻った後の表示の遅れは調査中 |
+| 　調べてから手当てすること | [interface/integration.md](./interface/integration.md)（システムによる中断）（実機で確かめた結果と手当て。ロック画面から再生した後の音の遅れは、制約として README に書き、Issue に移した） |
 | CI/CD（`.github/workflows/ci.yml`） | [interface/integration.md](./interface/integration.md)（CI/CD） |
 | 素材とライセンス | [interface/integration.md](./interface/integration.md)（ドラムサンプル） |
 | `package.json` と README | 一度きり（作業）。README と `package.json` に反映した |
