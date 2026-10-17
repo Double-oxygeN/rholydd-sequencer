@@ -1,3 +1,4 @@
+import { APP_NAME } from '../app-name.ts';
 import type { Seed } from '../random/rng.ts';
 import type { PlaybackState } from './controls.ts';
 import { MEDIA_ACTIONS, type MediaAction } from './playback.ts';
@@ -80,7 +81,7 @@ export function linkMediaSession(onAction: (action: MediaAction) => void): Media
   return {
     show(state, seed) {
       session.playbackState = MEDIA_STATE[state];
-      session.metadata = state === 'stopped' ? null : new MediaMetadata({ title: 'GenDnB', artist: `シード ${seed}` });
+      session.metadata = state === 'stopped' ? null : new MediaMetadata({ title: APP_NAME, artist: `シード ${seed}` });
       held = state === 'playing';
       if (held) {
         audio.play().catch((error: unknown) => {

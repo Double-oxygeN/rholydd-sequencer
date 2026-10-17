@@ -1,8 +1,10 @@
-# GenDnB
+# Rholydd Sequencer
+
+/ˈr̥ɔlɨð ˈsiːkwənsə/
 
 ## 概要
 
-GenDnB は、パラメーターを設定するだけでドラムンベースのビートをランダムに展開しながら永久に鳴らし続ける、ブラウザ向けのジェネレーティブ・シーケンサーです。完全なランダムではなく、2bar・8bar・32barそれぞれの単位でまとまりのある展開になるよう変化率を制御します。
+Rholydd Sequencer は、パラメーターを設定するだけでドラムンベースのビートをランダムに展開しながら永久に鳴らし続ける、ブラウザ向けのジェネレーティブ・シーケンサーです。完全なランダムではなく、2bar・8bar・32barそれぞれの単位でまとまりのある展開になるよう変化率を制御します。
 
 ## 特徴
 
@@ -34,7 +36,7 @@ GenDnB は、パラメーターを設定するだけでドラムンベースの�
 生成（何を鳴らすか）と再生（いつ鳴らすか）をディレクトリレベルで分離しています。生成器は音を出さず、イベント列だけを返します。
 
 ```
-gendnb/
+rholydd-sequencer/
 ├── public/samples/drums/    # kick, snare, hat, ghost の WAV（tools/make-samples.ts で合成した仮素材）
 ├── src/
 │   ├── units.ts             # brand 型の基盤、0〜1 の値
@@ -104,8 +106,8 @@ gendnb/
 必要環境は Node.js 24.2 以上（`tools/simulate.ts` が `import.meta.main` を使うため）と、Web Audio API に対応したモダンブラウザ（Chrome / Firefox / Safari / Edge の最新版）です。
 
 ```bash
-git clone <repository-url> gendnb
-cd gendnb
+git clone <repository-url> rholydd-sequencer
+cd rholydd-sequencer
 npm install
 npm run dev
 ```

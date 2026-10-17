@@ -1,4 +1,5 @@
 import * as Tone from 'tone';
+import { APP_NAME } from './app-name.ts';
 import { configureAudioContext, loadInstruments } from './engine/audio.ts';
 import { createSequencer, type PlaybackSession } from './engine/transport.ts';
 import { initialParams } from './params/config.ts';
@@ -36,7 +37,7 @@ async function boot(root: HTMLElement) {
   const mixerView = createMixerView(store);
 
   const title = document.createElement('h1');
-  title.textContent = 'GenDnB';
+  title.textContent = APP_NAME;
   const status = document.createElement('p');
   status.className = 'status';
   status.textContent = 'サンプルを読み込み中…';

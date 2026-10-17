@@ -230,13 +230,13 @@ describe('phase 4 acceptance: initial seed', () => {
 describe('phase 4 acceptance: sharing', () => {
   const pages = [
     'https://example.com/',
-    'https://example.com/gendnb/?seed=1&bpm=170#menu',
+    'https://example.com/rholydd-sequencer/?seed=1&bpm=170#menu',
     'http://192.168.0.2:5173/?seed=99',
   ];
 
   it('shares the page without its query and fragment, with the seed only when asked to', () => {
-    expect(shareUrl(pages[1]!, toSeed(12345))).toBe('https://example.com/gendnb/?seed=12345');
-    expect(shareUrl(pages[1]!, undefined)).toBe('https://example.com/gendnb/');
+    expect(shareUrl(pages[1]!, toSeed(12345))).toBe('https://example.com/rholydd-sequencer/?seed=12345');
+    expect(shareUrl(pages[1]!, undefined)).toBe('https://example.com/rholydd-sequencer/');
     expect(shareUrl(pages[2]!, undefined)).toBe('http://192.168.0.2:5173/');
   });
 
