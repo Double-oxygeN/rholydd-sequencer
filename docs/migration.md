@@ -379,7 +379,7 @@
 | 　読み上げ | [interface/screen.md](./interface/screen.md)（アクセシビリティ） |
 | 　コントラスト | [interface/screen.md](./interface/screen.md)（アクセシビリティ） |
 | ブラウザの確認 | [quality/release-checklist.md](./quality/release-checklist.md)（ブラウザ） |
-| 　調べてから手当てすること | 保留。実機で確かめてから手当てし、[interface/integration.md](./interface/integration.md) と README に書く（iOS の消音のスイッチ・画面のロック・アプリの切り替え、Safari のダイアログのフォーカス、Firefox のメディア操作）。確かめる項目は [quality/release-checklist.md](./quality/release-checklist.md)（ブラウザ） |
+| 　調べてから手当てすること | [interface/integration.md](./interface/integration.md)（システムによる中断）（実機で確かめた結果と手当て）。バックグラウンドから戻った後の表示の遅れは調査中 |
 | CI/CD（`.github/workflows/ci.yml`） | [interface/integration.md](./interface/integration.md)（CI/CD） |
 | 素材とライセンス | [interface/integration.md](./interface/integration.md)（ドラムサンプル） |
 | `package.json` と README | 一度きり（作業）。README と `package.json` に反映した |

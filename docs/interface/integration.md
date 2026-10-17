@@ -97,6 +97,17 @@ Media Session API で、再生の状態と曲名をブラウザと OS に伝え�
 - 曲名はアプリの名前、アーティストの欄に鳴っている展開のシードを出す
 - ヘッドホンが抜けたときなど、ブラウザが無音の `audio` 要素を止めたときは一時停止する
 
+### システムによる中断
+
+iOS では、画面をロックしたときと、ほかのアプリやホーム画面に切り替えたときに、システムが音を止めます。
+
+| 場面 | 振る舞い |
+| --- | --- |
+| 再生中に音が止められた | 一時停止の状態になり、画面とロック画面のメディア操作も「一時停止」を表示する。止まった位置を再開位置にする |
+| 再開ボタン、ロック画面の再生 | 止まった位置の続きから鳴る（ロック中でも鳴る） |
+| Safari に戻った | 一時停止のまま。再開ボタンで再開する |
+| 消音のスイッチ | 影響しない（オンでもオフでも鳴る） |
+
 ### ドラムサンプル
 
 `public/samples/drums/` の kick・snare・hat・ghost の WAV は、`tools/make-samples.ts`（`npm run samples`）で合成した自作の音です。リポジトリと同じ Apache License 2.0 で配布します。ノイズは自前の乱数から作るので、何度合成しても同じファイルになります。
@@ -172,6 +183,15 @@ function linkMediaSession(onAction: (action: MediaAction) => void): MediaSession
 - ブラウザが知らない操作の `setActionHandler` は例外になるので、操作ごとに捕まえる
 - `start` は `Tone.start()` を待った後で、セッションがまだないことを確かめてから始める
 
+### 中断（`main.ts`、`ui/playback.ts`）
+
+```ts
+type AudioState = AudioContextState | 'interrupted';   // Safari の iOS は標準にない 'interrupted' を返す
+function interruptionCommand(audio: AudioState, state: PlaybackState): PlaybackCommand | null;
+```
+
+`main.ts` は AudioContext の状態の変化（Tone.js の `statechange`）を受け、`running` から外れたときに再生中なら、画面のボタンと同じ `run('pause')` を通して一時停止します。`resume` も `start` と同じく `Tone.start()` を待ってから再開し、システムに止められた AudioContext を起こします。
+
 ### base path とビルド
 
 `tools/base-path.ts` が `package.json` の `name` から `/〈name〉/` を作り、`vite.config.ts` が `build` と `preview`（`isPreview`）の `base` にします。開発サーバー（`npm run dev`）はルートで開きます。サンプル・設定ファイル・共有する URL は `import.meta.env.BASE_URL` を基準にします。別の場所に配布するときは `npm run build -- --base /path/` で上書きできます。
@@ -207,6 +227,9 @@ push（すべてのブランチ）・pull_request
 - **音を `MediaStreamAudioDestinationNode` から `audio` 要素に流さない**: 音の経路と遅延が変わり、リミッターの後のクリップの検出やクリック防止を確かめ直すことになるため
 - **メディアの再生と一時停止を切り替えにしない**: OS が「再生」と「一時停止」を別の操作として送ってくるため。再生中に再生が来ても一時停止しない
 - **`Tone.start()` の後にセッションを確かめる**: ユーザーの操作を待っている間に2度目の開始（メディア操作と画面のクリックなど）が来ると、同じ操作で両方の待ちが解け、セッションが2つできてしまうため
+- **システムに止められたら一時停止にする**: そのままだと、音は止まっているのに、画面とロック画面は再生中を表示し続ける。一時停止にすると表示が実際の音と合い、止まった位置から聴き直せる。Safari に戻ったとき自動で鳴り直さず一時停止のまま待つのは、聴き手が操作していない間に音が鳴り出さないようにするため
+- **再開でも `Tone.start()` を待つ**: システムに止められた AudioContext は、ユーザーの操作でしか起こせない。ロック画面の再生ボタンも操作として扱われるので、ロック中でも再開できる
+- **`navigator.audioSession` を使わない**: 消音のスイッチで音が止まらないことを実機で確かめたため。メディア操作のための無音の `audio` 要素が鳴っていることで、音の扱いがすでに再生用になっていると考えられる
 - **曲名に加えてシードを出す**: ロック画面からでも、気に入った展開のシードを控えられるようにするため
 - **ドラムサンプルを自作の合成音にする**: 外部のサンプルを使わないので、ライセンスの条件が増えないため
 - **base path を `package.json` の `name` から作る**: GitHub Pages はプロジェクトのリポジトリをその名前の下に配るので、リポジトリ名を変えるときに `package.json` だけを直せば済むようにするため
