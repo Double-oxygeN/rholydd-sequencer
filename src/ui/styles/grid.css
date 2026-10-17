@@ -52,11 +52,7 @@
 }
 
 .grid-cell[data-layer='hit'] {
-  background: color-mix(
-    in srgb,
-    var(--base) calc((var(--weakest-share) + (1 - var(--weakest-share)) * var(--velocity)) * 100%),
-    var(--cell)
-  );
+  background: color-mix(in srgb, var(--base) calc(var(--velocity) * 100%), var(--cell));
 }
 
 .grid-cell[data-layer='note'] {
@@ -64,7 +60,7 @@
 }
 
 .grid-cell[data-layer='sustain'] {
-  background: color-mix(in srgb, var(--bass) calc(var(--weakest-share) * 100%), var(--cell));
+  background: color-mix(in srgb, var(--bass) 40%, var(--cell));
 }
 
 .grid-cell.now {

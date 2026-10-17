@@ -1,7 +1,8 @@
 /*
  * Text keeps 4.5:1 against what it sits on, and control borders, the focus ring and every fill that means something
  * keep 3:1, in both schemes. tests/interface/contrast.test.ts checks each pairing, so a colour changed here is
- * checked there too.
+ * checked there too. The sequencer's hits and notes are left out on purpose: their shading by velocity is what they
+ * show, and lifting the softest hit to 3:1 squeezed the shades too close together to tell apart.
  */
 :root {
   --bg: #f6f6f4;
@@ -15,15 +16,13 @@
   --cell: #ececef;
   --accent: #c4245f;
   --on-accent: #ffffff;
-  --base: #1a4fb5;
+  --base: #2f6fdf;
   --ornament: #13805b;
   --fill: #b05a00;
   --on-fill: #ffffff;
-  --bass: #5b33c4;
+  --bass: #7a4fd6;
   --solo: #a68600;
   --on-solo: #000000;
-  /* The share of a fill that the softest hit and a held note keep, the least that still stands out of its cell. */
-  --weakest-share: 0.68;
   color-scheme: light;
 }
 

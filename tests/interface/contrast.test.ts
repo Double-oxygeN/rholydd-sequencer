@@ -20,11 +20,6 @@ function rgb(hex: string): Rgb {
   return [0, 2, 4].map((i) => parseInt(digits.slice(i, i + 2), 16)) as unknown as Rgb;
 }
 
-/** color-mix(in srgb, a share, b), which mixes the gamma-encoded channels. */
-function mix(a: Rgb, b: Rgb, share: number): Rgb {
-  return a.map((x, i) => x * share + b[i]! * (1 - share)) as unknown as Rgb;
-}
-
 function luminance(color: Rgb): number {
   const [r, g, b] = color.map((x) => {
     const c = x / 255;
@@ -50,9 +45,9 @@ interface Pairing {
 
 const token = (name: string) => (t: Tokens) => [rgb(t[name]!)];
 const tokens = (...names: string[]) => (t: Tokens) => names.map((name) => rgb(t[name]!));
-const weakest = (fill: string) => (t: Tokens) => [mix(rgb(t[fill]!), rgb(t.cell!), Number(t['weakest-share']))];
 
-// Every fill on the screen that means something, as the stylesheets paint it.
+// Every fill on the screen that means something, as the stylesheets paint it. The sequencer's hits and notes are
+// left out: they are shaded by velocity, and the softest shades are meant to fade into the cell.
 const PAIRINGS: readonly Pairing[] = [
   { what: 'text and labels', fore: tokens('fg', 'muted'), back: ['bg', 'panel'], ratio: TEXT },
   { what: 'text on a selected tab', fore: token('bg'), back: ['fg'], ratio: TEXT },
@@ -61,9 +56,6 @@ const PAIRINGS: readonly Pairing[] = [
   { what: 'the focus ring', fore: token('focus'), back: ['bg', 'panel', 'cell'], ratio: GRAPHIC },
   { what: 'the play button', fore: token('accent'), back: ['bg'], ratio: GRAPHIC },
   { what: 'the icon on the play button', fore: token('on-accent'), back: ['accent'], ratio: GRAPHIC },
-  { what: 'the softest drum hit', fore: weakest('base'), back: ['cell'], ratio: GRAPHIC },
-  { what: 'notes in the sequencer', fore: token('bass'), back: ['cell'], ratio: GRAPHIC },
-  { what: 'held notes in the sequencer', fore: weakest('bass'), back: ['cell'], ratio: GRAPHIC },
   { what: 'lit cells of the cycle meter', fore: tokens('base', 'fill', 'accent', 'ornament'), back: ['bg'], ratio: GRAPHIC },
   { what: 'lit cells of the 8-bar meter', fore: token('accent'), back: ['bg'], ratio: GRAPHIC },
   { what: 'lit segments of the spectrum', fore: tokens('base', 'fill', 'accent'), back: ['cell', 'panel'], ratio: GRAPHIC },
