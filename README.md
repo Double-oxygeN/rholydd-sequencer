@@ -26,7 +26,7 @@ Rholydd Sequencer は、パラメーターを設定するだけでドラムン�
 
 | ブラウザ | 環境 |
 | --- | --- |
-| Chrome・Edge | デスクトップの最新版 |
+| Chrome・Edge | デスクトップの最新版（Edge は Chrome と同じ Chromium で動くため、個別には確かめていません） |
 | Firefox | デスクトップの最新版 |
 | Safari | macOS・iOS の最新版 |
 | Chrome | Android の最新版 |
