@@ -105,8 +105,10 @@ e2e/                  # Playwright（*.spec.ts）
 - 固定の時間を待たず、Playwright の自動の待ち（`expect(…).toHaveText` など）を使う。メニューを開いた後は、滑り込みが終わるまで待ってから位置を測る
 - 再試行は 0 回にする。再試行は、ときどきしか通らないテストを隠すため
 - 設定ファイルは `page.route` で `config.json` の中身を返す。ページから見ると、配布先に置いたときと同じ取得になる。ビルドを分けると CI の時間が延びるため
-- メディア操作は `page.addInitScript` で `setActionHandler` を包み、登録された処理を呼ぶ。Media Session API がないブラウザでは同じ形の代わりを置く
+- メディア操作は `page.addInitScript` で登録された処理を控えて呼ぶ。Media Session API がないブラウザでは同じ形の代わりを置く
 - Chromium は `--autoplay-policy=no-user-gesture-required` で起動する。音の出力先のない環境でも AudioContext を止めないため
+- Firefox は、音の出力先がないと AudioContext が起動しないので、CI では PulseAudio を出力先のない機器（null sink）だけで起動しておく
+- メディア操作の処理は `MediaSession.prototype.setActionHandler` を包んで受け取る。WebKit は、セッションのオブジェクトそのものに置いた関数を呼ばなかったため
 - 「横にはみ出さない」は `scrollWidth ≤ clientWidth`、「覆われていない」はフォーカスのある要素の中心と四隅の少し内側の5点で `elementFromPoint` を呼び、どれか1点でその要素か子孫が返ることで確かめる
 
 **安定性**: リリースの前に、同じコードで `npx playwright test --repeat-each 10` を実行し、すべて通ることを確かめます。

@@ -57,6 +57,12 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ matrix.browser }}-${{ hashFiles('package-lock.json') }}
       - run: npx playwright install --with-deps ${{ matrix.browser }}
+      # Firefox waits forever for an AudioContext to start without an audio device, which runners lack.
+      - name: Start an audio server with only a null sink
+        if: matrix.browser == 'firefox'
+        run: |
+          sudo apt-get install -y --no-install-recommends pulseaudio
+          pulseaudio --start --exit-idle-time=-1
       - uses: actions/download-artifact@v8
         with:
           name: dist
