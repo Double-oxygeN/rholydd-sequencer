@@ -3,8 +3,8 @@ import { join } from 'node:path';
 import type { Part } from '../src/generators/types.ts';
 import { createRng, toSeed, type Rng } from '../src/random/rng.ts';
 
-// Placeholder kit synthesized offline: the sample source and licence are still undecided,
-// and self-made sounds avoid licence questions until real samples are chosen.
+// The kit is synthesized here rather than taken from a sample pack, so that it ships under the repository's own
+// Apache License 2.0 with no other licence to follow.
 
 const SAMPLE_RATE = 44100;
 const OUT_DIR = join(import.meta.dirname, '..', 'public', 'samples', 'drums');

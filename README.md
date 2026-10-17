@@ -37,7 +37,7 @@ Rholydd Sequencer は、パラメーターを設定するだけでドラムン�
 
 ```
 rholydd-sequencer/
-├── public/samples/drums/    # kick, snare, hat, ghost の WAV（tools/make-samples.ts で合成した仮素材）
+├── public/samples/drums/    # kick, snare, hat, ghost の WAV（tools/make-samples.ts で合成した自作の音）
 ├── src/
 │   ├── units.ts             # brand 型の基盤、0〜1 の値
 │   ├── engine/
@@ -95,7 +95,7 @@ rholydd-sequencer/
 │   └── main.ts
 ├── tools/
 │   ├── simulate.ts          # オフライン長時間生成と統計出力
-│   └── make-samples.ts      # 仮ドラムサンプルの合成
+│   └── make-samples.ts      # ドラムサンプルの合成
 ├── tests/
 ├── config.example.json      # 設定ファイルの全キーと既定値
 └── docs/                    # 要件定義書、設計書、ロードマップ
@@ -126,9 +126,11 @@ npm run dev
 | `npm run build` | 本番用ビルド |
 | `npm test` | 単体テストを実行 |
 | `npm run simulate -- --bars 4096 --seed 42` | 音声なしで長時間生成し、密度・反復率・32bar の役割ごとの密度・進行・各パート・サイクルとシーン・ドロップの入り方・移調・音色・FX の統計を出力（`--m2` `--m8` `--m32` `--energy` `--fill` `--initial-key` `--json` も指定可。`--config <パス>` で設定ファイルを読む） |
-| `npm run samples` | 仮のドラムサンプルを `public/samples/drums/` に合成し直す |
+| `npm run samples` | ドラムサンプルを `public/samples/drums/` に合成し直す |
 | `npm run typecheck` | 型検査 |
 
 ## ライセンス
 
 Apache License 2.0。全文はリポジトリ直下の LICENSE ファイルを参照してください。
+
+ドラムサンプル（`public/samples/drums/`）は、`tools/make-samples.ts` で合成した自作の音です。外部のサンプルを使っていないので、リポジトリと同じ Apache License 2.0 で配布します。
