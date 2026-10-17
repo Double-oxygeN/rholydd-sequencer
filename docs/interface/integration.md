@@ -119,7 +119,7 @@ iOS では、画面をロックしたときと、ほかのアプリやホーム�
 | --- | --- |
 | 配布先 | GitHub Pages。`https://gh.double-oxygen.net/rholydd-sequencer/` |
 | base path | `/rholydd-sequencer/`。`package.json` の `name` から作る |
-| CI | すべてのブランチへのプッシュとプルリクエストで、型検査・単体テスト・ビルド・E2E テスト（3つのブラウザエンジン） |
+| CI | プルリクエストの作成と更新、main の更新で、型検査・単体テスト・ビルド・E2E テスト（3つのブラウザエンジン） |
 | CD | main の更新で、CI が通ったら配布する |
 | リリース | `v` で始まるタグを main に付け、GitHub Releases に利用者目線のリリースノートを手で書く（[リリースの確認](../quality/release-checklist.md)） |
 
@@ -200,7 +200,7 @@ function interruptionCommand(audio: AudioState, state: PlaybackState): PlaybackC
 ### CI/CD（`.github/workflows/ci.yml`）
 
 ```
-push（すべてのブランチ）・pull_request
+pull_request（作成・更新）・push（main だけ）
   ├─ check: npm ci → typecheck → test → build → dist/config.json がないことを確かめる → dist をアーティファクトに上げる
   ├─ e2e（matrix: chromium・firefox・webkit、check の後）
   │    npm ci → playwright install --with-deps → dist を受け取る → playwright test --project
@@ -211,7 +211,7 @@ push（すべてのブランチ）・pull_request
 - ビルドは `check` で1回だけ行い、E2E テストと配布で同じ `dist` を使う
 - E2E テストはブラウザごとにジョブを分け、失敗したら Playwright のレポートとトレースをアーティファクトに上げる
 - `deploy` だけに `pages: write`・`id-token: write` を与え、`concurrency: pages`（実行中のものは止めない）にする
-- main 以外では、同じブランチの新しいプッシュが古い実行を止める
+- プルリクエストでは、新しいプッシュが古い実行を止める。main では止めない
 
 ## 決めた理由
 
@@ -236,5 +236,6 @@ push（すべてのブランチ）・pull_request
 - **ドラムサンプルを自作の合成音にする**: 外部のサンプルを使わないので、ライセンスの条件が増えないため
 - **base path を `package.json` の `name` から作る**: GitHub Pages はプロジェクトのリポジトリをその名前の下に配るので、リポジトリ名を変えるときに `package.json` だけを直せば済むようにするため
 - **E2E テストを配布と同じビルドに対して回す**: base path の誤り（サンプルや設定ファイルが読めない、共有する URL がずれる）を配布の前に見つけるため。ビルドを1回にして、確かめたものと配布するものを一致させる
+- **ブランチへのプッシュごとには回さない**: 作業中のプッシュのたびに3つのブラウザの E2E テストを回すと、Actions の時間を消費するわりに得るものが少ないため。レビューに出すプルリクエストと、配布する main で確かめる
 - **E2E テストをブラウザごとに並べる**: 3つを順に回すより早く終わり、CI の1回を10分以内に収めるため
 - **配布の権限を絞り、途中で止めない**: ほかのジョブに書き込みの権限を持たせないため。配布が途中で切られて、古い版と新しい版が混ざらないようにするため

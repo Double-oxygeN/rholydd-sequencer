@@ -49,7 +49,7 @@ Web Audio API と AudioWorklet が必要です。ブラウザの自動再生の�
 | 乱数 | 自前の sfc32（シードの派生は splitmix32） | 環境によらない再現性と、用途ごとのシードの派生のため |
 | UI | フレームワークなしの TypeScript、Lucide のアイコン | 画面の部品が少なく、フレームワークが要らないため |
 | テスト | Vitest、Playwright、axe | 生成を音声なしで単体テスト・統計検証し、画面をブラウザで確かめるため |
-| CI/CD | GitHub Actions、GitHub Pages | プッシュごとにテストし、main を自動で配布するため |
+| CI/CD | GitHub Actions、GitHub Pages | プルリクエストごとにテストし、main を自動で配布するため |
 
 ## ディレクトリ構成
 

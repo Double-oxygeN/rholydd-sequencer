@@ -115,4 +115,4 @@ e2e/                  # Playwright（*.spec.ts）
 
 ## CI
 
-`.github/workflows/ci.yml` が、すべてのブランチへのプッシュとプルリクエストで、型検査・単体テスト・ビルド・E2E テストを回します（[連携](../interface/integration.md#cicdgithubworkflowsciyml)）。テストを1つ失敗させると CI が失敗することは、リリースの前に一度確かめます。
+`.github/workflows/ci.yml` が、プルリクエストの作成と更新のたびと、main の更新で、型検査・単体テスト・ビルド・E2E テストを回します（[連携](../interface/integration.md#cicdgithubworkflowsciyml)）。テストを1つ失敗させると CI が失敗することは、リリースの前に一度確かめます。

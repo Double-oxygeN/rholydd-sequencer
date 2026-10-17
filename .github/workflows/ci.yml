@@ -1,16 +1,18 @@
 name: CI
 
 on:
-  push:
-    branches: ['**']
+  # Branches are checked once they are up for review, rather than on every push while work is under way.
   pull_request:
+  # main also publishes, which only a push to it can trigger.
+  push:
+    branches: [main]
 
 permissions:
   contents: read
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
-  # A newer push makes an older run moot, except on main, where a run cut short could leave a deploy half done.
+  # A newer push to a pull request makes an older run moot; on main, a run cut short could leave a deploy half done.
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
