@@ -7,7 +7,7 @@ import { PARTS, type Step } from '../src/generators/types.ts';
 import { sectionEnergy } from '../src/structure/energy.ts';
 import { ALL_KEYS, DEFAULT_KEY, degreeOf } from '../src/structure/key.ts';
 import { chordOf } from '../src/structure/conductor.ts';
-import { isBorrowed } from '../src/structure/harmony.ts';
+import { isBorrowed } from '../src/structure/chords.ts';
 import { clampUnit } from '../src/units.ts';
 import { DEFAULT_LIVE, PARAM_SETS, SEEDS, TUNING, liveParams, relativeShape, run, type GeneratedPair } from './helpers.ts';
 

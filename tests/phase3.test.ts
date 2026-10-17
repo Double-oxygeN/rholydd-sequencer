@@ -38,7 +38,7 @@ import {
 } from '../src/engine/patches.ts';
 import { SECTIONS_PER_PHRASE } from '../src/structure/form.ts';
 import { chordOf } from '../src/structure/conductor.ts';
-import { isBorrowed } from '../src/structure/harmony.ts';
+import { isBorrowed } from '../src/structure/chords.ts';
 import { clampUnit } from '../src/units.ts';
 import { DEFAULT_LIVE, PARAM_SETS, PICKUP, SEEDS, TUNING, liveParams, run, type GeneratedPair } from './helpers.ts';
 

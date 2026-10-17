@@ -11,11 +11,11 @@ import {
   type SceneRole,
   type SectionInCycle,
 } from './arrangement.ts';
+import type { ColoredChord } from './chords.ts';
 import {
   cycleMainProgression,
   cycleModulation,
   phraseTransitionProgression,
-  type ColoredChord,
   type MainProgression,
   type TransitionProgression,
 } from './harmony.ts';

@@ -1,6 +1,6 @@
 import { TAG, createRng } from '../../random/rng.ts';
 import { chordOf } from '../../structure/conductor.ts';
-import { chordToneClass, tensionClass, type ChordTone } from '../../structure/harmony.ts';
+import { chordToneClass, tensionClass, type ChordTone } from '../../structure/chords.ts';
 import { motifSeed, playableEnd, styleOf, stylePlan } from '../line.ts';
 import { foldPitch, stackUp } from '../pitch.ts';
 import {

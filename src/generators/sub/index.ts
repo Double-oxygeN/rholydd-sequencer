@@ -1,7 +1,7 @@
 import { TAG, createRng } from '../../random/rng.ts';
 import { ALL_STEPS, type ContextWithDrums, type Generator, type SubNote } from '../types.ts';
 import { chordOf } from '../../structure/conductor.ts';
-import { chordToneClass } from '../../structure/harmony.ts';
+import { chordToneClass } from '../../structure/chords.ts';
 import { chordTone, legato, motifSeed, playableEnd, styleOf, stylePlan } from '../line.ts';
 import type { LineTuning } from '../tuning.ts';
 import { subPitch } from './pitch.ts';

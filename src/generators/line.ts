@@ -1,6 +1,6 @@
 import { REL, createRng, hash, weightedIndex, type Seed } from '../random/rng.ts';
 import type { Seeds } from '../structure/conductor.ts';
-import { CHORD_TONES, type ChordTone } from '../structure/harmony.ts';
+import { CHORD_TONES, type ChordTone } from '../structure/chords.ts';
 import type { ToneWeights } from './tuning.ts';
 import { STEPS_PER_PAIR, type ContextWithDrums, type Step, type StepLength } from './types.ts';
 

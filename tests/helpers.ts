@@ -10,7 +10,7 @@ import type { ContextWithDrums, DrumHit, NoteEvent, PadChord, PitchedEvent } fro
 import { DEFAULT_LIVE_PARAMS } from '../src/params/store.ts';
 import { toSeed } from '../src/random/rng.ts';
 import { chordOf, type LiveParams } from '../src/structure/conductor.ts';
-import { CHORD_TONES, chordToneClass } from '../src/structure/harmony.ts';
+import { CHORD_TONES, chordToneClass } from '../src/structure/chords.ts';
 import { DEFAULT_KEY, type Key } from '../src/structure/key.ts';
 import { clampUnit } from '../src/units.ts';
 

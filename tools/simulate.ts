@@ -34,17 +34,14 @@ import { SECTIONS_PER_PHRASE, type SectionIn32 } from '../src/structure/form.ts'
 import {
   BORROWED_SYMBOLS,
   CHORD_TONES,
-  MAIN_SKELETONS,
-  TRANSITION_SKELETONS,
   chordClasses,
   chordToneClass,
   isBorrowed,
   romanName,
-  skeletonName,
   type BorrowedSymbol,
-  type MainProgression,
   type Tension,
-} from '../src/structure/harmony.ts';
+} from '../src/structure/chords.ts';
+import { MAIN_SKELETONS, TRANSITION_SKELETONS, skeletonName, type MainProgression } from '../src/structure/harmony.ts';
 import { DEFAULT_KEY, KEY_NAMES, degreeOf, parseKey, type Key } from '../src/structure/key.ts';
 import { PAD_TIMBRES, REESE_TIMBRES, STAB_TIMBRES, type CycleTimbre } from '../src/structure/timbre.ts';
 import { clampUnit } from '../src/units.ts';

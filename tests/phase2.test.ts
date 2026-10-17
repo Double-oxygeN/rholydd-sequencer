@@ -3,13 +3,10 @@ import { PAD_HIGHEST, PAD_LOWEST, sectionVoicings } from '../src/generators/pad/
 import type { PitchedEvent } from '../src/generators/types.ts';
 import { hash } from '../src/random/rng.ts';
 import { chordOf } from '../src/structure/conductor.ts';
+import { DIATONIC_SYMBOLS, chordClasses, chordName, chordToneClass } from '../src/structure/chords.ts';
 import {
-  DIATONIC_SYMBOLS,
   MAIN_SKELETONS,
   TRANSITION_SKELETONS,
-  chordClasses,
-  chordName,
-  chordToneClass,
   colorMain,
   colorTransition,
   cycleMainProgression,

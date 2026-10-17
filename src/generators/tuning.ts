@@ -1,4 +1,4 @@
-import type { ChordTone } from '../structure/harmony.ts';
+import type { ChordTone } from '../structure/chords.ts';
 import { DEFAULT_STRUCTURE_TUNING, type StructureTuning } from '../structure/tuning.ts';
 import type { UnitInterval, Weight } from '../units.ts';
 import type { FillLength, PhraseFillLength } from './drums/fill.ts';

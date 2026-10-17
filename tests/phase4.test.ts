@@ -13,7 +13,6 @@ import { toSeed } from '../src/random/rng.ts';
 import { chordOf } from '../src/structure/conductor.ts';
 import {
   BORROWED_SYMBOLS,
-  BORROWINGS,
   CHORDS,
   CHORD_TONES,
   chordClasses,
@@ -22,7 +21,8 @@ import {
   tensionClass,
   type ChordSymbol,
   type ColoredChord,
-} from '../src/structure/harmony.ts';
+} from '../src/structure/chords.ts';
+import { BORROWINGS } from '../src/structure/harmony.ts';
 import { ALL_KEYS, DEFAULT_KEY, degreeOf } from '../src/structure/key.ts';
 import { clampUnit } from '../src/units.ts';
 import { simulate } from '../tools/simulate.ts';
