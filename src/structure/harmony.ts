@@ -30,7 +30,7 @@ export type ColoredAt<D extends DiatonicSymbol> = Colored<SubstituteOf<D>>;
 /** One chord per 2 bars of an 8-bar section. Sections A, A' and A'' play it. */
 export type MainSkeleton = readonly ['i', DiatonicSymbol, DiatonicSymbol, DiatonicSymbol];
 /**
- * Section B plays it. Starting away from i moves the centre the way B moved the bass in phase 1. Ending away
+ * Section B plays it. Starting away from i moves the centre, as B's own bass style does. Ending away
  * from i keeps the return to i in A'' fresh: ending on i ran into it and held i for up to 8 bars.
  */
 export type TransitionSkeleton = readonly [OffTonic, DiatonicSymbol, DiatonicSymbol, OffTonic];
@@ -160,7 +160,8 @@ export function cycleModulation(
 /** Transition progression of a 32-bar phrase, chosen and coloured afresh for every B. */
 export function phraseTransitionProgression(phraseSeed: Seed, tuning: HarmonyTuning): TransitionProgression {
   const rng = createRng(hash(phraseSeed, TAG.progression));
-  // The main progression used to come from the first two draws; skipping them keeps the transitions of phase 2.
+  // The main progression used to come from the first two draws; skipping them keeps every seed's transitions
+  // as they were before the main progression moved to the cycle.
   rng.float();
   rng.float();
   return colorTransition(pick(TRANSITION_SKELETONS, rng.float()), phraseSeed, tuning);

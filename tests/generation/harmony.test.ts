@@ -292,7 +292,7 @@ describe('harmony: modulation', () => {
     expect([...shifts].some((shift) => ![0, 5, 7].includes(shift))).toBe(true);
   });
 
-  // Borrowed chords (phase 4) bring their own tones from outside the scale.
+  // Borrowed chords bring their own tones from outside the scale.
   it("plays every pitched note in the natural minor of the cycle's key, apart from borrowed chords", () => {
     let modulated = 0;
     for (const { pairs } of runs) {

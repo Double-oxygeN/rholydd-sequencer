@@ -228,8 +228,8 @@ describe('form: energy curve', () => {
     }
   });
 
-  // Phase 3 gives every scene its own energy; drops keep the phase 1 curve so their 32 bars still rise and fall.
-  it('follows the phase 1 curve within every drop', () => {
+  // Every scene has its own energy; drops keep the phrase curve so their 32 bars still rise and fall.
+  it('follows the phrase curve within every drop', () => {
     for (const seed of SEEDS) {
       for (const depth of [0, 0.5, 1]) {
         for (const { ctx } of run(seed, BARS, () => liveParams(0.3, 0.35, 0.7, 0.6, depth))) {

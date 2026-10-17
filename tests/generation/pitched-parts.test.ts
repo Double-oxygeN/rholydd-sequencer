@@ -37,7 +37,7 @@ function layersKicks(pair: GeneratedPair): number[] {
 const RANGES: Readonly<Record<PitchedEvent['instrument'], readonly [number, number]>> = {
   sub: [29, 52],
   reese: [41, 52],
-  // A tension stacks the stab above the octave from C4 (phase 4).
+  // A tension stacks the stab above the octave from C4.
   stab: [60, 85],
   pad: [53, 76],
 };
@@ -106,7 +106,7 @@ describe('pitched parts: bass', () => {
     for (const initialKey of ALL_KEYS) {
       for (const { ctx, sub } of run(42, 256, () => DEFAULT_LIVE, initialKey)) {
         for (const note of sub.notes) {
-          // Borrowed chords (phase 4) may leave the scale; the bass stays on the chord's own tones.
+          // Borrowed chords may leave the scale; the bass stays on the chord's own tones.
           if (!isBorrowed(chordOf(ctx))) expect(degreeOf(ctx.key, note.pitch)).toBeDefined();
           expect(note.pitch).toBeGreaterThanOrEqual(29);
           expect(note.pitch).toBeLessThanOrEqual(52);
@@ -168,7 +168,7 @@ describe('pitched parts: bass', () => {
     }
   });
 
-  // Revised in phase 2: the chord changes every 2 bars, so the repeat units match relative to their chords.
+  // The chord changes every 2 bars, so the repeat units match relative to their chords.
   it('repeats the same bass relative to the chord for the three repeat units of each 8 bars', () => {
     for (const pairs of runs) {
       for (let i = 0; i < pairs.length; i += 4) {
@@ -205,7 +205,7 @@ describe('pitched parts: on the chords', () => {
 
   const cutFrom = (pair: GeneratedPair) => (isPhraseEnd(pair) ? (pair.ctx.drums.fill?.from ?? 32) : 32);
 
-  // Phase 4 lets the stab and the pad sound the chord's tension too.
+  // The stab and the pad may sound the chord's tension too.
   it('plays only chord tones and tensions of the 2 bars, each part within its range', () => {
     for (const initialKey of ALL_KEYS) {
       for (const params of PARAM_SETS) {
@@ -360,7 +360,7 @@ describe('pitched parts: tensions', () => {
 });
 
 describe('pitched parts: pad voicing', () => {
-  // Without tensions, as phase 2 voiced them.
+  // Without tensions, which change the voicing itself, so that only the voice leading is left to check.
   const plain: HarmonyTuning = { ...TUNING.harmony, tensionChance: clampUnit(0), borrowChance: clampUnit(0) };
 
   it('starts each section in root position and moves the voices as little as the candidates allow', () => {
@@ -381,7 +381,7 @@ describe('pitched parts: pad voicing', () => {
         for (let n = 1; n < voicings.length; n++) {
           // Close voicings of seventh chords are at most a few semitones per voice apart once led well.
           const moved = voicings[n]!.reduce((sum, p, v) => sum + Math.abs(p - voicings[n - 1]![v]!), 0);
-          // 9 since phase 4 added i–iv–VII–III and i–VI–VII–v.
+          // i–iv–VII–III and i–VI–VII–v need up to 9.
           expect(moved).toBeLessThanOrEqual(9);
         }
       }

@@ -44,7 +44,8 @@ const DUCKED_PARTS: readonly DuckedPart[] = ['sub', 'reese', 'pad'];
 // Stopping and starting cut the whole mix, so the gate fades rather than jumps, or a riser resumed halfway clicks.
 const GATE_FADE_SECONDS = 0.01;
 
-// A longer look-ahead than Tone's default 0.1 s keeps playback steady when the main thread stalls (N-02).
+// A longer look-ahead than Tone's default 0.1 s keeps playback steady when the main thread stalls, as it does when
+// the tab is switched.
 const LOOK_AHEAD_SECONDS = 0.25;
 
 export interface Instruments {

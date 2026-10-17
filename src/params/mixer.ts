@@ -2,7 +2,7 @@ import { clampUnit, type Brand, type UnitInterval } from '../units.ts';
 
 /**
  * Settings that only shape the sound. They never reach the ensemble, so no mixer move can change the events a
- * seed generates (N-11).
+ * seed generates.
  */
 
 /** Fader level in whole decibels within LEVEL_RANGE. 0 dB passes the part through unchanged. */

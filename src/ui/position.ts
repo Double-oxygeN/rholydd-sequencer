@@ -34,7 +34,7 @@ export function createPositionView(): PositionView {
     cycle.clear();
     pairs.set(null);
     bars.set(null);
-    // Nothing has played yet in a session that has not started (F-83).
+    // A session that has not started has no place in the piece to count.
     counters.hidden = true;
   };
   clear();

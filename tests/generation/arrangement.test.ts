@@ -287,7 +287,7 @@ describe('arrangement: parts per scene', () => {
     for (const count of gaps.values()) expect(count).toBeGreaterThan(20);
   });
 
-  // Phase 3 leaves out the parts a scene does not play and empties the beat before a drop, adding only the pickup.
+  // A scene leaves out the parts it does not play and empties the beat before a drop, adding only the pickup.
   it('plays the composed drum layers followed by the pitched parts, as far as the scene lets them sound', () => {
     expect(generateBars(42, 256)).toEqual(run(42, 256).map((pair) => pair.heard));
     for (const pair of run(42, 1024)) {

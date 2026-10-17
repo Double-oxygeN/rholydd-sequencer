@@ -62,7 +62,7 @@ export interface HeldPeak {
 
 export interface SpectrumView {
   readonly element: HTMLElement;
-  /** Draws for as long as it runs; only while shown and playing (N-16). */
+  /** Draws for as long as it runs; only while shown and playing, so that nothing is drawn that no one sees. */
   run(read: () => Spectrum): void;
   /** Stops drawing and leaves every segment dark. */
   halt(): void;

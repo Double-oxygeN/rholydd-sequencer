@@ -78,7 +78,7 @@ async function boot(root: HTMLElement) {
     },
   });
 
-  // The spectrum only draws while it is shown and something plays (N-16).
+  // The spectrum only draws while it is shown and something plays, so that nothing is drawn that no one sees.
   const drawSpectrum = () => {
     if (views.current() === 'spectrum' && session?.state === 'playing') spectrum.run(instruments.spectrum);
     else spectrum.halt();

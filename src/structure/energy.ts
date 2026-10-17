@@ -11,7 +11,7 @@ export function sectionEnergy(sectionIn32: SectionIn32, depth: UnitInterval, cur
 /**
  * Energy of an 8-bar section. Builds only rise, topping out at the drop's A so that the drop never starts thinner
  * than the build before it; the tension of a build comes from the riser and the high-pass instead. Drops keep the
- * phase 1 curve so that their 32 bars still rise and fall as A A' B A''.
+ * phrase curve so that their 32 bars still rise and fall as A A' B A''.
  */
 export function sceneEnergy(
   role: SceneRole,
