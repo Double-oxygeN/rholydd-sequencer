@@ -40,7 +40,7 @@
 ### 予約
 
 - `Tone.getTransport().scheduleRepeat(cb, '2m', …)` のコールバックで、アンサンブルから次の2bar を取り、渡された時刻を基準に `時刻 + step × 16分の秒数` で発音を予約する
-- ノートを送るシンセは `ctx.timbre` の音色で選ぶ。ダッキングは鳴る側のキックから、FX は `fxAutomation` の点列で予約する
+- ノートを送るシンセは `ctx.timbre` の音色で選ぶ。ダッキングは実音側のキックから、FX は `fxAutomation` の点列で予約する
 - 位置とグリッドの表示は `Tone.getDraw()` で発音の時刻に同期させ、2bar の頭（`pairStarted`）と各ステップ（`stepStarted`）で呼ぶ
 - AudioContext は `latencyHint: 'playback'` と、Tone.js の既定（0.1 秒）より長い先読み（0.25 秒）で作り、Tone.js の Worker のクロックで刻む
 
@@ -95,7 +95,7 @@ function eventsFrom(events: readonly NoteEvent[], from: Step): readonly NoteEven
 
 Transport を止めて予約と描画の予約を取り消し、`instruments.silence(Tone.now())` を呼びます。次の再生ではアンサンブルを作り直します。
 
-## 決めた理由
+## 決定理由
 
 - **2bar ごとにまとめて予約する**: 生成の単位に合わせ、トランスポートのコールバックの数を抑えるため。予約した時刻で発音するので、聴感上のズレや揺れが出ない
 - **先読みを長めにする**: タブを切り替えたりメインスレッドが一時的に重くなったりしても、音が途切れないようにするため。タブが隠れたときにタイマーが間引かれても、Worker のクロックと先読みで予約が間に合う

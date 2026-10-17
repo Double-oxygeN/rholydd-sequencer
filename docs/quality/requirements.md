@@ -52,7 +52,7 @@
 | デスクトップの Chrome・Edge・Firefox・Safari の最新版 | E2E テスト（Chromium・Firefox・WebKit）と手動 |
 | iOS の Safari・Android の Chrome の最新版（実機） | 手動 |
 
-手当てできない動作の違いは、README の対応環境に、ブラウザごとの制約として書きます。
+補正できない動作の違いは、README の対応環境に、ブラウザごとの制約として書きます。
 
 ## アクセシビリティ
 

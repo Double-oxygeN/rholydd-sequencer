@@ -1,6 +1,6 @@
 # 仕様の文書
 
-Rholydd Sequencer の現行の仕様です。各文書は、振る舞い（聞こえ方・見え方としての規則と表）、実装（型・関数の分担・データの流れ）、決めた理由（試聴で確定した値の根拠、採らなかった案）の順に書きます。冒頭に、関係するコードとテストのパスがあります。
+Rholydd Sequencer の現行の仕様です。各文書は、振る舞い（聞こえ方・見え方としての規則と表）、実装（型・関数の分担・データの流れ）、決定理由（試聴で確定した値の根拠、不採用の案）の順に書きます。冒頭に、関係するコードとテストのパスがあります。
 
 ## 読む順番
 
@@ -21,7 +21,7 @@ Rholydd Sequencer の現行の仕様です。各文書は、振る舞い（聞�
 | | [和声](./generation/harmony.md) | キー、コードとテンション、借用和音、進行と色付け、移調 |
 | | [ドラム](./generation/drums.md) | 重み表、基準パターンと変異、転換、間引き、装飾、フィル |
 | | [音程のあるパート](./generation/pitched-parts.md) | サブベース・リースベース・スタブ・パッドの型、音高、ボイシング |
-| | [選別・溜め・FX](./generation/fx.md) | 鳴る側のイベントの選別、溜め、FX のイベント |
+| | [選別・溜め・FX](./generation/fx.md) | 実音側のイベントの選別、溜め、FX のイベント |
 | 再生 | [トランスポート](./playback/transport.md) | 予約、再生の状態、一時停止と再開 |
 | | [音](./playback/sound.md) | 音の経路、音色、ミキサーとソロ、ダッキング、ダイナミクス、FX のオートメーション |
 | 画面と連携 | [画面](./interface/screen.md) | 画面の組み立て、操作、位置の表示、シーケンサーとスペクトラム、メニュー、狭い画面、アクセシビリティ |
@@ -36,15 +36,15 @@ Rholydd Sequencer の現行の仕様です。各文書は、振る舞い（聞�
 | --- | --- |
 | 同じシードで同じ展開になる仕組み | [乱数とシード](./generation/random.md)、[テスト](./quality/testing.md#生成の基準) |
 | ある音がなぜ鳴る（鳴らない）のか | [アレンジ](./generation/arrangement.md#シーンごとのパート)、[選別・溜め・FX](./generation/fx.md) |
-| パラメーターがどこに効くか | [乱数とシード](./generation/random.md#パラメーターのラッチ)、[用語集](./glossary.md) |
+| パラメーターの効果範囲 | [乱数とシード](./generation/random.md#パラメーターのラッチ)、[用語集](./glossary.md) |
 | 調整用の数値を変えたい | [連携](./interface/integration.md#設定ファイル)、`config.example.json` |
-| 新しいパートや音色を足したい | [アーキテクチャ](./architecture.md#決めた理由)、[音程のあるパート](./generation/pitched-parts.md)、[音](./playback/sound.md#音色) |
+| 新しいパートや音色を足したい | [アーキテクチャ](./architecture.md#決定理由)、[音程のあるパート](./generation/pitched-parts.md)、[音](./playback/sound.md#音色) |
 | 画面の部品を変えたい | [画面](./interface/screen.md) |
 | リリースしたい | [リリースの確認](./quality/release-checklist.md) |
 
 ## 文書の決まり
 
-- 調整用の数値の既定値は、コード（`src/structure/tuning.ts`・`src/generators/tuning.ts`・`src/engine/tuning.ts`）と `config.example.json` を正本にし、文書には意味・範囲・理由だけを書く。進行の表・ステップの重み表・音色の表のように、何を鳴らすかを決める表は文書に載せる
+- 調整用の数値の既定値は、コード（`src/structure/tuning.ts`・`src/generators/tuning.ts`・`src/engine/tuning.ts`）と `config.example.json` を参照するようにし、文書には意味・範囲・理由だけを書く。進行の表・ステップの重み表・音色の表のように、何を鳴らすかを決める表は文書に載せる
 - 文書どうしは、ファイルと見出しへのリンクで参照する。番号は振らない
 - 自動で確かめられる性質はテストに任せ、文書には受け入れ基準を残さない。手動の確認は [リリースの確認](./quality/release-checklist.md) にまとめる
 - リリースの後の予定と変更の履歴は、GitHub の Issues と Releases で管理する
