@@ -6,9 +6,9 @@
 
 ## 名称の扱い
 
-新しい名称は未定なので、本書では〈新名称〉、リポジトリ名を〈リポジトリ名〉と書きます。名称が決まるまでは、名称に依存しない作業（基準の記録、リファクタリング、テストの並べ替え、アクセシビリティ）を先に進めます。
+名称は Rholydd Sequencer、リポジトリ名は `rholydd-sequencer` に決めました（[要件定義書の決定事項](./requirements.md#決定事項)）。
 
-名称が出てくる場所は、名称を決めたときに一度で直せるよう、次の3か所に絞ります。
+名称が出てくる場所は、次の3か所に絞ります。名称を変えることになっても、一度で直せるようにするためです。
 
 | 場所 | 中身 | 理由 |
 | --- | --- | --- |
@@ -99,7 +99,7 @@ e2e/                  # Playwright のテスト（*.spec.ts）。Vitest の対�
 
 ## base path とビルド
 
-配布先の URL は `https://gh.double-oxygen.net/〈リポジトリ名〉/` です。base path を1か所で決めるため、`vite.config.ts` が `package.json` の `name` から `/〈name〉/` を作り、`build` と `preview` の `base` にします。
+配布先の URL は `https://gh.double-oxygen.net/rholydd-sequencer/` です。base path を1か所で決めるため、`vite.config.ts` が `package.json` の `name` から `/〈name〉/` を作り、`build` と `preview` の `base` にします。
 
 - Vite は `vite preview` でも設定の関数に `command: 'serve'` を渡す。`command === 'build'` だけで決めると、preview が `/` で配って、ビルドした JavaScript とサンプルが見つからなくなるので、`isPreview` も見る
 - `tsconfig.json` の `include` に `e2e` と `playwright.config.ts` を足す。足さないと、E2E テストが型検査の対象から外れるため
@@ -313,11 +313,11 @@ push（すべてのブランチ）・pull_request
 
 | 項目 | 値 |
 | --- | --- |
-| `name` | 〈リポジトリ名〉 |
+| `name` | rholydd-sequencer |
 | `version` | `1.0.0`（タグは `v1.0.0`） |
-| `description` | 〈新名称〉の一文の説明（README の概要と同じ） |
-| `repository` | `github:Double-oxygeN/〈リポジトリ名〉` |
-| `homepage` | `https://gh.double-oxygen.net/〈リポジトリ名〉/` |
+| `description` | Rholydd Sequencer の一文の説明（README の概要と同じ） |
+| `repository` | `github:Double-oxygeN/rholydd-sequencer` |
+| `homepage` | `https://gh.double-oxygen.net/rholydd-sequencer/` |
 | `private` | `true` のまま（npm に公開しないため） |
 | `scripts` | `e2e` を足す |
 | `devDependencies` | `@playwright/test`、`@axe-core/playwright` を足す |
@@ -376,4 +376,3 @@ README は、概要・特徴・開く URL・対応環境と制約・技術スタ
 | E2E テストがマシンの負荷で不安定になる | 小節数やタイミングを確かめない。固定の時間を待たない。再試行を 0 にして、不安定さを隠さない |
 | ファイルの分割で再生の振る舞いが変わる（ノードのつなぎ方の誤り） | `engine/` の分割は1ファイルずつコミットし、そのたびに聴き比べる |
 | 文書の移行で、決めた理由やリスクへの対策が落ちる | 見出しごとの移行表で、元の文書の全見出しに行き先を決めてから削除する |
-| 名称が決まらないまま進め方の3以降に入れない | 名称に依存する場所を3か所に絞り、名称に依存しない作業を先に終える |
