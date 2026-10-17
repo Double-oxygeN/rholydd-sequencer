@@ -4,7 +4,7 @@ button.play {
   border-radius: 50%;
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 button.play.playing {

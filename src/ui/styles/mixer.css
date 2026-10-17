@@ -87,13 +87,13 @@ button.solo {
 button.mute.on {
   background: var(--fill);
   border-color: var(--fill);
-  color: #fff;
+  color: var(--on-fill);
 }
 
 button.solo.on {
   background: var(--solo);
   border-color: var(--solo);
-  color: #000;
+  color: var(--on-solo);
 }
 
 @media (max-width: 640px) {

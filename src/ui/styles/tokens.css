@@ -1,16 +1,29 @@
+/*
+ * Text keeps 4.5:1 against what it sits on, and control borders, the focus ring and every fill that means something
+ * keep 3:1, in both schemes. tests/interface/contrast.test.ts checks each pairing, so a colour changed here is
+ * checked there too.
+ */
 :root {
   --bg: #f6f6f4;
   --fg: #1d1d1f;
   --muted: #6b6b70;
   --panel: #ffffff;
+  /* Dividers only: they mean nothing, so they stay faint to keep the page light. */
   --line: #d9d9dd;
+  --control-border: #8a8a92;
+  --focus: #1f5fd1;
   --cell: #ececef;
-  --accent: #e0457b;
-  --base: #2f6fdf;
-  --ornament: #1a9e74;
-  --fill: #e08a1e;
-  --bass: #7a4fd6;
-  --solo: #e6c229;
+  --accent: #c4245f;
+  --on-accent: #ffffff;
+  --base: #1a4fb5;
+  --ornament: #13805b;
+  --fill: #b05a00;
+  --on-fill: #ffffff;
+  --bass: #5b33c4;
+  --solo: #a68600;
+  --on-solo: #000000;
+  /* The share of a fill that the softest hit and a held note keep, the least that still stands out of its cell. */
+  --weakest-share: 0.68;
   color-scheme: light;
 }
 
@@ -21,13 +34,18 @@
     --muted: #9a9aa3;
     --panel: #1d1d21;
     --line: #34343a;
+    --control-border: #74747e;
+    --focus: #8ab4ff;
     --cell: #26262b;
     --accent: #ff6b9c;
+    --on-accent: #000000;
     --base: #6b9cff;
     --ornament: #45cf9f;
     --fill: #ffb24d;
+    --on-fill: #000000;
     --bass: #b18cff;
     --solo: #f2d75c;
+    --on-solo: #000000;
     color-scheme: dark;
   }
 }

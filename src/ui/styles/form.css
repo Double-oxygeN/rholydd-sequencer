@@ -50,7 +50,7 @@ select {
   width: 100%;
   min-width: 0;
   padding: 6px 8px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--control-border);
   border-radius: 6px;
   background: var(--bg);
   color: var(--fg);
@@ -64,7 +64,7 @@ input:invalid {
 
 button {
   padding: 6px 12px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--control-border);
   border-radius: 6px;
   background: var(--bg);
   color: var(--fg);
