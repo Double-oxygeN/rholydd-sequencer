@@ -10,5 +10,7 @@ export default defineConfig(({ command, isPreview, mode }) => ({
   test: {
     include: ['tests/**/*.test.ts'],
     environment: 'node',
+    // The property tests generate up to 8192 bars per seed; CI runners with fewer cores took over the 5 s default.
+    testTimeout: 30_000,
   },
 }));
