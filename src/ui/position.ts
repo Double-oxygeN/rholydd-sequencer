@@ -87,12 +87,12 @@ const PREVIEW_LAYOUT: CycleLayout = {
   leadIns: { first: 'silence', second: 'straight' },
 };
 
-/** One cell per 8 bars of the cycle, coloured by scene, so that the next drop can be seen coming. */
 function picture(element: HTMLElement, label: string): void {
   element.setAttribute('role', 'img');
   element.setAttribute('aria-label', label);
 }
 
+/** One cell per 8 bars of the cycle, coloured by scene, so that the next drop can be seen coming. */
 function sceneMeter() {
   const element = document.createElement('div');
   element.className = 'meter scene-meter';
