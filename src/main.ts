@@ -17,7 +17,7 @@ import { createSpectrumView } from './ui/spectrum.ts';
 import { createViews } from './ui/views.ts';
 import { linkMediaSession } from './ui/media-session.ts';
 import { mediaCommand, toggleCommand, type PlaybackCommand } from './ui/playback.ts';
-import './ui/style.css';
+import './ui/styles/index.css';
 
 const SAMPLE_BASE_URL = `${import.meta.env.BASE_URL}samples/drums/`;
 const CONFIG_URL = `${import.meta.env.BASE_URL}config.json`;

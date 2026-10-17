@@ -1,0 +1,22 @@
+.spectrum[hidden] {
+  display: none;
+}
+
+.spectrum {
+  padding: 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.spectrum canvas {
+  display: block;
+  width: 100%;
+  height: 260px;
+}
+
+@media (max-width: 560px) {
+  .spectrum canvas {
+    height: 180px;
+  }
+}

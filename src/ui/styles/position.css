@@ -1,0 +1,79 @@
+.position {
+  display: grid;
+  gap: 8px;
+}
+
+.meter {
+  display: grid;
+  gap: 3px;
+  align-items: center;
+}
+
+.meter span {
+  height: 10px;
+  border-radius: 2px;
+  background: var(--cell);
+}
+
+.meter span.on {
+  background: var(--accent);
+}
+
+.bar-meter {
+  display: none;
+}
+
+@media (max-width: 560px) {
+  .pair-meter {
+    display: none;
+  }
+
+  .bar-meter {
+    display: grid;
+  }
+}
+
+/* Upcoming sections stay faint, so the shape of the rest of the cycle shows without hiding where playback is. */
+.scene-meter span[data-scene] {
+  opacity: 0.3;
+}
+
+.scene-meter span[data-scene].on {
+  opacity: 1;
+}
+
+.scene-meter span[data-scene='intro'] {
+  background: var(--base);
+}
+
+.scene-meter span[data-scene='build'] {
+  background: var(--fill);
+}
+
+.scene-meter span[data-scene='drop'] {
+  background: var(--accent);
+}
+
+.scene-meter span[data-scene='breakdown'] {
+  background: var(--ornament);
+}
+
+.counters {
+  display: flex;
+  gap: 16px;
+  margin-left: auto;
+  align-items: baseline;
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.counters[hidden] {
+  display: none;
+}
+
+.counter strong {
+  margin-right: 4px;
+  font-size: 1.4rem;
+  color: var(--fg);
+}
