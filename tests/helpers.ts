@@ -1,7 +1,7 @@
 import type { PairLayers } from '../src/generators/drums/index.ts';
 import { pickupHit } from '../src/generators/arrange.ts';
 import { createEnsemble } from '../src/generators/ensemble.ts';
-import { DEFAULT_GENERATION_TUNING } from '../src/generators/tuning.ts';
+import { DEFAULT_GENERATION_TUNING, type GenerationTuning } from '../src/generators/tuning.ts';
 import type { FxEvent } from '../src/generators/fx/index.ts';
 import type { ReeseLine } from '../src/generators/reese/index.ts';
 import type { StabLine } from '../src/generators/stab/index.ts';
@@ -60,8 +60,9 @@ export function run(
   bars: number,
   live: (pairIndex: number) => LiveParams = () => DEFAULT_LIVE,
   initialKey: Key = DEFAULT_KEY,
+  tuning: GenerationTuning = TUNING,
 ): GeneratedPair[] {
-  const ensemble = createEnsemble({ seed: toSeed(seed), initialKey, tuning: TUNING });
+  const ensemble = createEnsemble({ seed: toSeed(seed), initialKey, tuning });
   return Array.from({ length: Math.ceil(bars / 2) }, (_, i) => {
     const { ctx, drumLayers, sub, reese, stab, pad, events, fx } = ensemble.next(live(i));
     const pitched = [...sub.notes, ...reese.notes, ...stab.hits, pad];

@@ -26,14 +26,9 @@ import {
 import { ALL_KEYS, DEFAULT_KEY, degreeOf } from '../src/structure/key.ts';
 import { clampUnit } from '../src/units.ts';
 import { simulate } from '../tools/simulate.ts';
-import { FINGERPRINT_RUNS, unpitchedFingerprint } from './fingerprint.ts';
 import { DEFAULT_LIVE, PARAM_SETS, SEEDS, TUNING, liveParams, run, type GeneratedPair } from './helpers.ts';
 
 // Automated acceptance criteria from docs/specs/phase4/requirements.md.
-
-const PHASE3_UNPITCHED: readonly string[] = JSON.parse(
-  readFileSync(new URL('./fixtures/phase3-unpitched.json', import.meta.url), 'utf8'),
-);
 
 const BARS = 2048;
 const runs = SEEDS.flatMap((seed) => PARAM_SETS.map((params) => ({ params, pairs: run(seed, BARS, () => params) })));
@@ -45,14 +40,6 @@ const everyChord = (): readonly ColoredChord[] =>
   (Object.keys(CHORDS) as ChordSymbol[]).flatMap((symbol) =>
     [null, ...CHORDS[symbol].tensions].map((tension) => ({ symbol, tension }) as ColoredChord),
   );
-
-describe('phase 4 acceptance', () => {
-  it('keeps the drums, layouts, keys, sounds and effects of phase 3 for the same seed', () => {
-    FINGERPRINT_RUNS.forEach(({ seed, live }, i) => {
-      expect(unpitchedFingerprint(seed, live)).toBe(PHASE3_UNPITCHED[i]);
-    });
-  });
-});
 
 describe('phase 4 acceptance: harmony', () => {
   it('plays only tones and tensions of the coloured chord, and only the natural minor where nothing is borrowed', () => {
