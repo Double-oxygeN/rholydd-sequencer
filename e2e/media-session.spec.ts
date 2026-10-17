@@ -11,21 +11,25 @@ type MediaAction = 'play' | 'pause' | 'stop';
 function recordHandlers(): void {
   const handlers: Record<string, () => void> = {};
   (window as unknown as { mediaHandlers: typeof handlers }).mediaHandlers = handlers;
+  const keep = (action: MediaSessionAction, handler: MediaSessionActionHandler | null) => {
+    if (handler !== null) handlers[action] = () => handler({ action });
+  };
   if (!('mediaSession' in navigator)) {
-    const session = { metadata: null, playbackState: 'none', setActionHandler: () => {} };
+    const session = { metadata: null, playbackState: 'none', setActionHandler: keep };
     Object.defineProperty(navigator, 'mediaSession', { value: session });
     (window as unknown as { MediaMetadata: unknown }).MediaMetadata = class {
       constructor(init: object) {
         Object.assign(this, init);
       }
     };
+    return;
   }
-  const session = navigator.mediaSession;
-  const register = session.setActionHandler.bind(session);
-  session.setActionHandler = (action, handler) => {
-    if (handler !== null) handlers[action] = () => handler({ action });
+  // Wrapped on the prototype: WebKit never called a wrapper set on the session object itself.
+  const register = MediaSession.prototype.setActionHandler;
+  MediaSession.prototype.setActionHandler = function (this: MediaSession, action, handler) {
+    keep(action, handler);
     try {
-      register(action, handler);
+      register.call(this, action, handler);
     } catch {
       // The page itself copes with actions a browser does not know.
     }
