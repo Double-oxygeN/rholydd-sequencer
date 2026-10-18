@@ -8,7 +8,14 @@ import { icon, iconButton, setIcon } from './icons.ts';
 /** Where playback stands: no session while stopped. */
 export type PlaybackState = PlaybackSession['state'] | 'stopped';
 
-const PLAY_BUTTON: Readonly<Record<PlaybackState, readonly [IconNode, string]>> = {
+/**
+ * What the buttons show: playback, or the samples still loading, when no session can start yet. Loading stays out of
+ * PlaybackState, which only a session decides.
+ */
+export type ControlsState = PlaybackState | 'loading';
+
+const PLAY_BUTTON: Readonly<Record<ControlsState, readonly [IconNode, string]>> = {
+  loading: [Play, '再生'],
   stopped: [Play, '再生'],
   playing: [Pause, '一時停止'],
   paused: [Play, '再開'],
@@ -16,7 +23,7 @@ const PLAY_BUTTON: Readonly<Record<PlaybackState, readonly [IconNode, string]>> 
 
 export interface Controls {
   readonly element: HTMLElement;
-  show(state: PlaybackState): void;
+  show(state: ControlsState): void;
   onPlay(handler: () => void): void;
   onStop(handler: () => void): void;
 }
@@ -56,13 +63,17 @@ export function createControls(store: ParamStore): Controls {
   volumeLabel.append(volumeIcon, slider);
 
   element.append(play, stop, volumeLabel);
+  const show = (state: ControlsState) => {
+    setIcon(play, ...PLAY_BUTTON[state]);
+    play.classList.toggle('playing', state === 'playing');
+    // A press while loading is dropped rather than held over: the status line already says that the samples load.
+    play.disabled = state === 'loading';
+    stop.disabled = state === 'loading' || state === 'stopped';
+  };
+  show('loading');
   return {
     element,
-    show(state) {
-      setIcon(play, ...PLAY_BUTTON[state]);
-      play.classList.toggle('playing', state === 'playing');
-      stop.disabled = state === 'stopped';
-    },
+    show,
     onPlay(handler) {
       play.addEventListener('click', handler);
     },
