@@ -2,7 +2,7 @@
 
 音の経路、パートごとの音源と音色、ミキサーとソロ、ダッキング、ダイナミクスとクリップの検出、FX のオートメーション、スペクトラムアナライザーの取り出しをまとめます。
 
-関係するコード: `src/engine/audio.ts`、`src/engine/strips.ts`、`src/engine/voices.ts`、`src/engine/effects.ts`、`src/engine/patches.ts`、`src/engine/automation.ts`、`src/engine/ducking.ts`、`src/engine/clip.ts`、`src/engine/clip-worklet.ts`、`src/engine/tuning.ts`、`src/params/mixer.ts`
+関係するコード: `src/engine/audio.ts`、`src/engine/oscillator-release.ts`、`src/engine/source-disposal.ts`、`src/engine/strips.ts`、`src/engine/voices.ts`、`src/engine/effects.ts`、`src/engine/patches.ts`、`src/engine/automation.ts`、`src/engine/ducking.ts`、`src/engine/clip.ts`、`src/engine/clip-worklet.ts`、`src/engine/tuning.ts`、`src/params/mixer.ts`
 関係するテスト: `tests/playback/sound.test.ts`
 
 ## 振る舞い
@@ -156,6 +156,25 @@ impact: MembraneSynth + NoiseSynth ─▶ HPF(80) ─▶ fx のトリム ─▶ 
 - ノートの長さは `length × 16分の秒数` から 5 ms 短くして予約する
 - スタブとパッドの `PolySynth` の同時発音数は 12
 
+### 鳴り終えたオシレーターの解放（`engine/oscillator-release.ts`）
+
+Tone.js の `Oscillator` は、前の音が鳴り終えた後に次の音を始めるたびに新しいネイティブの `OscillatorNode` を作り、自分の `frequency` と `detune` の信号をその AudioParam につなぎますが、このつながりを切りません。起動のとき（`boot` で AudioContext を作る前）に `Tone.Oscillator.prototype._start` を包み、作ったノードが鳴り終えたら、信号をそのノードの AudioParam から切ります。
+
+- 渡すのはノードのネイティブの AudioParam（`param.input`）。Tone.js の `Param` を渡すと、信号のつながりをすべて切ってしまう
+- シンセを破棄した後に鳴り終えたノードでは何もしない。破棄で信号のつながりはすでに消えている
+- 2回入れても1回だけ包む
+- Tone.js の版は `15.1.22` に固定する
+
+### 鳴り終えた音源の破棄（`engine/source-disposal.ts`）
+
+Tone.js は、音ごとのオシレーターとバッファ音源（`OneShotSource`）を、鳴り終えた後に `requestIdleCallback` で破棄します。起動のとき（`boot` で AudioContext を作る前）に `OneShotSource.prototype._onended` を包み、呼んでいる間だけ `window.requestIdleCallback` を `undefined` にして、Tone.js の代わりの道（`setTimeout(dispose, 10)`）で破棄させます。
+
+- 呼んだ後は `requestIdleCallback` を元に戻す
+- 入れるときに、`ToneOscillatorNode` と `ToneBufferSource` が同じ基底を持ち、`_onended` が関数であることを確かめ、違えば例外を投げる
+- 2回入れても1回だけ包む
+
+
+
 ### ダッキング（`engine/ducking.ts`）
 
 ```ts
@@ -242,4 +261,11 @@ function restingValue(fx: FxTuning): AutomationValues;
 - **FM の変調波を正弦波にする**: Tone.js の既定は矩形波で、どの FM の音色も荒く濁るため
 - **FM の比を1以上の整数にする**: 1未満や非整数にすると、側波帯が基音の下や倍音列の外に出て、音高が1オクターブ下に聞こえたり、和音が濁ったりする。リースの音高がサブベースの帯域に聞こえると、ハイパスで分けた意味がなくなる
 - **音色の補正を 0 dB 以下にする**: トリムとリミッターの余裕は、表の先頭の音色で測ったもの。補正をプラスにすると、クリップしない保証が崩れる。補正は、パートの共通のフィルターを通してオフラインで鳴らした実効値を、先頭の音色にそろえた値で、試聴で確定した。Tone.js は fat 系のオシレーターを重ねる数で割り、FM 系はそのままの振幅で鳴らすので、FM の音色ほど大きく下げている。`pluck` は補正ではなくディケイを長くして差を縮めた
+- **鳴り終えたオシレーターから信号を切る**: standardized-audio-context はつながりを送り元の `outputs` に記録し、送り元を `disconnect` したときにだけ消す。信号はシンセと同じだけ生きる（`open` から次の `open` まで）ので、記録が鳴り終えたオシレーターをすべて保持し、再生を続けるほどメモリが増えた。デチューンで重ねた音色は本数分、FM の音色は2つずつ溜まる。Tone.js の最新版（15.5.57）でも直っていない
+- **Tone.js の内部を包み、自前の音源やシンセの作り直しで避けない**: アプリの音源の形を変えずに直せるため。オシレーターを鳴らし続けて音量だけで音を出す自前の音源にすると、音の頭の位相が毎回変わり、アタックの聞こえ方が変わる。シンセを定期的に作り直すと、鳴っている音の余韻が切れる
+- **破棄の後と2回目の切断を避ける**: どちらも `InvalidAccessError` を投げる。Tone.js のタイムアウトは、例外を投げたコールバックを取り除かずに毎回呼び直し、後のタイムアウト（ほかの音源の終わりの処理を含む）もすべて止まるため
+- **鳴り終えた音源を `setTimeout` で破棄させる**: Chrome は隠したタブでアイドル時間のコールバックを実行しないので、破棄の待ちが音の数だけ溜まり、それぞれが音源とそのゲイン・AudioParam を保持した（30 分で約3万件、ヒープは 200 MB 近く）。`setTimeout` は隠したタブでも実行される（間引かれても約1秒ごと。音を鳴らしているページは強い間引きの対象外）。Tone.js が `requestIdleCallback` のないブラウザのために用意している道なので、破棄の処理そのものは変えずに済む
+- **`requestIdleCallback` にタイムアウトを足す案を採らない**: 隠したタブでタイムアウトが実行されるかを、自動の確認では確かめられないため（ヘッドレスのブラウザはタブを隠しても `visible` のまま）
+- **`requestIdleCallback` を音源の終わりの処理の中だけで隠す**: ページ全体で差し替えると、ほかのコードの振る舞いまで変わるため。Tone.js のタイムアウト（`context.setTimeout`）を使わないのは、例外を投げたコールバックがそのループのほかのタイムアウトをすべて止めるため
+- **Tone.js の版を固定する**: 包むのは型に出ていない内部（`_start`・`_oscillator`）で、版が変わると黙って効かなくなったり壊れたりするため。上げるときは、アプリを読まないページで各音源に間を空けた音を鳴らし、GC の後に生きている `OscillatorNode` の数が今鳴っている分だけであることを確かめ直す（[テスト](../quality/testing.md#e2e-テスト)）
 - **同時発音数を 12 にする**: `PolySynth` は予約した音のボイスを先読みの分だけ早く確保し、オシレーターの停止の知らせがメインスレッドに届くまで空けない。スタブは2ステップ間隔で鳴ると3〜4回分が重なり、パッドはリリースが次の和音と重なる。8では音が落ちた。使っていないボイスは自動で破棄されるので、普段の負荷は増えない。音色ごとにシンセを分けるので、前の音色の余韻が新しい音色の発音数を使うことはない

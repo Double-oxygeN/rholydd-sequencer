@@ -80,14 +80,16 @@ e2e/                  # Playwright（*.spec.ts）
 
 | ファイル | 確かめること |
 | --- | --- |
-| `initial.spec.ts` | 初期画面の部品とタイトル。停止のボタンが押せない |
+| `initial.spec.ts` | 初期画面の部品とタイトル。停止のボタンが押せない。サンプルの読み込み中は再生と停止のボタンが押せず、読み終えると再生できる |
 | `playback.spec.ts` | 再生・一時停止・再開・停止でのボタン・欄・累計。表示の切り替え |
+| `spectrum.spec.ts` | 停止中のスペクトラムアナライザーが、幅を 1024px から 375px に変えると表示の大きさ × `devicePixelRatio` のピクセル数で描き直され、暗い配色に切り替えると消灯したセグメントが暗い配色の `--cell` の色になる |
 | `menu.spec.ts` | 右から出て、タブを切り替え、閉じるボタンでだけ閉じる。ミュートとソロの状態 |
 | `startup.spec.ts` | クエリ文字列のシード、設定ファイル（壊れた JSON を含む） |
 | `share.spec.ts` | URL とシードの有無、鳴っている展開のシード、閉じ方、コピー |
 | `media-session.spec.ts` | ページが登録したメディア操作の処理を呼ぶと、画面のボタンと同じ変化になる |
 | `narrow.spec.ts` | 幅 320px と 375px で、横にはみ出さず、1小節のシーケンサーと全幅のメニュー |
 | `keyboard.spec.ts` | Tab キーだけでの再生・メニュー・共有、タブの矢印キー、メニューに覆われた部品にフォーカスが移らない（幅 320・1024・1280px） |
+| `disposal.spec.ts` | `requestIdleCallback` を呼ばないものに差し替え（隠したタブの Chrome と同じ状態）、数小節鳴らして止めたとき、呼ばれずに待っている破棄が0件 |
 | `accessibility.spec.ts` | 初期画面・再生中・メニュー・共有のダイアログで、axe（WCAG 2.2 AA までのタグ）が違反を報告しない |
 
 **E2E テストで確かめないもの**
@@ -97,6 +99,7 @@ e2e/                  # Playwright（*.spec.ts）
 | 音の中身 | ヘッドレスのブラウザでの音の出力は環境に左右され、テストが不安定になるため | 単体テスト・シミュレーション・試聴 |
 | OS のメディアキー、ロック画面、通知 | テストから OS の操作を起こせない | ページの処理の呼び出しを E2E テストで、OS からの操作を手動で |
 | クリップボードへの実際のコピー（Chromium 以外） | テストから読み取りの権限を与えられない | Chromium だけで読み返し、ほかは手動で |
+| 鳴り終えたオシレーターが溜まらないこと | 数えるには CDP（`Runtime.queryObjects`）が要り、Chromium でしか動かない。溜まる速さはアプリの展開しだいで、短い再生では差が出ないことがある | Tone.js を上げるとき、アプリを読まないページで各音源に間を空けた音を鳴らし、GC の後に生きている `OscillatorNode` を数える（[音](../playback/sound.md#決定理由)）。長時間の動作の確認 |
 | 実機の Safari・iOS・Android | Linux で動かす WebKit は Safari と同じではない | 手動 |
 
 **書き方**
@@ -109,6 +112,7 @@ e2e/                  # Playwright（*.spec.ts）
 - Chromium は `--autoplay-policy=no-user-gesture-required` で起動する。音の出力先のない環境でも AudioContext を止めないため
 - Firefox は、音の出力先がないと AudioContext が起動しないので、CI では PulseAudio を出力先のない機器（null sink）だけで起動しておく
 - メディア操作の処理は `MediaSession.prototype.setActionHandler` を包んで受け取る。WebKit は、セッションのオブジェクトそのものに置いた関数を呼ばなかったため
+- 隠したタブは、ヘッドレスのブラウザでは作れない（タブを切り替えても最小化しても `visibilityState` が `visible` のまま）。隠したタブで止まる処理は、止まる API を `page.addInitScript` で差し替えて再現する
 - 「横にはみ出さない」は `scrollWidth ≤ clientWidth`、「覆われていない」はフォーカスのある要素の中心と四隅の少し内側の5点で `elementFromPoint` を呼び、どれか1点でその要素か子孫が返ることで確かめる
 
 **安定性**: リリースの前に、同じコードで `npx playwright test --repeat-each 10` を実行し、すべて通ることを確かめます。

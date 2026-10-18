@@ -9,11 +9,11 @@ import {
   type AutomationTarget,
 } from '../../src/engine/automation.ts';
 import type { Seconds } from '../../src/engine/ducking.ts';
-import { NOTHING_PENDING, locate, pairSource, type ScheduledPair } from '../../src/engine/playhead.ts';
+import { NOTHING_PENDING, locate, pairSource, playheadAt, type ScheduledPair } from '../../src/engine/playhead.ts';
 import { eventsFrom } from '../../src/engine/resume.ts';
 import { DEFAULT_SOUND_TUNING } from '../../src/engine/tuning.ts';
 import { createEnsemble, type EnsemblePair } from '../../src/generators/ensemble.ts';
-import { ALL_STEPS, type NoteEvent } from '../../src/generators/types.ts';
+import { ALL_STEPS, type NoteEvent, type Step } from '../../src/generators/types.ts';
 import { toSeed } from '../../src/random/rng.ts';
 import { DEFAULT_KEY } from '../../src/structure/key.ts';
 import { DEFAULT_LIVE, TUNING, run } from '../support/helpers.ts';
@@ -132,10 +132,12 @@ describe('transport: the effects at a resumed step', () => {
   });
 });
 
-describe('transport: the point to resume from', () => {
-  const fake = (n: number) => ({ n }) as unknown as EnsemblePair;
+const fake = (n: number) => ({ n }) as unknown as EnsemblePair;
 
-  const scheduled: ScheduledPair[] = [0, 1, 2].map((n) => ({ start: at(n, 0) as Seconds, pair: fake(n) }));
+const scheduledFrom = (n: number, from = 0): ScheduledPair => ({ start: at(n, 0) as Seconds, from: from as Step, pair: fake(n) });
+
+describe('transport: the point to resume from', () => {
+  const scheduled: ScheduledPair[] = [0, 1, 2].map((n) => scheduledFrom(n));
 
   const cut = (time: number) => locate(scheduled, time as Seconds, STEP);
 
@@ -150,6 +152,14 @@ describe('transport: the point to resume from', () => {
     expect(locate([], 1 as Seconds, STEP)).toEqual(NOTHING_PENDING);
   });
 
+  it('stays where the 2 bars resumed from when playback pauses again before that step sounds', () => {
+    const resumed = [scheduledFrom(0, 12), scheduledFrom(1)];
+    expect(locate(resumed, at(0, 9.5) as Seconds, STEP)).toEqual({ pending: [fake(0), fake(1)], step: 12 });
+    expect(locate(resumed, at(0, 12) as Seconds, STEP)).toEqual({ pending: [fake(0), fake(1)], step: 12 });
+    expect(locate(resumed, (at(0, 12) + 0.05) as Seconds, STEP)).toEqual({ pending: [fake(0), fake(1)], step: 13 });
+    expect(locate(resumed, at(1, 3) as Seconds, STEP)).toEqual({ pending: [fake(1)], step: 3 });
+  });
+
   it('keeps the piece as it would have gone on, however often playback pauses', () => {
     const fresh = () => createEnsemble({ seed: toSeed(9), initialKey: DEFAULT_KEY, tuning: TUNING });
     const uninterrupted = fresh();
@@ -162,7 +172,7 @@ describe('transport: the point to resume from', () => {
     const time = 0;
     const pausedAt = new Set<number>();
     while (played.length < 64) {
-      if (ahead.length < 2) ahead.push({ start: (time + ahead.length * PAIR) as Seconds, pair: next() });
+      if (ahead.length < 2) ahead.push({ start: (time + ahead.length * PAIR) as Seconds, from: 0 as Step, pair: next() });
       if (ahead.length < 2) continue;
       if (played.length % 5 === 4 && !pausedAt.has(played.length)) {
         pausedAt.add(played.length);
@@ -176,5 +186,58 @@ describe('transport: the point to resume from', () => {
     }
     expect(played.map((p) => p.ctx.pair)).toEqual(expected.map((p) => p.ctx.pair));
     expect(played).toEqual(expected);
+  });
+});
+
+describe('transport: the step on screen', () => {
+  const scheduled: ScheduledPair[] = [0, 1, 2].map((n) => scheduledFrom(n));
+
+  const shown = (list: readonly ScheduledPair[], time: number) => {
+    const playhead = playheadAt(list, time as Seconds, STEP);
+    return playhead === null ? null : { pair: list.indexOf(playhead.scheduled), step: playhead.step };
+  };
+
+  it('is the latest step begun within the 2 bars sounding', () => {
+    expect(shown(scheduled, -0.01)).toBeNull();
+    expect(shown(scheduled, 0)).toEqual({ pair: 0, step: 0 });
+    expect(shown(scheduled, 0.05)).toEqual({ pair: 0, step: 0 });
+    expect(shown(scheduled, at(0, 5))).toEqual({ pair: 0, step: 5 });
+    expect(shown(scheduled, at(0, 31) + 0.05)).toEqual({ pair: 0, step: 31 });
+    expect(shown(scheduled, at(2, 3) + 0.05)).toEqual({ pair: 2, step: 3 });
+  });
+
+  it('moves to the next 2 bars right at their start, even where the start times are sums of floats', () => {
+    for (const n of [1, 2]) expect(shown(scheduled, at(n, 0))).toEqual({ pair: n, step: 0 });
+    let time = 0;
+    for (let step = 0; step < 32; step++) time += STEP;
+    expect(shown(scheduled, time)).toEqual({ pair: 1, step: 0 });
+    for (let step = 1; step < 96; step++) expect(shown(scheduled, at(0, step))).toEqual({ pair: Math.floor(step / 32), step: step % 32 });
+  });
+
+  it('shows nothing before the step a resumed pair sounds from, nor anything already shown before the pause', () => {
+    const resumed = [scheduledFrom(0, 12), scheduledFrom(1)];
+    expect(shown(resumed, at(0, 11) + 0.05)).toBeNull();
+    expect(shown(resumed, at(0, 12))).toEqual({ pair: 0, step: 12 });
+    expect(shown(resumed, at(1, 4))).toEqual({ pair: 1, step: 4 });
+  });
+
+  it('shows nothing once every pair has ended', () => {
+    expect(shown(scheduled, at(3, 0))).toBeNull();
+    expect(shown(scheduled, at(5, 7))).toBeNull();
+    expect(playheadAt([], 1 as Seconds, STEP)).toBeNull();
+  });
+
+  it('stays one step behind the point to resume from, wherever playback pauses', () => {
+    for (let time = 0; time < at(3, 0) - 0.01; time += 0.0173) {
+      const playhead = playheadAt(scheduled, time as Seconds, STEP)!;
+      const point = locate(scheduled, time as Seconds, STEP);
+      const index = scheduled.indexOf(playhead.scheduled);
+      const begun = time - at(index, playhead.step) > 1e-6;
+      // A pause right as a step begins resumes from that step; any later, from the one after.
+      const next = begun ? playhead.step + 1 : playhead.step;
+      const expected = next < 32 ? { pair: index, step: next } : { pair: index + 1, step: 0 };
+      if (expected.pair > 2) expect(point).toEqual(NOTHING_PENDING);
+      else expect({ pair: (point.pending[0] as unknown as { n: number }).n, step: point.step }).toEqual(expected);
+    }
   });
 });
