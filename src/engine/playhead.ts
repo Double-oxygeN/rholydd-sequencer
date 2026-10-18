@@ -34,7 +34,9 @@ export function locate(scheduled: readonly ScheduledPair[], cutTime: Seconds, st
   const pairSeconds = STEPS_PER_PAIR * stepSeconds;
   const index = scheduled.findIndex(({ start }) => cutTime < start + pairSeconds);
   if (index === -1) return NOTHING_PENDING;
-  const step = Math.max(0, Math.ceil((cutTime - scheduled[index]!.start) / stepSeconds - EPSILON));
+  const { start, from: sounded } = scheduled[index]!;
+  // A pause before the resumed pair's first step sounds keeps the resume point, rather than going back to steps heard.
+  const step = Math.max(sounded, Math.ceil((cutTime - start) / stepSeconds - EPSILON));
   const from = step >= STEPS_PER_PAIR ? index + 1 : index;
   const [first, ...rest] = scheduled.slice(from).map(({ pair }) => pair);
   if (first === undefined) return NOTHING_PENDING;

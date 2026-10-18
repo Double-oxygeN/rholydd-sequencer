@@ -152,6 +152,14 @@ describe('transport: the point to resume from', () => {
     expect(locate([], 1 as Seconds, STEP)).toEqual(NOTHING_PENDING);
   });
 
+  it('stays where the 2 bars resumed from when playback pauses again before that step sounds', () => {
+    const resumed = [scheduledFrom(0, 12), scheduledFrom(1)];
+    expect(locate(resumed, at(0, 9.5) as Seconds, STEP)).toEqual({ pending: [fake(0), fake(1)], step: 12 });
+    expect(locate(resumed, at(0, 12) as Seconds, STEP)).toEqual({ pending: [fake(0), fake(1)], step: 12 });
+    expect(locate(resumed, (at(0, 12) + 0.05) as Seconds, STEP)).toEqual({ pending: [fake(0), fake(1)], step: 13 });
+    expect(locate(resumed, at(1, 3) as Seconds, STEP)).toEqual({ pending: [fake(1)], step: 3 });
+  });
+
   it('keeps the piece as it would have gone on, however often playback pauses', () => {
     const fresh = () => createEnsemble({ seed: toSeed(9), initialKey: DEFAULT_KEY, tuning: TUNING });
     const uninterrupted = fresh();
