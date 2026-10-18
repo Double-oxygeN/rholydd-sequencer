@@ -42,6 +42,8 @@ export interface Messages {
   readonly cycleCount: (cycle: number) => CounterText;
 
   readonly initialKey: string;
+  /** A natural minor key named after its tonic, such as C♯. */
+  readonly minorKey: (tonic: string) => string;
   readonly liveParam: Readonly<Record<keyof LiveParams, string>>;
   readonly seed: string;
   readonly rollSeed: string;
@@ -119,6 +121,7 @@ export const JA: Messages = {
   cycleCount: () => ({ before: '', after: 'サイクル' }),
 
   initialKey: '初期キー',
+  minorKey: (tonic) => `${tonic} マイナー`,
   liveParam: {
     m2: '2bar 変化率',
     m8: '8bar 変化率',

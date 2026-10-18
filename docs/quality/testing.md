@@ -52,7 +52,7 @@ e2e/                  # Playwright（*.spec.ts）
 
 ## 慣習の検査
 
-`tests/quality/conventions.test.ts` は、`src`・`tools`・`tests`・`e2e` に要件の番号とフェーズの名前が出てこないこと、テストのファイル名にフェーズの名前がないことを確かめます、`src/ui/` と `src/main.ts` で、画面の文言の表（`src/ui/messages.ts`）の外に日本語が出てこないことを確かめます。コメントと名前は、それだけで理由が分かる文で書きます。文書へのリンクや番号に頼ると、文書の構成が変わったときに古くなるためです。
+`tests/quality/conventions.test.ts` は、`src`・`tools`・`tests`・`e2e` に要件の番号とフェーズの名前が出てこないこと、テストのファイル名にフェーズの名前がないことを確かめます、`src` で、画面の文言の表（`src/ui/messages.ts`）とコンソールに出す設定ファイルの警告（`src/params/config.ts`・`decode.ts`・`load-config.ts`）の外に日本語が出てこないことを確かめます。コメントと名前は、それだけで理由が分かる文で書きます。文書へのリンクや番号に頼ると、文書の構成が変わったときに古くなるためです。
 
 ## コントラストの検査
 

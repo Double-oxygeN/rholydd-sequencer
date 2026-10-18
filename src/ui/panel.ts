@@ -7,7 +7,7 @@ import { createResetButton } from './reset.ts';
 import { BPM_RANGE, clampBpm, randomSeed, type ParamStore, type Params } from '../params/store.ts';
 import { parseSeed } from '../random/rng.ts';
 import type { LiveParams } from '../structure/conductor.ts';
-import { KEY_NAMES, keyName, toKey, type Key } from '../structure/key.ts';
+import { KEY_NAMES, toKey } from '../structure/key.ts';
 import { clampUnit } from '../units.ts';
 
 const LIVE_PARAMS: readonly (keyof LiveParams)[] = ['m2', 'm8', 'm32', 'fillIntensity', 'energyDepth'];
@@ -31,7 +31,7 @@ export function createPanel(store: ParamStore, messages: Messages): Panel {
   });
 
   const initialKey = document.createElement('select');
-  initialKey.append(...KEY_NAMES.map((name, i) => new Option(keyName(i as Key), String(i))));
+  initialKey.append(...KEY_NAMES.map((name, i) => new Option(messages.minorKey(name), String(i))));
   initialKey.value = String(store.get().initialKey);
   initialKey.addEventListener('change', () => {
     const value = toKey(Number(initialKey.value));

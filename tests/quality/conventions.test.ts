@@ -29,7 +29,9 @@ const sources = [...DIRECTORIES.flatMap(filesUnder).filter((path) => !path.inclu
 const PHASE_WORDS = [/\b[FN]-[0-9]+\b/, /\b[P]hase ?[0-9]/i, /\bM[V]P\b/, new RegExp('\u30d5\u30a7\u30fc\u30ba')];
 
 const MESSAGES = 'src/ui/messages.ts';
-const SCREEN = [...filesUnder('src/ui').filter((path) => path !== MESSAGES), 'src/main.ts'];
+// The config file's warnings go to the console for whoever deploys the page, who reads its Japanese documentation.
+const CONSOLE = ['src/params/config.ts', 'src/params/decode.ts', 'src/params/load-config.ts'];
+const SCREEN = filesUnder('src').filter((path) => path !== MESSAGES && !CONSOLE.includes(path));
 const JAPANESE = /[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}]/u;
 
 describe('conventions', () => {
