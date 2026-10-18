@@ -64,7 +64,7 @@ export interface SpectrumView {
   readonly element: HTMLElement;
   /** Draws for as long as it runs; only while shown and playing, so that nothing is drawn that no one sees. */
   run(read: () => Spectrum): void;
-  /** Stops drawing and leaves every segment dark. */
+  /** Stops drawing and leaves every segment dark, drawn again whenever its size or the colour scheme changes. */
   halt(): void;
 }
 
@@ -117,6 +117,13 @@ export function createSpectrumView(): SpectrumView {
     peaks = [];
     draw([]);
   };
+  // Only while halted, since every frame draws anew while running. The canvas itself is watched, rather than the
+  // window, so that a height set by a media query or the switch between views is caught too.
+  const redrawWhileHalted = () => {
+    if (frame === null) draw([]);
+  };
+  new ResizeObserver(redrawWhileHalted).observe(canvas);
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', redrawWhileHalted);
 
   return {
     element,
