@@ -1,8 +1,8 @@
 # 連携（設定ファイル・URL・共有・メディア操作・配布）
 
-ページの外とのつながりをまとめます。設定ファイル、クエリ文字列のシード、共有のダイアログ、OS のメディア操作、ドラムサンプル、配布と CI/CD です。
+ページの外とのつながりをまとめます。設定ファイル、クエリ文字列のシード、共有のダイアログ、OS のメディア操作、ドラムサンプル、アイコンと画像、配布と CI/CD です。
 
-関係するコード: `src/params/config.ts`、`src/params/decode.ts`、`src/params/load-config.ts`、`src/params/query.ts`、`src/ui/share.ts`、`src/ui/media-session.ts`、`src/ui/playback.ts`、`src/app-name.ts`、`config.example.json`、`tools/make-samples.ts`、`tools/base-path.ts`、`vite.config.ts`、`.github/workflows/ci.yml`
+関係するコード: `src/params/config.ts`、`src/params/decode.ts`、`src/params/load-config.ts`、`src/params/query.ts`、`src/ui/share.ts`、`src/ui/media-session.ts`、`src/ui/playback.ts`、`src/app-name.ts`、`config.example.json`、`tools/make-samples.ts`、`tools/make-icons.ts`、`public/icons/*`、`index.html`、`tools/base-path.ts`、`vite.config.ts`、`.github/workflows/ci.yml`
 関係するテスト: `tests/interface/integration.test.ts`、`tests/interface/screen.test.ts`（再生の命令）、`e2e/startup.spec.ts`、`e2e/share.spec.ts`、`e2e/media-session.spec.ts`
 
 ## 振る舞い
@@ -112,6 +112,21 @@ iOS では、画面をロックしたときと、ほかのアプリやホーム�
 ### ドラムサンプル
 
 `public/samples/drums/` の kick・snare・hat・ghost の WAV は、`tools/make-samples.ts`（`npm run samples`）で合成した自作の音です。リポジトリと同じ Apache License 2.0 で配布します。ノイズは自前の乱数から作るので、何度合成しても同じファイルになります。
+
+### アイコンと画像
+
+アイコンの絵柄は、名前の由来のニシブッポウソウ（roller）を、シーケンサーの 7×7 のマスで描いたものです。元の SVG（`public/icons/icon.svg`）を手で書き、ほかの画像は `tools/make-icons.ts`（`npm run icons`）が Playwright の Chromium で描いた PNG です。どれも自作で、リポジトリと同じ Apache License 2.0 で配布します。
+
+| 画像 | 大きさ | 使い道 |
+| --- | --- | --- |
+| `icon.svg` | — | favicon（`<link rel="icon" type="image/svg+xml">`）と、ほかの画像の元 |
+| `icon-192.png`・`icon-512.png` | 192・512 | マニフェスト、メディア操作のアートワーク |
+| `icon-maskable-512.png` | 512 | マニフェストの `purpose: "maskable"`（Android のホーム画面）。絵柄を 76% に縮め、マスの四隅まで中央の円（直径の 80%）に収める |
+| `apple-touch-icon.png` | 180 | iOS のホーム画面（`<link rel="apple-touch-icon">`）。角の丸めは iOS に任せ、四隅まで背景で塗る |
+| `share.png` | 1200×630 | 共有したリンクのプレビュー。アイコン、アプリの名前、英語の短い説明 |
+
+- 色は `tokens.css` の暗い配色から取る。アイコン自身が暗い背景を持つので、明るいタブバーでも暗いタブバーでも見分けられる
+- PNG はコミットし、ビルドのたびには作らない。元の SVG を変えたら `npm run icons` で作り直す。同じ版の Chromium なら、何度描いても同じファイルになる（共有用の画像の文字は、描いた環境の `system-ui` のフォントで描く）
 
 ### 配布
 
@@ -233,7 +248,10 @@ pull_request（作成・更新）・push（main だけ）
 - **ロック画面から再生した後に Safari に戻っても、AudioContext を作り直さない**: 1.0.0 では、戻った後に音が表示や操作より遅れて鳴り、Safari を閉じるまで続くことがあった（[Issue #1](https://github.com/Double-oxygeN/rholydd-sequencer/issues/1)）。遅れている間も `outputLatency`・`baseLatency`・`getOutputTimestamp` と `currentTime` の差は変わらず、ページから遅れを知る手段はなかった。描画の予約を溜めないようにし、鳴り終えたオシレーターと音源が溜まらないようにした後は、iOS の実機で再現しなくなった。原因は確かめていないが、音の経路をすべて組み直す大きな変更は要らなくなった
 - **`navigator.audioSession` を使わない**: 消音のスイッチで音が止まらないことを実機で確かめたため。メディア操作のための無音の `audio` 要素が鳴っていることで、音の扱いがすでに再生用になっていると考えられる
 - **曲名に加えてシードを出す**: ロック画面からでも、気に入った展開のシードを控えられるようにするため
-- **ドラムサンプルを自作の合成音にする**: 外部のサンプルを使わないので、ライセンスの条件が増えないため
+- **ドラムサンプルを自作の合成音にする**: 外部のサンプルを使わないので、ライセンスの条件が増えないため。アイコンと画像も同じ理由で自作にする
+- **アイコンの絵柄をマスで描いたニシブッポウソウにする**: 名前の由来と、シーケンサーのマス目の両方を表すため。鳥を三角形や曲線で描いた案は、16px で細部がつぶれるか、鳥に見えなかった
+- **PNG を Playwright で描き、コミットする**: 画像を変換する依存を増やさないため。SVG を描けるブラウザは E2E テストですでに使っている。ビルドと CI に Chromium の起動を加えないよう、作った PNG はコミットする
+- **共有用の画像の説明を英語にする**: 画像の中の文字は、リンクを受け取った人の言語に合わせて変えられないので、読める人の多い英語にするため
 - **base path を `package.json` の `name` から作る**: GitHub Pages はプロジェクトのリポジトリをその名前の下に配るので、リポジトリ名を変えるときに `package.json` だけを直せば済むようにするため
 - **E2E テストを配布と同じビルドに対して回す**: base path の誤り（サンプルや設定ファイルが読めない、共有する URL がずれる）を配布の前に見つけるため。ビルドを1回にして、確かめたものと配布するものを一致させる
 - **ブランチへのプッシュごとには回さない**: 作業中のプッシュのたびに3つのブラウザの E2E テストを回すと、Actions の時間を消費するわりに得るものが少ないため。レビューに出すプルリクエストと、配布する main で確かめる

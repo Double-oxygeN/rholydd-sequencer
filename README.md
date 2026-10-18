@@ -52,7 +52,9 @@ Web Audio API と AudioWorklet が必要です。
 
 ```
 rholydd-sequencer/
-├── public/samples/drums/      # kick, snare, hat, ghost の WAV（tools/make-samples.ts で合成した自作の音）
+├── public/
+│   ├── samples/drums/         # kick, snare, hat, ghost の WAV（tools/make-samples.ts で合成した自作の音）
+│   └── icons/                 # アイコンの元の SVG と、そこから tools/make-icons.ts で描いた PNG
 ├── src/
 │   ├── main.ts                # 画面の組み立てと再生の操作
 │   ├── app-name.ts            # アプリの名前
@@ -66,6 +68,7 @@ rholydd-sequencer/
 ├── tools/
 │   ├── simulate.ts            # 音声なしの長時間の生成と統計（集計と整形は simulation/）
 │   ├── make-samples.ts        # ドラムサンプルの合成
+│   ├── make-icons.ts          # アイコンと共有用の画像を PNG に描く
 │   └── base-path.ts           # 配布する base path
 ├── tests/                     # 単体テスト（generation・playback・interface・quality）
 ├── e2e/                       # E2E テスト（Playwright）
@@ -110,6 +113,7 @@ E2E テストを動かすときは、`npx playwright install` でブラウザを
 | `npm run typecheck` | 型検査 |
 | `npm run simulate -- --bars 4096 --seed 42` | 音声なしで長時間生成し、密度・反復率・進行・各パート・サイクルとシーン・ドロップの入り方・移調・音色・FX の統計を出力（`--m2` `--m8` `--m32` `--energy` `--fill` `--initial-key` `--json` も指定可。`--config <パス>` で設定ファイルを読む） |
 | `npm run samples` | ドラムサンプルを `public/samples/drums/` に合成し直す |
+| `npm run icons` | `public/icons/icon.svg` から、アイコンと共有用の画像の PNG を `public/icons/` に描き直す（Playwright の Chromium を使う） |
 
 ## 仕様の文書
 
@@ -119,4 +123,4 @@ E2E テストを動かすときは、`npx playwright install` でブラウザを
 
 Apache License 2.0。全文はリポジトリ直下の LICENSE ファイルを参照してください。
 
-ドラムサンプル（`public/samples/drums/`）は、`tools/make-samples.ts` で合成した自作の音です。外部のサンプルを使っていないので、リポジトリと同じ Apache License 2.0 で配布します。
+ドラムサンプル（`public/samples/drums/`）は、`tools/make-samples.ts` で合成した自作の音です。アイコンと共有用の画像（`public/icons/`）は、自作の SVG と、そこから `tools/make-icons.ts` で描いた PNG です。どちらも外部の素材を使っていないので、リポジトリと同じ Apache License 2.0 で配布します。

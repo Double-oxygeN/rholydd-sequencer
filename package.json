@@ -20,7 +20,8 @@
     "e2e": "npm run build && playwright test",
     "typecheck": "tsc --noEmit",
     "simulate": "node tools/simulate.ts",
-    "samples": "node tools/make-samples.ts"
+    "samples": "node tools/make-samples.ts",
+    "icons": "node tools/make-icons.ts"
   },
   "dependencies": {
     "lucide": "1.49.0",
