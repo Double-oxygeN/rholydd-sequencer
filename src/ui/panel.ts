@@ -3,6 +3,7 @@ import type { PlaybackState } from './controls.ts';
 import { field, row, showValue } from './dom.ts';
 import { iconButton } from './icons.ts';
 import type { Messages } from './messages.ts';
+import { createResetButton } from './reset.ts';
 import { BPM_RANGE, clampBpm, randomSeed, type ParamStore, type Params } from '../params/store.ts';
 import { parseSeed } from '../random/rng.ts';
 import type { LiveParams } from '../structure/conductor.ts';
@@ -57,6 +58,7 @@ export function createPanel(store: ParamStore, messages: Messages): Panel {
     field(messages.initialKey, initialKey),
     ...LIVE_PARAMS.map((key) => field(messages.liveParam[key], slider(store, key, messages))),
     field(messages.seed, row(seed, dice)),
+    createResetButton(store, 'live', messages),
   );
 
   return {

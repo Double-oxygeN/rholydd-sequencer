@@ -1,4 +1,5 @@
 import type { ChannelId, Decibels, Milliseconds, Pan } from '../params/mixer.ts';
+import type { ResetScope } from '../params/reset.ts';
 import type { Seed } from '../random/rng.ts';
 import type { LiveParams } from '../structure/conductor.ts';
 import type { UnitInterval } from '../units.ts';
@@ -45,6 +46,10 @@ export interface Messages {
   readonly seed: string;
   readonly rollSeed: string;
   readonly invalidSeed: string;
+
+  /** The buttons putting back the parameters' and the mixer's values, and the word once they have. */
+  readonly reset: Readonly<Record<ResetScope, string>>;
+  readonly resetDone: string;
 
   readonly mixerModes: string;
   readonly mixerMode: Readonly<Record<MixerMode, string>>;
@@ -124,6 +129,9 @@ export const JA: Messages = {
   seed: 'シード',
   rollSeed: 'シードを振り直す',
   invalidSeed: '0〜4294967295 の整数を入力してください',
+
+  reset: { live: 'パラメーターを既定値に戻す', mix: 'ミキサーを既定値に戻す' },
+  resetDone: '既定値に戻しました',
 
   mixerModes: 'ミキサーの調整の対象',
   mixerMode: { level: '音量', pan: 'パン', send: 'センド' },

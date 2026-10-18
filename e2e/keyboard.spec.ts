@@ -1,5 +1,15 @@
-import { expect, test, type Page } from '@playwright/test';
-import { menu, menuToggle, openMenu, openPage, playButton, shareDialog, shareToggle } from './support.ts';
+import { expect, test, type Locator, type Page } from '@playwright/test';
+import {
+  menu,
+  menuToggle,
+  openMenu,
+  openPage,
+  playButton,
+  resetMixer,
+  resetParameters,
+  shareDialog,
+  shareToggle,
+} from './support.ts';
 
 test('plays and opens and closes the menu and the share dialog with the keyboard alone', async ({ page }) => {
   await openPage(page);
@@ -50,6 +60,41 @@ test('moves between tabs with the arrow keys, and enters and leaves them with on
   await expect(page.getByRole('slider', { name: '音量' })).toBeFocused();
   await page.keyboard.press('Tab');
   await expect(spectrum).toBeFocused();
+});
+
+/** Presses Tab until the control has the focus, as many times as there are controls on the way at most. */
+async function tabTo(page: Page, target: Locator, most: number): Promise<void> {
+  for (let i = 0; i < most; i++) {
+    if (await target.evaluate((el) => el === document.activeElement)) return;
+    await page.keyboard.press('Tab');
+  }
+  await expect(target).toBeFocused();
+}
+
+test('reaches both resets with Tab and keeps the focus on them once pressed', async ({ page }) => {
+  await openPage(page);
+  await openMenu(page);
+  const m2 = page.getByRole('slider', { name: '2bar 変化率', exact: true });
+  const m2Before = await m2.inputValue();
+  await m2.focus();
+  await page.keyboard.press('ArrowRight');
+  await tabTo(page, resetParameters(page), 10);
+  await page.keyboard.press('Enter');
+  await expect(m2).toHaveValue(m2Before);
+  await expect(resetParameters(page)).toBeFocused();
+  await expect(resetParameters(page)).toHaveAttribute('aria-disabled', 'true');
+
+  await page.getByRole('tab', { name: 'パラメーター' }).focus();
+  await page.keyboard.press('ArrowRight');
+  await expect(page.getByRole('tab', { name: 'ミキサー' })).toHaveAttribute('aria-selected', 'true');
+  const mute = page.getByRole('button', { name: 'リバーブ ミュート' });
+  await mute.focus();
+  await page.keyboard.press('Enter');
+  await expect(mute).toHaveAttribute('aria-pressed', 'true');
+  await tabTo(page, resetMixer(page), 5);
+  await page.keyboard.press('Space');
+  await expect(mute).toHaveAttribute('aria-pressed', 'false');
+  await expect(resetMixer(page)).toBeFocused();
 });
 
 /** Whether any of the centre and four inner corners of the focused element shows the element itself. */

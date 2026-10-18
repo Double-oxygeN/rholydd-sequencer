@@ -18,6 +18,7 @@ import { createTabs } from './tabs.ts';
 import { createDuckingControls } from './ducking.ts';
 import { createLevelMeter } from './level-meter.ts';
 import type { Messages } from './messages.ts';
+import { createResetButton } from './reset.ts';
 
 export interface MixerView {
   readonly element: HTMLElement;
@@ -41,7 +42,7 @@ export function createMixerView(store: ParamStore, messages: Messages): MixerVie
   });
   const ducking = createDuckingControls(store, messages);
   const level = createLevelMeter(messages);
-  element.append(modes, table, ducking.element, level.element);
+  element.append(modes, table, ducking.element, createResetButton(store, 'mix', messages), level.element);
 
   const render = (mixer: MixerSettings) => {
     for (const r of rows) r.render(mixer);

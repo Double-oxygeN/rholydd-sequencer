@@ -1,4 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { DEFAULT_CONFIG, initialParams } from '../../src/params/config.ts';
+import { clampLevel, clampRelease } from '../../src/params/mixer.ts';
+import { isReset, resetValues } from '../../src/params/reset.ts';
+import { clampBpm, type Params } from '../../src/params/store.ts';
+import { toSeed } from '../../src/random/rng.ts';
+import { clampUnit } from '../../src/units.ts';
 import { MEDIA_ACTIONS, interruptionCommand, mediaCommand, toggleCommand } from '../../src/ui/playback.ts';
 import { BAND_CENTERS, FLOOR_DB, SEGMENTS, bandLevels, holdPeaks, litSegments } from '../../src/ui/spectrum.ts';
 
@@ -89,5 +95,57 @@ describe('screen: spectrum analyser', () => {
     for (let t = 0; t < 5; t += 0.1) peaks = holdPeaks(peaks, [2], 0.1);
     expect(peaks[0]!.segment).toBe(2);
     expect(holdPeaks(peaks, [9], 0.1)[0]).toEqual({ segment: 9, age: 0 });
+  });
+});
+
+describe('screen: resets', () => {
+  const initial = initialParams(DEFAULT_CONFIG, toSeed(1));
+  const moved: Params = {
+    ...initial,
+    m2: clampUnit(0.9),
+    energyDepth: clampUnit(0),
+    bpm: clampBpm(160),
+    volume: clampUnit(0.2),
+    seed: toSeed(2),
+    mixer: {
+      ...initial.mixer,
+      kick: { ...initial.mixer.kick, muted: true, soloed: true },
+      snare: { ...initial.mixer.snare, level: clampLevel(-6) },
+    },
+    ducking: { ...initial.ducking, release: clampRelease(100) },
+  };
+  const apply = (scope: 'live' | 'mix', params: Params): Params => ({ ...params, ...resetValues(scope, initial) });
+
+  it('puts back the five live parameters alone, leaving the tempo, the key, the seed and the volume', () => {
+    expect(Object.keys(resetValues('live', initial)).sort()).toEqual(['energyDepth', 'fillIntensity', 'm2', 'm32', 'm8']);
+    const reset = apply('live', moved);
+    expect(isReset('live', reset, initial)).toBe(true);
+    expect(reset).toEqual({ ...moved, m2: initial.m2, energyDepth: initial.energyDepth });
+  });
+
+  it('puts back the whole mixer and the ducking, leaving the parameters and the volume', () => {
+    expect(Object.keys(resetValues('mix', initial)).sort()).toEqual(['ducking', 'mixer']);
+    const reset = apply('mix', moved);
+    expect(isReset('mix', reset, initial)).toBe(true);
+    expect(reset).toEqual({ ...moved, mixer: initial.mixer, ducking: initial.ducking });
+  });
+
+  it('puts back the values the page opened with, those of a config file included', () => {
+    const config = { ...DEFAULT_CONFIG, params: { ...DEFAULT_CONFIG.params, m8: clampUnit(1) } };
+    const opened = initialParams(config, toSeed(1));
+    expect(resetValues('live', opened).m8).toBe(1);
+    expect(isReset('live', initial, opened)).toBe(false);
+  });
+
+  it('tells the values at their defaults by value, whatever objects hold them', () => {
+    expect(isReset('live', initial, initial)).toBe(true);
+    expect(isReset('mix', structuredClone(initial), initial)).toBe(true);
+    expect(isReset('live', moved, initial)).toBe(false);
+    expect(isReset('mix', moved, initial)).toBe(false);
+    // Moving what a reset leaves alone keeps it unavailable.
+    const elsewhere = { ...initial, bpm: clampBpm(170), volume: clampUnit(1), seed: toSeed(9) };
+    expect(isReset('live', elsewhere, initial)).toBe(true);
+    expect(isReset('mix', elsewhere, initial)).toBe(true);
+    expect(isReset('mix', { ...initial, ducking: { ...initial.ducking, depth: clampUnit(0) } }, initial)).toBe(false);
   });
 });

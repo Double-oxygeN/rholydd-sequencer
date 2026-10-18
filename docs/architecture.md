@@ -66,6 +66,7 @@ tools/simulate ──▶ tools/simulation ──▶ generators/ensemble
 | `src/engine/patches.ts` | 音色ごとのシンセの設定と、その制約 |
 | `src/engine/tuning.ts` | 音の調整用の数値の型と既定値 |
 | `src/params/store.ts`・`mixer.ts` | パラメーター、ミキサー、ダッキングの設定 |
+| `src/params/reset.ts` | メニューの既定値に戻すボタンが戻す値と、既定値との一致 |
 | `src/params/config.ts`・`decode.ts`・`load-config.ts` | 設定ファイルのスキーマ、検証の部品、読み込み |
 | `src/params/query.ts` | クエリ文字列のシードと共有する URL |
 | `src/ui/*` | 画面の部品（[画面](./interface/screen.md)） |
