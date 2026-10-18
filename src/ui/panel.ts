@@ -2,27 +2,21 @@ import { Dices } from 'lucide';
 import type { PlaybackState } from './controls.ts';
 import { field, row, showValue } from './dom.ts';
 import { iconButton } from './icons.ts';
+import type { Messages } from './messages.ts';
 import { BPM_RANGE, clampBpm, randomSeed, type ParamStore, type Params } from '../params/store.ts';
 import { parseSeed } from '../random/rng.ts';
+import type { LiveParams } from '../structure/conductor.ts';
 import { KEY_NAMES, keyName, toKey, type Key } from '../structure/key.ts';
-import { clampUnit, type UnitInterval } from '../units.ts';
+import { clampUnit } from '../units.ts';
 
-type UnitKey = 'm2' | 'm8' | 'm32' | 'fillIntensity' | 'energyDepth';
-
-const UNIT_CONTROLS: readonly { key: UnitKey; label: string }[] = [
-  { key: 'm2', label: '2bar 変化率' },
-  { key: 'm8', label: '8bar 変化率' },
-  { key: 'm32', label: '32bar 変化率' },
-  { key: 'fillIntensity', label: 'フィル強度' },
-  { key: 'energyDepth', label: 'エネルギーの起伏' },
-];
+const LIVE_PARAMS: readonly (keyof LiveParams)[] = ['m2', 'm8', 'm32', 'fillIntensity', 'energyDepth'];
 
 export interface Panel {
   readonly element: HTMLElement;
   show(state: PlaybackState): void;
 }
 
-export function createPanel(store: ParamStore): Panel {
+export function createPanel(store: ParamStore, messages: Messages): Panel {
   const element = document.createElement('form');
   element.className = 'panel';
   element.addEventListener('submit', (e) => e.preventDefault());
@@ -47,10 +41,10 @@ export function createPanel(store: ParamStore): Panel {
   seed.value = String(store.get().seed);
   seed.addEventListener('input', () => {
     const value = parseSeed(seed.value);
-    seed.setCustomValidity(value === undefined ? '0〜4294967295 の整数を入力してください' : '');
+    seed.setCustomValidity(value === undefined ? messages.invalidSeed : '');
     if (value !== undefined) store.update({ seed: value });
   });
-  const dice = iconButton(Dices, 'シードを振り直す', 'dice');
+  const dice = iconButton(Dices, messages.rollSeed, 'dice');
   dice.addEventListener('click', () => {
     const value = randomSeed();
     seed.value = String(value);
@@ -60,9 +54,9 @@ export function createPanel(store: ParamStore): Panel {
 
   element.append(
     field('BPM', bpm),
-    field('初期キー', initialKey),
-    ...UNIT_CONTROLS.map(({ key, label }) => field(label, slider(store, key))),
-    field('シード', row(seed, dice)),
+    field(messages.initialKey, initialKey),
+    ...LIVE_PARAMS.map((key) => field(messages.liveParam[key], slider(store, key, messages))),
+    field(messages.seed, row(seed, dice)),
   );
 
   return {
@@ -75,21 +69,17 @@ export function createPanel(store: ParamStore): Panel {
   };
 }
 
-function slider(store: ParamStore, key: UnitKey): HTMLElement {
+function slider(store: ParamStore, key: keyof LiveParams, messages: Messages): HTMLElement {
   const range = input({ type: 'range', min: '0', max: '1', step: '0.01' });
   const output = document.createElement('output');
   const render = (params: Params) => {
     range.value = String(params[key]);
-    showValue(range, output, formatPercent(params[key]));
+    showValue(range, output, messages.percent(params[key]));
   };
   range.addEventListener('input', () => store.update({ [key]: clampUnit(Number(range.value)) }));
   store.subscribe(render);
   render(store.get());
   return row(range, output);
-}
-
-function formatPercent(value: UnitInterval): string {
-  return `${Math.round(value * 100)}%`;
 }
 
 type InputProps = Partial<Pick<HTMLInputElement, 'type' | 'min' | 'max' | 'step' | 'inputMode' | 'spellcheck'>>;

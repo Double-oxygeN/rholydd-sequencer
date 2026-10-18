@@ -28,6 +28,10 @@ const sources = [...DIRECTORIES.flatMap(filesUnder).filter((path) => !path.inclu
 // Built from character classes, so that this file never matches its own patterns.
 const PHASE_WORDS = [/\b[FN]-[0-9]+\b/, /\b[P]hase ?[0-9]/i, /\bM[V]P\b/, new RegExp('\u30d5\u30a7\u30fc\u30ba')];
 
+const MESSAGES = 'src/ui/messages.ts';
+const SCREEN = [...filesUnder('src/ui').filter((path) => path !== MESSAGES), 'src/main.ts'];
+const JAPANESE = /[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}]/u;
+
 describe('conventions', () => {
   // The phase documents and their numbers are gone once the specs are rewritten by area, so a comment or a name
   // that leans on them would explain nothing.
@@ -38,6 +42,18 @@ describe('conventions', () => {
         .split('\n')
         .flatMap((line, i) => (PHASE_WORDS.some((word) => word.test(line)) ? [`${path}:${i + 1}: ${line.trim()}`] : []));
     });
+    expect(found).toEqual([]);
+  });
+
+  // A word left in a part would show in Japanese whatever the language, and a language missing it would still compile.
+  it('keeps every Japanese word of the screen in the table of messages', () => {
+    expect(SCREEN.length).toBeGreaterThan(1);
+    expect(readIfPresent(MESSAGES)).toMatch(JAPANESE);
+    const found = SCREEN.flatMap((path) =>
+      (readIfPresent(path) ?? '')
+        .split('\n')
+        .flatMap((line, i) => (JAPANESE.test(line) ? [`${path}:${i + 1}: ${line.trim()}`] : [])),
+    );
     expect(found).toEqual([]);
   });
 

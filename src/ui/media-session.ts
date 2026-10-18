@@ -1,6 +1,7 @@
 import { APP_NAME } from '../app-name.ts';
 import type { Seed } from '../random/rng.ts';
 import type { PlaybackState } from './controls.ts';
+import type { Messages } from './messages.ts';
 import { MEDIA_ACTIONS, type MediaAction } from './playback.ts';
 
 export interface MediaSessionLink {
@@ -57,7 +58,7 @@ const NO_LINK: MediaSessionLink = { show() {} };
  * to pages playing an audio element, never to Web Audio alone, so a silent element loops while the piece plays. The
  * sound itself stays on Web Audio: sending it through the element would change its path and its latency.
  */
-export function linkMediaSession(onAction: (action: MediaAction) => void): MediaSessionLink {
+export function linkMediaSession(messages: Messages, onAction: (action: MediaAction) => void): MediaSessionLink {
   if (!('mediaSession' in navigator)) return NO_LINK;
   const session = navigator.mediaSession;
   for (const action of MEDIA_ACTIONS) {
@@ -81,7 +82,7 @@ export function linkMediaSession(onAction: (action: MediaAction) => void): Media
   return {
     show(state, seed) {
       session.playbackState = MEDIA_STATE[state];
-      session.metadata = state === 'stopped' ? null : new MediaMetadata({ title: APP_NAME, artist: `シード ${seed}` });
+      session.metadata = state === 'stopped' ? null : new MediaMetadata({ title: APP_NAME, artist: messages.mediaArtist(seed) });
       held = state === 'playing';
       if (held) {
         audio.play().catch((error: unknown) => {

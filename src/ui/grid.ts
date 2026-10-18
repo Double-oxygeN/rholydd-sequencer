@@ -1,5 +1,6 @@
 import { STEPS_PER_BAR, STEPS_PER_PAIR, type NoteEvent, type Part, type Pitch, type Step } from '../generators/types.ts';
 import { KEY_NAMES } from '../structure/key.ts';
+import type { Messages } from './messages.ts';
 
 /** Ghosts share the snare's lane: both are snare strokes, and the generators never put the two on one step. */
 type Row = Exclude<Part, 'ghost'> | 'sub' | 'reese' | 'stab';
@@ -21,12 +22,12 @@ export interface StepGrid {
   highlight(step: Step | null): void;
 }
 
-export function createStepGrid(): StepGrid {
+export function createStepGrid(messages: Messages): StepGrid {
   const element = document.createElement('div');
   element.className = 'grid';
   // Read out step by step, the grid would talk over the music it shows.
   element.setAttribute('role', 'img');
-  element.setAttribute('aria-label', 'シーケンサー');
+  element.setAttribute('aria-label', messages.sequencer);
   const cells = new Map<string, HTMLElement>();
   const columns: HTMLElement[][] = Array.from({ length: STEPS_PER_PAIR }, () => []);
 

@@ -1,4 +1,5 @@
 import type { Spectrum } from '../engine/audio.ts';
+import type { Messages } from './messages.ts';
 
 /** Half-octave bands from 31.5 Hz to 16 kHz: the kick and the sub land in bands of their own, the hats at the top. */
 export const BAND_CENTERS: readonly number[] = Array.from({ length: 19 }, (_, k) => 31.5 * Math.SQRT2 ** k);
@@ -68,12 +69,12 @@ export interface SpectrumView {
   halt(): void;
 }
 
-export function createSpectrumView(): SpectrumView {
+export function createSpectrumView(messages: Messages): SpectrumView {
   const element = document.createElement('div');
   element.className = 'spectrum';
   const canvas = document.createElement('canvas');
   canvas.setAttribute('role', 'img');
-  canvas.setAttribute('aria-label', 'スペクトラムアナライザー');
+  canvas.setAttribute('aria-label', messages.spectrumAnalyser);
   element.append(canvas);
   let frame: number | null = null;
   let peaks: readonly HeldPeak[] = [];

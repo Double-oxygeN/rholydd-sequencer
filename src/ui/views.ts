@@ -1,15 +1,13 @@
 import { AudioLines, LayoutGrid, type IconNode } from 'lucide';
 import { iconButton } from './icons.ts';
+import type { Messages } from './messages.ts';
 import { createTabs } from './tabs.ts';
 
 /** What fills the main area: the step grid or the spectrum, never both, to keep the screen to one picture. */
 export const VIEWS = ['sequencer', 'spectrum'] as const;
 export type View = (typeof VIEWS)[number];
 
-const VIEW_BUTTON: Readonly<Record<View, readonly [IconNode, string]>> = {
-  sequencer: [LayoutGrid, 'シーケンサー'],
-  spectrum: [AudioLines, 'スペクトラム'],
-};
+const VIEW_ICON: Readonly<Record<View, IconNode>> = { sequencer: LayoutGrid, spectrum: AudioLines };
 
 export interface Views {
   readonly element: HTMLElement;
@@ -17,7 +15,7 @@ export interface Views {
   onChange(handler: (view: View) => void): void;
 }
 
-export function createViews(panes: Readonly<Record<View, HTMLElement>>): Views {
+export function createViews(panes: Readonly<Record<View, HTMLElement>>, messages: Messages): Views {
   const element = document.createElement('section');
   element.className = 'views';
   const handlers: ((view: View) => void)[] = [];
@@ -30,8 +28,8 @@ export function createViews(panes: Readonly<Record<View, HTMLElement>>): Views {
   const panels: Readonly<Record<View, HTMLElement>> = { sequencer: wrap(panes.sequencer), spectrum: wrap(panes.spectrum) };
   const tabs = createTabs({
     ids: VIEWS,
-    label: '表示',
-    button: (view) => iconButton(...VIEW_BUTTON[view]),
+    label: messages.views,
+    button: (view) => iconButton(VIEW_ICON[view], messages.view[view]),
     panel: (view) => panels[view],
     initial: 'sequencer',
     onSelect(view) {

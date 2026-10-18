@@ -1,11 +1,10 @@
 import { Menu, X } from 'lucide';
 import { iconButton, setIcon } from './icons.ts';
+import type { Messages } from './messages.ts';
 import { createTabs } from './tabs.ts';
 
 export const MENU_TABS = ['parameters', 'mixer'] as const;
 export type MenuTab = (typeof MENU_TABS)[number];
-
-const TAB_LABEL: Readonly<Record<MenuTab, string>> = { parameters: 'パラメーター', mixer: 'ミキサー' };
 
 export interface OffCanvasMenu {
   /** The button that opens the menu and, in the same place above it, closes it. */
@@ -19,18 +18,18 @@ export interface OffCanvasMenu {
  * page, so whatever the menu leaves in sight stays at hand while values change, and only the close button closes
  * it: a stray click on the page must not take the menu away mid-adjustment.
  */
-export function createOffCanvasMenu(panes: Readonly<Record<MenuTab, HTMLElement>>): OffCanvasMenu {
+export function createOffCanvasMenu(panes: Readonly<Record<MenuTab, HTMLElement>>, messages: Messages): OffCanvasMenu {
   const element = document.createElement('aside');
   element.className = 'offcanvas';
   element.id = 'menu';
-  element.setAttribute('aria-label', 'メニュー');
+  element.setAttribute('aria-label', messages.menu);
   const tabs = createTabs({
     ids: MENU_TABS,
-    label: 'メニューの表示',
+    label: messages.menuTabs,
     button(tab) {
       const button = document.createElement('button');
       button.type = 'button';
-      button.textContent = TAB_LABEL[tab];
+      button.textContent = messages.menuTab[tab];
       return button;
     },
     panel: (tab) => panes[tab],
@@ -43,7 +42,7 @@ export function createOffCanvasMenu(panes: Readonly<Record<MenuTab, HTMLElement>
   body.append(...MENU_TABS.map((tab) => panes[tab]));
   element.append(tabs.element, body);
 
-  const toggle = iconButton(Menu, 'メニューを開く', 'menu-toggle');
+  const toggle = iconButton(Menu, messages.openMenu, 'menu-toggle');
   toggle.setAttribute('aria-controls', element.id);
   let covered: readonly HTMLElement[] = [];
   const uncover = () => {
@@ -62,7 +61,7 @@ export function createOffCanvasMenu(panes: Readonly<Record<MenuTab, HTMLElement>
     // Out of reach of the keyboard and screen readers while it is off screen.
     element.inert = !open;
     toggle.setAttribute('aria-expanded', String(open));
-    setIcon(toggle, open ? X : Menu, open ? 'メニューを閉じる' : 'メニューを開く');
+    setIcon(toggle, open ? X : Menu, open ? messages.closeMenu : messages.openMenu);
     if (open) {
       cover();
       tabs.focus();
