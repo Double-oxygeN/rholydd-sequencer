@@ -7,7 +7,7 @@ import type { DuckingSettings } from '../params/mixer.ts';
 import type { Context, LiveParams } from '../structure/conductor.ts';
 import type { Instruments } from './audio.ts';
 import type { Seconds } from './ducking.ts';
-import { NOTHING_PENDING, locate, pairSource, type ResumePoint, type ScheduledPair } from './playhead.ts';
+import { NOTHING_PENDING, locate, pairSource, playheadAt, type Playhead, type ResumePoint, type ScheduledPair } from './playhead.ts';
 import { eventsFrom } from './resume.ts';
 
 /** Fixed for the whole session: BPM, seed, initial key and tuning only change between stop and play. */
@@ -16,9 +16,9 @@ export interface PlaybackSettings extends SessionSettings {
 }
 
 export interface PlaybackListener {
-  /** Called in sync with the audio when a 2-bar unit starts, or when playback resumes within one. */
+  /** Called on the first frame that a 2-bar unit sounds in, from its start or from where playback resumed within it. */
   pairStarted(ctx: Context, events: readonly NoteEvent[]): void;
-  /** Called in sync with the audio on every 16th note. */
+  /** Called on the first frame that a 16th note sounds in; steps that start and end between two frames are skipped. */
   stepStarted(ctx: Context, step: Step): void;
 }
 
@@ -55,7 +55,6 @@ export function createSequencer(
   listener: PlaybackListener,
 ): Sequencer {
   const transport = Tone.getTransport();
-  const draw = Tone.getDraw();
 
   function play(settings: PlaybackSettings, generate: () => EnsemblePair, from: ResumePoint): PlayingSession {
     const stepSeconds = 60 / settings.bpm / (STEPS_PER_BAR / 4);
@@ -94,11 +93,7 @@ export function createSequencer(
         .map((hit) => at(hit.step) as Seconds);
       instruments.duck(kicks, readParams().ducking);
       instruments.fx(fx, pairStart as Seconds, stepSeconds, fromStep);
-      draw.schedule(() => listener.pairStarted(ctx, pair.events), at(fromStep));
-      for (let step = fromStep; step < STEPS_PER_PAIR; step++) {
-        draw.schedule(() => listener.stepStarted(ctx, step as Step), at(step));
-      }
-      scheduled.push({ start: pairStart as Seconds, pair });
+      scheduled.push({ start: pairStart as Seconds, from: fromStep, pair });
       while (scheduled.length > 0 && scheduled[0]!.start + pairSeconds < Tone.immediate() - KEPT_SECONDS) scheduled.shift();
     };
 
@@ -112,10 +107,25 @@ export function createSequencer(
     transport.scheduleRepeat((pairStart) => schedule(next(), pairStart, 0 as Step), '2m', restSeconds);
     transport.start(time);
 
+    let shown: Playhead | null = null;
+    // Read against the audio clock rather than the frame's own time, since the notes were scheduled on it.
+    const follow = (now: Seconds) => {
+      const playhead = playheadAt(scheduled, now, stepSeconds);
+      if (playhead === null) return;
+      const { ctx, events } = playhead.scheduled.pair;
+      if (playhead.scheduled !== shown?.scheduled) listener.pairStarted(ctx, events);
+      if (playhead.scheduled !== shown?.scheduled || playhead.step !== shown.step) listener.stepStarted(ctx, playhead.step);
+      shown = playhead;
+    };
+    let frame = requestAnimationFrame(function tick() {
+      follow(Tone.immediate() as Seconds);
+      frame = requestAnimationFrame(tick);
+    });
+
     const halt = (cut: number) => {
+      cancelAnimationFrame(frame);
       transport.stop();
       transport.cancel(0);
-      draw.cancel(0);
       instruments.silence(cut);
     };
 
@@ -124,6 +134,8 @@ export function createSequencer(
       pause() {
         const cut = Tone.immediate() as Seconds;
         const point = locate(scheduled, cut, stepSeconds);
+        // A step may have begun since the last frame; showing it keeps the step left on screen just before the resume point.
+        follow(cut);
         halt(cut);
         return paused(settings, next, point);
       },
