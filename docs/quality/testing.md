@@ -89,6 +89,7 @@ e2e/                  # Playwright（*.spec.ts）
 | `media-session.spec.ts` | ページが登録したメディア操作の処理を呼ぶと、画面のボタンと同じ変化になる |
 | `narrow.spec.ts` | 幅 320px と 375px で、横にはみ出さず、1小節のシーケンサーと全幅のメニュー |
 | `keyboard.spec.ts` | Tab キーだけでの再生・メニュー・共有、タブの矢印キー、メニューに覆われた部品にフォーカスが移らない（幅 320・1024・1280px） |
+| `disposal.spec.ts` | `requestIdleCallback` を呼ばないものに差し替え（隠したタブの Chrome と同じ状態）、数小節鳴らして止めたとき、呼ばれずに待っている破棄が0件 |
 | `accessibility.spec.ts` | 初期画面・再生中・メニュー・共有のダイアログで、axe（WCAG 2.2 AA までのタグ）が違反を報告しない |
 
 **E2E テストで確かめないもの**
@@ -111,6 +112,7 @@ e2e/                  # Playwright（*.spec.ts）
 - Chromium は `--autoplay-policy=no-user-gesture-required` で起動する。音の出力先のない環境でも AudioContext を止めないため
 - Firefox は、音の出力先がないと AudioContext が起動しないので、CI では PulseAudio を出力先のない機器（null sink）だけで起動しておく
 - メディア操作の処理は `MediaSession.prototype.setActionHandler` を包んで受け取る。WebKit は、セッションのオブジェクトそのものに置いた関数を呼ばなかったため
+- 隠したタブは、ヘッドレスのブラウザでは作れない（タブを切り替えても最小化しても `visibilityState` が `visible` のまま）。隠したタブで止まる処理は、止まる API を `page.addInitScript` で差し替えて再現する
 - 「横にはみ出さない」は `scrollWidth ≤ clientWidth`、「覆われていない」はフォーカスのある要素の中心と四隅の少し内側の5点で `elementFromPoint` を呼び、どれか1点でその要素か子孫が返ることで確かめる
 
 **安定性**: リリースの前に、同じコードで `npx playwright test --repeat-each 10` を実行し、すべて通ることを確かめます。
