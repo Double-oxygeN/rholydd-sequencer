@@ -1,7 +1,7 @@
 {
   "name": "rholydd-sequencer",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "パラメーターを設定するだけで、ドラムンベースを展開しながら止めるまで鳴らし続けるブラウザのジェネレーティブ・シーケンサー",
   "type": "module",
   "license": "Apache-2.0",
