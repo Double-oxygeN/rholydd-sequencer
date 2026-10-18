@@ -1,6 +1,7 @@
 import * as Tone from 'tone';
 import { APP_NAME } from './app-name.ts';
 import { configureAudioContext, loadInstruments } from './engine/audio.ts';
+import { releaseEndedOscillators } from './engine/oscillator-release.ts';
 import { createSequencer, type PlaybackSession } from './engine/transport.ts';
 import { initialParams } from './params/config.ts';
 import { loadConfig } from './params/load-config.ts';
@@ -23,6 +24,7 @@ const SAMPLE_BASE_URL = `${import.meta.env.BASE_URL}samples/drums/`;
 const CONFIG_URL = `${import.meta.env.BASE_URL}config.json`;
 
 async function boot(root: HTMLElement) {
+  releaseEndedOscillators();
   configureAudioContext();
   const { value: config, warnings } = await loadConfig(CONFIG_URL);
   for (const warning of warnings) console.warn(warning);
