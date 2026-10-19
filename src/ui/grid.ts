@@ -1,20 +1,26 @@
-import { STEPS_PER_BAR, STEPS_PER_PAIR, type NoteEvent, type Part, type Pitch, type Step } from '../generators/types.ts';
+import { STEPS_PER_BAR, STEPS_PER_PAIR, type Cymbal, type NoteEvent, type Part, type Pitch, type Step } from '../generators/types.ts';
 import { KEY_NAMES } from '../structure/key.ts';
 import type { Messages } from './messages.ts';
 
-/** Ghosts share the snare's lane: both are snare strokes, and the generators never put the two on one step. */
-type Row = Exclude<Part, 'ghost'> | 'sub' | 'reese' | 'stab';
+/**
+ * Ghosts share the snare's lane: both are snare strokes, and the generators never put the two on one step. The crash
+ * and the ride share one lane too, as the ride always leaves the crash's step to it; every lane more shrinks the cells
+ * on a narrow screen.
+ */
+type Row = Exclude<Part, 'ghost'> | 'cymbal' | 'sub' | 'reese' | 'stab';
 
-const ROWS: readonly Row[] = ['kick', 'snare', 'hat', 'sub', 'reese', 'stab'];
+const ROWS: readonly Row[] = ['kick', 'snare', 'hat', 'cymbal', 'sub', 'reese', 'stab'];
 const ROW_LABEL: Readonly<Record<Row, string>> = {
   kick: 'Kick',
   snare: 'Snare',
   hat: 'Hat',
+  cymbal: 'Cym',
   sub: 'Sub',
   reese: 'Reese',
   stab: 'Stab',
 };
 const ROW_OF: Readonly<Record<Part, Row>> = { kick: 'kick', snare: 'snare', hat: 'hat', ghost: 'snare' };
+const CYMBAL_NAME: Readonly<Record<Cymbal, string>> = { crash: 'Crash', ride: 'Ride' };
 
 export interface StepGrid {
   readonly element: HTMLElement;
@@ -75,6 +81,9 @@ export function createStepGrid(messages: Messages): StepGrid {
           // as the soft snare strokes they are.
           case 'drums':
             paint(ROW_OF[event.part], event.step, 'hit', event.velocity, event.part === 'ghost' ? 'Ghost' : '');
+            break;
+          case 'cymbal':
+            paint('cymbal', event.step, 'hit', event.velocity, CYMBAL_NAME[event.part]);
             break;
           case 'sub':
           case 'reese':

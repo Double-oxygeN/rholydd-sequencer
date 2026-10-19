@@ -9,8 +9,13 @@ for (const width of [320, 375]) {
     await page.setViewportSize({ width, height: 720 });
     await openPage(page);
     expect(await overflows(page)).toBe(false);
-    // Six rows of 16 steps: the bar playing alone.
-    await expect(page.locator('.grid-cell:visible')).toHaveCount(6 * 16);
+    // Seven rows of 16 steps: the bar playing alone.
+    const cells = page.locator('.grid-cell:visible');
+    await expect(cells).toHaveCount(7 * 16);
+    // Wide enough to tell one cell from the next.
+    for (const box of await cells.evaluateAll((all) => all.map((cell) => cell.getBoundingClientRect().width))) {
+      expect(box).toBeGreaterThanOrEqual(8);
+    }
 
     await startPlayback(page);
     expect(await overflows(page)).toBe(false);
