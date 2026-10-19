@@ -73,6 +73,8 @@ tools/simulate ──▶ tools/simulation ──▶ generators/ensemble
 | `src/ui/*` | 画面の部品（[画面](./interface/screen.md)） |
 | `tools/simulate.ts`・`tools/simulation/*` | 音声なしの長時間の生成と統計 |
 | `tools/make-samples.ts` | ドラムサンプルの合成 |
+| `tools/make-icons.ts` | アイコンと共有用の画像の PNG を描く |
+| `tools/page-meta.ts` | 共有したリンクのプレビューのメタデータを `index.html` に書き込む Vite のプラグイン |
 | `tools/base-path.ts` | 配布する base path |
 
 ## 2bar ごとの生成の流れ

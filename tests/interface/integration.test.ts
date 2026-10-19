@@ -5,6 +5,8 @@ import { loadConfig } from '../../src/params/load-config.ts';
 import { seedFromQuery, shareUrl } from '../../src/params/query.ts';
 import { toSeed } from '../../src/random/rng.ts';
 import { SILENCE, SILENT_SAMPLE, silentWav } from '../../src/ui/media-session.ts';
+import { APP_NAME } from '../../src/app-name.ts';
+import { pageMetaTags } from '../../tools/page-meta.ts';
 
 describe('integration: initial seed', () => {
   it('reads a valid seed from the query string and nothing else', () => {
@@ -200,5 +202,35 @@ describe('integration: config file', () => {
     expect((await loadConfig('config.json', answer('{', json))).warnings).toHaveLength(1);
     const read = await loadConfig('config.json', answer('{"params": {"bpm": 170}}', json));
     expect(read).toEqual({ value: { ...DEFAULT_CONFIG, params: { ...DEFAULT_CONFIG.params, bpm: 170 } }, warnings: [] });
+  });
+});
+
+describe('integration: link previews', () => {
+  const pkg = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')) as {
+    description: string;
+    homepage: string;
+  };
+  const tags = pageMetaTags();
+  const content = (key: string) => tags.filter((tag) => tag.name === key || tag.property === key).map((tag) => tag.content);
+
+  it('describes the page with package.json and points at where it is published', () => {
+    expect(content('description')).toEqual([pkg.description]);
+    expect(content('og:description')).toEqual([pkg.description]);
+    expect(content('og:title')).toEqual([APP_NAME]);
+    expect(content('og:url')).toEqual([pkg.homepage]);
+    expect(content('og:image')).toEqual([`${pkg.homepage}icons/share.png`]);
+    expect([...content('og:image:width'), ...content('og:image:height')]).toEqual(['1200', '630']);
+    expect(content('twitter:card')).toEqual(['summary_large_image']);
+  });
+
+  it('colours the browser around the page with the background of each colour scheme in tokens.css', () => {
+    // Read the way the contrast test reads it, so that the two never disagree on what the backgrounds are.
+    const css = readFileSync(new URL('../../src/ui/styles/tokens.css', import.meta.url), 'utf8');
+    const [light, dark] = css.split('@media (prefers-color-scheme: dark)').map((block) => /--bg:\s*([^;]+);/.exec(block)![1]);
+    const themes = tags.filter((tag) => tag.name === 'theme-color').map(({ content, media }) => ({ content, media }));
+    expect(themes).toEqual([
+      { content: light, media: '(prefers-color-scheme: light)' },
+      { content: dark, media: '(prefers-color-scheme: dark)' },
+    ]);
   });
 });

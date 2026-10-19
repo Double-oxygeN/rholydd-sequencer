@@ -127,7 +127,7 @@
 3. `package.json`（と `package-lock.json`）の `version` を上げる
 4. README を、リリースの時点の内容（対応環境と制約を含む）に更新する
 5. main にマージし、CI が通って GitHub Pages に配布されたことを確かめる
-6. 配布したページで、サンプルが読み込まれて再生でき、共有する URL が配布先の URL（`https://gh.double-oxygen.net/rholydd-sequencer/`）になることを確かめる
+6. 配布したページで、サンプルが読み込まれて再生でき、共有する URL が配布先の URL（`https://gh.double-oxygen.net/rholydd-sequencer/`）になることを確かめる。配布した URL を OGP の確認ツールか SNS・チャットに貼り、名前・説明・画像のプレビューが出ることを確かめる
 7. main に `v` で始まるタグを付けて push し、GitHub Releases に利用者目線のリリースノートを書く。同じシードの展開が変わるときは、そう書く
 
 **リポジトリの設定**（最初の配布の前に一度）

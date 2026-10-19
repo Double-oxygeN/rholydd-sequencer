@@ -2,8 +2,8 @@
 
 ページの外とのつながりをまとめます。設定ファイル、クエリ文字列のシード、共有のダイアログ、OS のメディア操作、ドラムサンプル、アイコンと画像、配布と CI/CD です。
 
-関係するコード: `src/params/config.ts`、`src/params/decode.ts`、`src/params/load-config.ts`、`src/params/query.ts`、`src/ui/share.ts`、`src/ui/media-session.ts`、`src/ui/playback.ts`、`src/app-name.ts`、`config.example.json`、`tools/make-samples.ts`、`tools/make-icons.ts`、`public/icons/*`、`index.html`、`tools/base-path.ts`、`vite.config.ts`、`.github/workflows/ci.yml`
-関係するテスト: `tests/interface/integration.test.ts`、`tests/interface/screen.test.ts`（再生の命令）、`e2e/startup.spec.ts`、`e2e/share.spec.ts`、`e2e/media-session.spec.ts`
+関係するコード: `src/params/config.ts`、`src/params/decode.ts`、`src/params/load-config.ts`、`src/params/query.ts`、`src/ui/share.ts`、`src/ui/media-session.ts`、`src/ui/playback.ts`、`src/app-name.ts`、`config.example.json`、`tools/make-samples.ts`、`tools/make-icons.ts`、`tools/page-meta.ts`、`public/icons/*`、`index.html`、`tools/base-path.ts`、`vite.config.ts`、`.github/workflows/ci.yml`
+関係するテスト: `tests/interface/integration.test.ts`、`tests/interface/screen.test.ts`（再生の命令）、`e2e/startup.spec.ts`、`e2e/share.spec.ts`、`e2e/link-preview.spec.ts`、`e2e/media-session.spec.ts`
 
 ## 振る舞い
 
@@ -77,6 +77,27 @@
 - 共有するシードは、再生中と一時停止中は鳴っている展開のシード、停止中は次に再生するシードの欄の値
 - 共有する URL に画面の言語を含めない。受け取った人は、自分のブラウザの言語で読む（[画面](./screen.md#言語)）
 - ダイアログは開いている間、ページのほかの操作を受けない（モーダル）
+
+### 共有したリンクのプレビュー
+
+SNS やチャットに URL を貼ったときのプレビューのために、次のメタデータを `index.html` に置きます。
+
+| メタデータ | 値 |
+| --- | --- |
+| `<meta name="description">` | `package.json` の `description` |
+| `og:title` | アプリの名前 |
+| `og:description` | `description` と同じ |
+| `og:type` | `website` |
+| `og:url` | 配布先の URL（`package.json` の `homepage`） |
+| `og:image` | 共有用の画像（`icons/share.png`、1200×630）の絶対 URL |
+| `og:image:width`・`og:image:height`・`og:image:alt` | 1200・630・画像の説明 |
+| `og:locale` | `ja_JP` |
+| `twitter:card` | `summary_large_image` |
+| `theme-color` | 明るい配色と暗い配色の背景（`tokens.css` の `--bg`）。`media` で分ける |
+
+- `?seed=` のついた URL でも同じプレビューになる。シードはプレビューに出さない
+- 説明は日本語。画面の言語はスクリプトが決めるが、プレビューを作るクローラーが読むのは静的な1つの言語なので、`index.html` の `lang="ja"` に合わせる
+- 開発サーバーでも同じタグを出す。`og:url` と `og:image` は配布先を指したまま
 
 ### メディア操作
 
@@ -211,6 +232,10 @@ function interruptionCommand(audio: AudioState, state: PlaybackState): PlaybackC
 
 `main.ts` は AudioContext の状態の変化（Tone.js の `statechange`）を受け、`running` から外れたときに再生中なら、画面のボタンと同じ `run('pause')` を通して一時停止します。`resume` も `start` と同じく `Tone.start()` を待ってから再開し、システムに止められた AudioContext を起こします。
 
+### プレビューのメタデータ（`tools/page-meta.ts`）
+
+小さな Vite のプラグイン（`pageMeta`）が、`transformIndexHtml` でビルドと開発サーバーの `index.html` にメタデータを書き込みます。値は `package.json` の `description`・`homepage`、`src/app-name.ts` の名前、`tokens.css` の `--bg` から作ります。`tests/interface/integration.test.ts` が、`theme-color` と `tokens.css` の一致と、各値の出どころを確かめます。
+
 ### base path とビルド
 
 `tools/base-path.ts` が `package.json` の `name` から `/〈name〉/` を作り、`vite.config.ts` が `build` と `preview`（`isPreview`）の `base` にします。開発サーバー（`npm run dev`）はルートで開きます。サンプル・設定ファイル・共有する URL は `import.meta.env.BASE_URL` を基準にします。別の場所に配布するときは `npm run build -- --base /path/` で上書きできます。
@@ -257,6 +282,10 @@ pull_request（作成・更新）・push（main だけ）
 - **アイコンの絵柄をマスで描いたニシブッポウソウにする**: 名前の由来と、シーケンサーのマス目の両方を表すため。鳥を三角形や曲線で描いた案は、16px で細部がつぶれるか、鳥に見えなかった
 - **PNG を Playwright で描き、コミットする**: 画像を変換する依存を増やさないため。SVG を描けるブラウザは E2E テストですでに使っている。ビルドと CI に Chromium の起動を加えないよう、作った PNG はコミットする
 - **共有用の画像の説明を英語にする**: 画像の中の文字は、リンクを受け取った人の言語に合わせて変えられないので、読める人の多い英語にするため
+- **プレビューのメタデータをビルドのときに書き込む**: プレビューを作る側（SNS やチャットのクローラー）は JavaScript を動かさないため
+- **`og:url` と `og:image` を `homepage` から作る**: 絶対 URL が要るため。base path を `name` から作るのと同じく、配布先を変えるときに `package.json` だけを直せば済むようにする。`--base` で別の場所に配るときは、プレビューの URL が配布先を指さない
+- **プレビューの説明を `description` と共通にする**: 説明を二重に持たないため
+- **シードのついた URL で別のプレビューにしない**: 静的な配布では、クエリ文字列でメタデータを変えられないため
 - **base path を `package.json` の `name` から作る**: GitHub Pages はプロジェクトのリポジトリをその名前の下に配るので、リポジトリ名を変えるときに `package.json` だけを直せば済むようにするため
 - **E2E テストを配布と同じビルドに対して回す**: base path の誤り（サンプルや設定ファイルが読めない、共有する URL がずれる）を配布の前に見つけるため。ビルドを1回にして、確かめたものと配布するものを一致させる
 - **ブランチへのプッシュごとには回さない**: 作業中のプッシュのたびに3つのブラウザの E2E テストを回すと、Actions の時間を消費するわりに得るものが少ないため。レビューに出すプルリクエストと、配布する main で確かめる

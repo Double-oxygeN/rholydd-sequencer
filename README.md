@@ -70,6 +70,7 @@ rholydd-sequencer/
 │   ├── simulate.ts            # 音声なしの長時間の生成と統計（集計と整形は simulation/）
 │   ├── make-samples.ts        # ドラムサンプルの合成
 │   ├── make-icons.ts          # アイコンと共有用の画像を PNG に描く
+│   ├── page-meta.ts           # 共有したリンクのプレビューのメタデータ
 │   └── base-path.ts           # 配布する base path
 ├── tests/                     # 単体テスト（generation・playback・interface・quality）
 ├── e2e/                       # E2E テスト（Playwright）
@@ -107,7 +108,7 @@ E2E テストを動かすときは、`npx playwright install` でブラウザを
 | `npm run dev` | 開発サーバーを起動 |
 | `npm run cert` | LAN の実機で試すための証明書を `.cert/` に作る（[mkcert](https://github.com/FiloSottile/mkcert) が必要） |
 | `npm run dev:https` | 開発サーバーを LAN に HTTPS で公開する（先に `npm run cert`） |
-| `npm run build` | 配布用のビルド（base path は `/rholydd-sequencer/`。`npm run build -- --base /path/` で変えられる） |
+| `npm run build` | 配布用のビルド（base path は `/rholydd-sequencer/`。`npm run build -- --base /path/` で変えられるが、共有したリンクのプレビューの URL は `package.json` の `homepage` を指したまま） |
 | `npm run preview` | ビルドしたページを配る |
 | `npm test` | 単体テスト |
 | `npm run e2e` | ビルドしてから E2E テスト（Chromium・Firefox・WebKit） |
