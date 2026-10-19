@@ -1,11 +1,12 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 
-/** Opens the page and waits until the drum samples are in, which is when the play button starts anything. */
+/**
+ * Opens the page and waits until the drum samples are in, which is when the play button becomes available, in
+ * whichever language the page speaks.
+ */
 export async function openPage(page: Page, query = ''): Promise<void> {
   await page.goto(query);
-  const status = page.locator('.status');
-  await expect(status).toBeAttached();
-  await expect(status).not.toHaveText('サンプルを読み込み中…');
+  await expect(playButton(page)).toBeEnabled();
 }
 
 export const playButton = (page: Page) => page.locator('button.play');

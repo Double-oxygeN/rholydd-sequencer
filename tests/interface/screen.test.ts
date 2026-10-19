@@ -5,6 +5,7 @@ import { isReset, resetValues } from '../../src/params/reset.ts';
 import { clampBpm, type Params } from '../../src/params/store.ts';
 import { toSeed } from '../../src/random/rng.ts';
 import { clampUnit } from '../../src/units.ts';
+import { pickLanguage } from '../../src/ui/messages.ts';
 import { MEDIA_ACTIONS, interruptionCommand, mediaCommand, toggleCommand } from '../../src/ui/playback.ts';
 import { BAND_CENTERS, FLOOR_DB, SEGMENTS, bandLevels, holdPeaks, litSegments } from '../../src/ui/spectrum.ts';
 
@@ -147,5 +148,34 @@ describe('screen: resets', () => {
     expect(isReset('live', elsewhere, initial)).toBe(true);
     expect(isReset('mix', elsewhere, initial)).toBe(true);
     expect(isReset('mix', { ...initial, ducking: { ...initial.ducking, depth: clampUnit(0) } }, initial)).toBe(false);
+  });
+});
+
+describe('screen: language', () => {
+  it('speaks the first of the browser languages that is Japanese or English, and English otherwise', () => {
+    const table = Object.fromEntries(
+      [
+        ['ja'],
+        ['ja-JP', 'en-US'],
+        ['JA-jp'],
+        ['en-GB', 'ja'],
+        ['fr-FR', 'ja-JP', 'en'],
+        ['fr-FR', 'en-CA', 'ja'],
+        ['de-DE', 'fr'],
+        ['jam'],
+        [],
+      ].map((languages) => [languages.join(',') || '(none)', pickLanguage(languages)]),
+    );
+    expect(table).toEqual({
+      ja: 'ja',
+      'ja-JP,en-US': 'ja',
+      'JA-jp': 'ja',
+      'en-GB,ja': 'en',
+      'fr-FR,ja-JP,en': 'ja',
+      'fr-FR,en-CA,ja': 'en',
+      'de-DE,fr': 'en',
+      jam: 'en',
+      '(none)': 'en',
+    });
   });
 });

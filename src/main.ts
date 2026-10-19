@@ -18,7 +18,7 @@ import { createShareDialog } from './ui/share.ts';
 import { createSpectrumView } from './ui/spectrum.ts';
 import { createViews } from './ui/views.ts';
 import { linkMediaSession } from './ui/media-session.ts';
-import { JA, type Messages } from './ui/messages.ts';
+import { MESSAGES, pickLanguage, type Messages } from './ui/messages.ts';
 import { interruptionCommand, mediaCommand, toggleCommand, type AudioState, type PlaybackCommand } from './ui/playback.ts';
 import './ui/styles/index.css';
 
@@ -141,7 +141,10 @@ async function boot(root: HTMLElement, messages: Messages) {
 
 const root = document.getElementById('app');
 if (root !== null) {
-  const messages = JA;
+  // Read here alone, as location is: the language is the browser's to tell, and the page offers no switch.
+  const language = pickLanguage(navigator.languages);
+  document.documentElement.lang = language;
+  const messages = MESSAGES[language];
   boot(root, messages).catch((error: unknown) => {
     root.textContent = messages.bootFailed(String(error));
   });

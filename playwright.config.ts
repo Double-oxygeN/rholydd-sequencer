@@ -3,6 +3,8 @@ import { BASE_PATH } from './tools/base-path.ts';
 
 const PORT = 4173;
 const CI = process.env.CI !== undefined;
+// The tests find the controls by their Japanese names, which must not change with the language of the machine.
+const LOCALE = 'ja-JP';
 
 export default defineConfig({
   testDir: 'e2e',
@@ -18,11 +20,15 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      // Keeps the AudioContext running on machines with no audio output, as on CI.
-      use: { ...devices['Desktop Chrome'], launchOptions: { args: ['--autoplay-policy=no-user-gesture-required'] } },
+      use: {
+        ...devices['Desktop Chrome'],
+        locale: LOCALE,
+        // Keeps the AudioContext running on machines with no audio output, as on CI.
+        launchOptions: { args: ['--autoplay-policy=no-user-gesture-required'] },
+      },
     },
-    { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
-    { name: 'webkit', use: { ...devices['Desktop Safari'] } },
+    { name: 'firefox', use: { ...devices['Desktop Firefox'], locale: LOCALE } },
+    { name: 'webkit', use: { ...devices['Desktop Safari'], locale: LOCALE } },
   ],
   // Serves the build in dist, which `npm run e2e` makes first and CI hands over from its build job.
   webServer: {

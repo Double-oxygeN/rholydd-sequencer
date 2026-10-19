@@ -177,3 +177,103 @@ export const JA: Messages = {
 
   mediaArtist: (seed) => `シード ${seed}`,
 };
+
+export const EN: Messages = {
+  play: 'Play',
+  pause: 'Pause',
+  resume: 'Resume',
+  stop: 'Stop',
+  volume: 'Volume',
+
+  share: 'Share',
+  openMenu: 'Open menu',
+  closeMenu: 'Close menu',
+  menu: 'Menu',
+  menuTabs: 'Menu sections',
+  menuTab: { parameters: 'Parameters', mixer: 'Mixer' },
+
+  views: 'View',
+  view: { sequencer: 'Sequencer', spectrum: 'Spectrum' },
+  sequencer: 'Sequencer',
+  spectrumAnalyser: 'Spectrum analyser',
+
+  cyclePosition: 'Position in the cycle',
+  sectionPosition: 'Position in 8 bars',
+  barCount: () => ({ before: 'Bar ', after: '' }),
+  cycleCount: () => ({ before: 'Cycle ', after: '' }),
+
+  initialKey: 'Starting key',
+  minorKey: (tonic) => `${tonic} minor`,
+  liveParam: {
+    m2: '2-bar variation',
+    m8: '8-bar variation',
+    m32: '32-bar variation',
+    fillIntensity: 'Fill intensity',
+    energyDepth: 'Energy contour',
+  },
+  seed: 'Seed',
+  rollSeed: 'Roll a new seed',
+  invalidSeed: 'Enter a whole number from 0 to 4294967295',
+
+  reset: { live: 'Reset parameters', mix: 'Reset mixer' },
+  resetDone: 'Back to the defaults',
+
+  mixerModes: 'What the sliders adjust',
+  mixerMode: { level: 'Level', pan: 'Pan', send: 'Send' },
+  channel: {
+    kick: 'Kick',
+    snare: 'Snare',
+    hat: 'Hat',
+    ghost: 'Ghost',
+    sub: 'Sub bass',
+    reese: 'Reese bass',
+    stab: 'Stab',
+    pad: 'Pad',
+    fx: 'FX',
+    reverbReturn: 'Reverb',
+  },
+  mute: 'Mute',
+  solo: 'Solo',
+  channelControl: (channel, control) => `${channel} ${control.toLowerCase()}`,
+  duckingDepth: 'Ducking depth',
+  duckingRelease: 'Ducking release',
+  masterPeak: 'Master peak',
+  heldPeak: (db) => `Max ${dbfs(db)}`,
+  clipCount: (clips) => `${clips} ${clips === 1 ? 'sample' : 'samples'} clipped`,
+
+  percent,
+  decibels,
+  pan,
+  milliseconds: (time) => `${time} ms`,
+
+  loadingSamples: 'Loading samples…',
+  configIgnored: 'Some values in the config file were ignored (see the console)',
+  bootFailed: (error) => `Failed to start: ${error}`,
+
+  close: 'Close',
+  shareUrl: 'URL to share',
+  copy: 'Copy',
+  copied: 'Copied',
+  copyBySelecting: 'Copy the selected URL',
+  includeSeed: 'Include the seed',
+
+  mediaArtist: (seed) => `Seed ${seed}`,
+};
+
+export const LANGUAGES = ['ja', 'en'] as const;
+export type Language = (typeof LANGUAGES)[number];
+
+export const MESSAGES: Readonly<Record<Language, Messages>> = { ja: JA, en: EN };
+
+/**
+ * The first of the browser's languages the page speaks, decided once as it opens. English stands in for any other,
+ * since more of those who cannot read Japanese read English than any other language.
+ */
+export function pickLanguage(languages: readonly string[]): Language {
+  for (const tag of languages) {
+    const primary = tag.split('-')[0]!.toLowerCase();
+    const language = LANGUAGES.find((known) => known === primary);
+    if (language !== undefined) return language;
+  }
+  return 'en';
+}
