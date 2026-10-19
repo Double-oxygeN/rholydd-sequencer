@@ -48,7 +48,13 @@ async function boot(root: HTMLElement, messages: Messages) {
   const mixerView = createMixerView(store, messages);
 
   const title = document.createElement('h1');
-  title.textContent = APP_NAME;
+  // Decoration only: the name beside it already says which app this is, and would be read out twice.
+  const logo = new Image(32, 32);
+  logo.src = `${import.meta.env.BASE_URL}icons/icon.svg`;
+  logo.alt = '';
+  const name = document.createElement('span');
+  name.textContent = APP_NAME;
+  title.append(logo, name);
   const status = document.createElement('p');
   status.className = 'status';
   // In the page from the start, so that screen readers read out what is written into it later.

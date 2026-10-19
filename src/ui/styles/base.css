@@ -25,10 +25,41 @@ body {
   gap: 20px;
 }
 
+header {
+  display: flex;
+  align-items: center;
+  /* Level with the share and menu buttons, fixed 16px from the top and 38px tall. */
+  min-height: 38px;
+  margin-top: -8px;
+  /* Those buttons take the 100px at the window's right edge, so the heading stops short of them rather than under. */
+  padding-right: 96px;
+}
+
 h1 {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
   margin: 0;
   font-size: 1.5rem;
+  line-height: 1.15;
   letter-spacing: 0.04em;
+}
+
+h1 img {
+  display: block;
+  flex: none;
+}
+
+/* Wraps between the words, rather than being cut short, wherever a phone's font leaves the name no room. */
+h1 span {
+  min-width: 0;
+}
+
+@media (max-width: 480px) {
+  h1 {
+    font-size: 1.25rem;
+  }
 }
 
 .status {

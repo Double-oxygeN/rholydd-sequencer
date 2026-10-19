@@ -142,7 +142,7 @@ iOS では、画面をロックしたときと、ほかのアプリやホーム�
 
 | 画像 | 大きさ | 使い道 |
 | --- | --- | --- |
-| `icon.svg` | — | favicon（`<link rel="icon" type="image/svg+xml">`）と、ほかの画像の元 |
+| `icon.svg` | — | favicon（`<link rel="icon" type="image/svg+xml">`）、見出しのロゴマーク、ほかの画像の元 |
 | `icon-192.png`・`icon-512.png` | 192・512 | マニフェスト、メディア操作のアートワーク |
 | `icon-maskable-512.png` | 512 | マニフェストの `purpose: "maskable"`（Android のホーム画面）。絵柄を 76% に縮め、マスの四隅まで中央の円（直径の 80%）に収める |
 | `apple-touch-icon.png` | 180 | iOS のホーム画面（`<link rel="apple-touch-icon">`）。角の丸めは iOS に任せ、四隅まで背景で塗る |
