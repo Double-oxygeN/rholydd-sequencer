@@ -73,6 +73,19 @@ button {
   cursor: pointer;
 }
 
+.reset {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  align-items: center;
+}
+
+.reset-status {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
 .icon {
   display: block;
   flex: none;

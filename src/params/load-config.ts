@@ -10,8 +10,10 @@ const NONE: Decoded<Config> = { value: DEFAULT_CONFIG, warnings: [] };
  */
 export async function loadConfig(url: string, fetchFile: typeof fetch = fetch): Promise<Decoded<Config>> {
   try {
-    // Without no-store an edited file could be served from the cache when the page is opened again.
-    const response = await fetchFile(url, { headers: { Accept: 'application/json' }, cache: 'no-store' });
+    // no-cache asks the server each time, so that an edited file is never served from the cache on opening the page
+    // again. no-store would too, but Playwright's Firefox then sent the request past the service worker and failed it
+    // offline.
+    const response = await fetchFile(url, { headers: { Accept: 'application/json' }, cache: 'no-cache' });
     if (!response.ok || !(response.headers.get('content-type') ?? '').includes('json')) return NONE;
     return parseConfigText(await response.text());
   } catch (error) {

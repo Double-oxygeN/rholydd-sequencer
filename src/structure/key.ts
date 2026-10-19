@@ -39,11 +39,6 @@ const NATURAL_MINOR = [0, 2, 3, 5, 7, 8, 10] as const;
 export const DEGREES_PER_OCTAVE = NATURAL_MINOR.length;
 export const TONIC = 0 as ScaleDegree;
 
-/** Name such as F マイナー, shared by the initial key control and the current key in the position display. */
-export function keyName(key: Key): string {
-  return `${KEY_NAMES[key]} マイナー`;
-}
-
 export function toKey(n: number): Key | undefined {
   return Number.isInteger(n) && n >= 0 && n < KEY_NAMES.length ? (n as Key) : undefined;
 }

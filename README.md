@@ -15,6 +15,8 @@ Rholydd Sequencer（発音：/ˈr̥ɔlɨð ˈsiːkwənsə/）は、パラメー�
 - **展開の起伏**: 128〜192bar のサイクルでイントロ・ビルド・ドロップ・ブレイクダウンを巡り、ライザーやインパクトなどの FX で切り替わりを演出します。サイクル内では主題を共有し、2回目のドロップで同じ主題が戻ってきます。
 - **DnB らしさの維持**: ステップごとの重み表とパートごとの変わりやすさにより、ランダムでもジャンルの文法を崩しません。
 - **メディア操作**: メディアキーや OS のロック画面・通知から、再生・一時停止・停止できます。
+- **英語の画面**: ブラウザの言語が日本語でなければ、画面を英語で表示します。
+- **ホーム画面への追加とオフライン**: ブラウザのメニューからホーム画面やアプリの一覧に追加できます。一度開いた端末なら、オフラインでも開いて再生できます。新しい版は、ページのタブをすべて閉じて開き直したときから使われます。
 - **再現性**: シードを保存すれば、同じ展開をもう一度聴くことができます。`?seed=12345` のように URL で初期シードを指定でき、右上の共有ボタンから、聴いている展開のシードを含めた URL をコピーできます。
 
 ## 対応環境
@@ -26,7 +28,7 @@ Rholydd Sequencer（発音：/ˈr̥ɔlɨð ˈsiːkwənsə/）は、パラメー�
 | Safari | macOS・iOS の最新版 |
 | Chrome | Android の最新版 |
 
-Web Audio API と AudioWorklet が必要です。
+Web Audio API と AudioWorklet が必要です。オフラインで開くには、Service Worker が必要です（プライベートウィンドウなど、使えない環境ではオンラインでだけ開けます）。
 
 **ブラウザごとの制約**
 
@@ -52,9 +54,12 @@ Web Audio API と AudioWorklet が必要です。
 
 ```
 rholydd-sequencer/
-├── public/samples/drums/      # kick, snare, hat, ghost の WAV（tools/make-samples.ts で合成した自作の音）
+├── public/
+│   ├── samples/drums/         # kick, snare, hat, ghost の WAV（tools/make-samples.ts で合成した自作の音）
+│   └── icons/                 # アイコンの元の SVG と、そこから tools/make-icons.ts で描いた PNG
 ├── src/
 │   ├── main.ts                # 画面の組み立てと再生の操作
+│   ├── service-worker.ts      # オフラインで開くためのサービスワーカー
 │   ├── app-name.ts            # アプリの名前
 │   ├── units.ts               # brand 型の基盤、0〜1 の値
 │   ├── random/rng.ts          # シード付きの乱数、シードの派生
@@ -66,6 +71,9 @@ rholydd-sequencer/
 ├── tools/
 │   ├── simulate.ts            # 音声なしの長時間の生成と統計（集計と整形は simulation/）
 │   ├── make-samples.ts        # ドラムサンプルの合成
+│   ├── make-icons.ts          # アイコンと共有用の画像を PNG に描く
+│   ├── page-meta.ts           # 共有したリンクのプレビューのメタデータ
+│   ├── web-app.ts             # マニフェストとサービスワーカーを作る
 │   └── base-path.ts           # 配布する base path
 ├── tests/                     # 単体テスト（generation・playback・interface・quality）
 ├── e2e/                       # E2E テスト（Playwright）
@@ -103,13 +111,14 @@ E2E テストを動かすときは、`npx playwright install` でブラウザを
 | `npm run dev` | 開発サーバーを起動 |
 | `npm run cert` | LAN の実機で試すための証明書を `.cert/` に作る（[mkcert](https://github.com/FiloSottile/mkcert) が必要） |
 | `npm run dev:https` | 開発サーバーを LAN に HTTPS で公開する（先に `npm run cert`） |
-| `npm run build` | 配布用のビルド（base path は `/rholydd-sequencer/`。`npm run build -- --base /path/` で変えられる） |
+| `npm run build` | 配布用のビルド（base path は `/rholydd-sequencer/`。`npm run build -- --base /path/` で変えられるが、共有したリンクのプレビューの URL は `package.json` の `homepage` を指したまま） |
 | `npm run preview` | ビルドしたページを配る |
 | `npm test` | 単体テスト |
 | `npm run e2e` | ビルドしてから E2E テスト（Chromium・Firefox・WebKit） |
 | `npm run typecheck` | 型検査 |
 | `npm run simulate -- --bars 4096 --seed 42` | 音声なしで長時間生成し、密度・反復率・進行・各パート・サイクルとシーン・ドロップの入り方・移調・音色・FX の統計を出力（`--m2` `--m8` `--m32` `--energy` `--fill` `--initial-key` `--json` も指定可。`--config <パス>` で設定ファイルを読む） |
 | `npm run samples` | ドラムサンプルを `public/samples/drums/` に合成し直す |
+| `npm run icons` | `public/icons/icon.svg` から、アイコンと共有用の画像の PNG を `public/icons/` に描き直す（Playwright の Chromium を使う） |
 
 ## 仕様の文書
 
@@ -119,4 +128,4 @@ E2E テストを動かすときは、`npx playwright install` でブラウザを
 
 Apache License 2.0。全文はリポジトリ直下の LICENSE ファイルを参照してください。
 
-ドラムサンプル（`public/samples/drums/`）は、`tools/make-samples.ts` で合成した自作の音です。外部のサンプルを使っていないので、リポジトリと同じ Apache License 2.0 で配布します。
+ドラムサンプル（`public/samples/drums/`）は、`tools/make-samples.ts` で合成した自作の音です。アイコンと共有用の画像（`public/icons/`）は、自作の SVG と、そこから `tools/make-icons.ts` で描いた PNG です。どちらも外部の素材を使っていないので、リポジトリと同じ Apache License 2.0 で配布します。

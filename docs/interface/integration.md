@@ -1,9 +1,9 @@
 # 連携（設定ファイル・URL・共有・メディア操作・配布）
 
-ページの外とのつながりをまとめます。設定ファイル、クエリ文字列のシード、共有のダイアログ、OS のメディア操作、ドラムサンプル、配布と CI/CD です。
+ページの外とのつながりをまとめます。設定ファイル、クエリ文字列のシード、共有のダイアログ、OS のメディア操作、ドラムサンプル、アイコンと画像、配布、ホーム画面への追加とオフライン、CI/CD です。
 
-関係するコード: `src/params/config.ts`、`src/params/decode.ts`、`src/params/load-config.ts`、`src/params/query.ts`、`src/ui/share.ts`、`src/ui/media-session.ts`、`src/ui/playback.ts`、`src/app-name.ts`、`config.example.json`、`tools/make-samples.ts`、`tools/base-path.ts`、`vite.config.ts`、`.github/workflows/ci.yml`
-関係するテスト: `tests/interface/integration.test.ts`、`tests/interface/screen.test.ts`（再生の命令）、`e2e/startup.spec.ts`、`e2e/share.spec.ts`、`e2e/media-session.spec.ts`
+関係するコード: `src/params/config.ts`、`src/params/decode.ts`、`src/params/load-config.ts`、`src/params/query.ts`、`src/ui/share.ts`、`src/ui/media-session.ts`、`src/ui/playback.ts`、`src/app-name.ts`、`config.example.json`、`tools/make-samples.ts`、`tools/make-icons.ts`、`tools/page-meta.ts`、`tools/web-app.ts`、`src/service-worker.ts`、`public/icons/*`、`index.html`、`tools/base-path.ts`、`vite.config.ts`、`.github/workflows/ci.yml`
+関係するテスト: `tests/interface/integration.test.ts`、`tests/interface/screen.test.ts`（再生の命令）、`e2e/startup.spec.ts`、`e2e/share.spec.ts`、`e2e/link-preview.spec.ts`、`e2e/media-session.spec.ts`、`e2e/offline.spec.ts`
 
 ## 振る舞い
 
@@ -75,7 +75,29 @@
 
 - 共有する URL は、ページの URL からクエリ文字列とフラグメントを除き、チェックボックスがオンなら `seed` を加えたもの
 - 共有するシードは、再生中と一時停止中は鳴っている展開のシード、停止中は次に再生するシードの欄の値
+- 共有する URL に画面の言語を含めない。受け取った人は、自分のブラウザの言語で読む（[画面](./screen.md#言語)）
 - ダイアログは開いている間、ページのほかの操作を受けない（モーダル）
+
+### 共有したリンクのプレビュー
+
+SNS やチャットに URL を貼ったときのプレビューのために、次のメタデータを `index.html` に置きます。
+
+| メタデータ | 値 |
+| --- | --- |
+| `<meta name="description">` | `package.json` の `description` |
+| `og:title` | アプリの名前 |
+| `og:description` | `description` と同じ |
+| `og:type` | `website` |
+| `og:url` | 配布先の URL（`package.json` の `homepage`） |
+| `og:image` | 共有用の画像（`icons/share.png`、1200×630）の絶対 URL |
+| `og:image:width`・`og:image:height`・`og:image:alt` | 1200・630・画像の説明 |
+| `og:locale` | `ja_JP` |
+| `twitter:card` | `summary_large_image` |
+| `theme-color` | 明るい配色と暗い配色の背景（`tokens.css` の `--bg`）。`media` で分ける |
+
+- `?seed=` のついた URL でも同じプレビューになる。シードはプレビューに出さない
+- 説明は日本語。画面の言語はスクリプトが決めるが、プレビューを作るクローラーが読むのは静的な1つの言語なので、`index.html` の `lang="ja"` に合わせる
+- 開発サーバーでも同じタグを出す。`og:url` と `og:image` は配布先を指したまま
 
 ### メディア操作
 
@@ -95,6 +117,7 @@ Media Session API で、再生の状態と曲名をブラウザと OS に伝え�
 
 - 操作は画面のボタンと同じ動作にし、どちらから操作しても画面とメディア操作の表示がそろう
 - 曲名はアプリの名前、アーティストの欄に鳴っている展開のシードを出す
+- 再生中と一時停止中は、アートワークとしてアプリのアイコン（`icon-192.png`・`icon-512.png`）を渡す。停止中は曲名と一緒に消す
 - ヘッドホンが抜けたときなど、ブラウザが無音の `audio` 要素を止めたときは一時停止する
 
 ### システムによる中断
@@ -113,6 +136,21 @@ iOS では、画面をロックしたときと、ほかのアプリやホーム�
 
 `public/samples/drums/` の kick・snare・hat・ghost の WAV は、`tools/make-samples.ts`（`npm run samples`）で合成した自作の音です。リポジトリと同じ Apache License 2.0 で配布します。ノイズは自前の乱数から作るので、何度合成しても同じファイルになります。
 
+### アイコンと画像
+
+アイコンの絵柄は、名前の由来のニシブッポウソウ（roller）を、シーケンサーの 7×7 のマスで描いたものです。元の SVG（`public/icons/icon.svg`）を手で書き、ほかの画像は `tools/make-icons.ts`（`npm run icons`）が Playwright の Chromium で描いた PNG です。どれも自作で、リポジトリと同じ Apache License 2.0 で配布します。
+
+| 画像 | 大きさ | 使い道 |
+| --- | --- | --- |
+| `icon.svg` | — | favicon（`<link rel="icon" type="image/svg+xml">`）、見出しのロゴマーク、ほかの画像の元 |
+| `icon-192.png`・`icon-512.png` | 192・512 | マニフェスト、メディア操作のアートワーク |
+| `icon-maskable-512.png` | 512 | マニフェストの `purpose: "maskable"`（Android のホーム画面）。絵柄を 76% に縮め、マスの四隅まで中央の円（直径の 80%）に収める |
+| `apple-touch-icon.png` | 180 | iOS のホーム画面（`<link rel="apple-touch-icon">`）。角の丸めは iOS に任せ、四隅まで背景で塗る |
+| `share.png` | 1200×630 | 共有したリンクのプレビュー。アイコン、アプリの名前、英語の短い説明 |
+
+- 色は `tokens.css` の暗い配色から取る。アイコン自身が暗い背景を持つので、明るいタブバーでも暗いタブバーでも見分けられる
+- PNG はコミットし、ビルドのたびには作らない。元の SVG を変えたら `npm run icons` で作り直す。同じ版の Chromium なら、何度描いても同じファイルになる（共有用の画像の文字は、描いた環境の `system-ui` のフォントで描く）
+
 ### 配布
 
 | 項目 | 内容 |
@@ -122,6 +160,36 @@ iOS では、画面をロックしたときと、ほかのアプリやホーム�
 | CI | プルリクエストの作成と更新、main の更新で、型検査・単体テスト・ビルド・E2E テスト（3つのブラウザエンジン） |
 | CD | main の更新で、CI が通ったら配布する |
 | リリース | `v` で始まるタグを main に付け、GitHub Releases に利用者目線のリリースノートを手で書く（[リリースの確認](../quality/release-checklist.md)） |
+
+### ホーム画面への追加とオフライン
+
+ホーム画面やアプリの一覧に追加して開けます。一度開いた端末なら、オフラインでも開いて再生できます。
+
+**マニフェスト**（`manifest.webmanifest`）
+
+| 項目 | 値 |
+| --- | --- |
+| `name`・`short_name` | アプリの名前 |
+| `description` | `package.json` の `description` |
+| `start_url`・`scope` | base path（`/rholydd-sequencer/`） |
+| `display` | `standalone` |
+| `icons` | `icon-192.png`・`icon-512.png` と、マスカブルの `icon-maskable-512.png` |
+| `theme_color`・`background_color` | 明るい配色の `--bg` |
+
+- インストールを促すボタンや案内は画面に置かない。ブラウザのメニューから追加する
+- ホーム画面から開いたときは、`?seed=` のない URL で開く（`start_url` にクエリを持たせない）
+
+**サービスワーカーの応答**（`sw.js`）
+
+| 要求 | 応答 |
+| --- | --- |
+| ページ（`?seed=` のついた URL を含む）・スクリプト・スタイル・AudioWorklet・ドラムサンプル・アイコン・共有用の画像・マニフェスト | 事前に保存した版。ネットワークには行かない |
+| `config.json` | ネットワークを先に試し、届いた応答（ないときの 404 を含む）を保存する。つながらなければ保存した応答を、それもなければ 404 を返す。サービスワーカーを入れるときにも取得して保存する |
+| それ以外 | ネットワークに任せる |
+
+- オフラインで開いても、設定ファイルを読めなかった警告を出さない。配布先に設定ファイルがあれば、最後に読めたものを使う
+- 新しい版を配布した後に開くと、サービスワーカーが裏で新しい版を保存する。保存した新しい版は、そのページのタブをすべて閉じた後に開いたときから使う。再生中に版が切り替わったり、ページが読み直されたりはしない。「新しい版があります」のような表示は置かない
+- 登録は、ビルドしたページだけで行う。開発サーバーでは登録しない
 
 ## 実装
 
@@ -153,7 +221,7 @@ async function loadConfig(url: string): Promise<Decoded<Config>>;
 | JSON として読めない | 既定値と警告 |
 | 読めた | `decodeConfig` の結果 |
 
-`fetch` には `Accept: application/json` と `cache: 'no-store'` を付けます。
+`fetch` には `Accept: application/json` と `cache: 'no-cache'` を付けます。
 
 ### 共有とシード
 
@@ -173,10 +241,11 @@ type PlaybackCommand = 'start' | 'pause' | 'resume' | 'stop';
 type MediaAction = 'play' | 'pause' | 'stop';
 function toggleCommand(state: PlaybackState): Exclude<PlaybackCommand, 'stop'>;   // 再生のボタン
 function mediaCommand(action: MediaAction, state: PlaybackState): PlaybackCommand | null;
-function linkMediaSession(onAction: (action: MediaAction) => void): MediaSessionLink;
+function linkMediaSession(messages: Messages, artwork: readonly MediaImage[], onAction: (action: MediaAction) => void): MediaSessionLink;
 ```
 
 - `navigator.mediaSession` がないブラウザでは、何もしない
+- アートワークの URL は `main.ts` が `import.meta.env.BASE_URL` から作って渡す。ページの URL を読むのは `main.ts` だけにするため
 - `show(state, seed)` は `playbackState` と `metadata` を更新する。停止中は `metadata` を消す。`setPositionState` は呼ばない（曲に終わりがないため）
 - 無音の `audio` 要素は、10秒・8bit モノラルの無音の WAV（`silentWav()`）の Blob の URL を `loop` で鳴らし、`hidden` にして文書に置く。要素の `muted` と音量は変えない
 - 再生中は `audio.play()`、一時停止中と停止では、鳴っているときだけ `audio.pause()` を呼ぶ。`play()` が拒否されても、音は Web Audio API から出ているので無視する
@@ -192,6 +261,21 @@ function interruptionCommand(audio: AudioState, state: PlaybackState): PlaybackC
 ```
 
 `main.ts` は AudioContext の状態の変化（Tone.js の `statechange`）を受け、`running` から外れたときに再生中なら、画面のボタンと同じ `run('pause')` を通して一時停止します。`resume` も `start` と同じく `Tone.start()` を待ってから再開し、システムに止められた AudioContext を起こします。
+
+### プレビューのメタデータ（`tools/page-meta.ts`）
+
+小さな Vite のプラグイン（`pageMeta`）が、`transformIndexHtml` でビルドと開発サーバーの `index.html` にメタデータを書き込みます。値は `package.json` の `description`・`homepage`、`src/app-name.ts` の名前、`tokens.css` の `--bg` から作ります。`tests/interface/integration.test.ts` が、`theme-color` と `tokens.css` の一致と、各値の出どころを確かめます。
+
+### マニフェストとサービスワーカー（`tools/web-app.ts`、`src/service-worker.ts`）
+
+Vite のプラグイン（`webApp`）が、ビルドのときにマニフェストとサービスワーカーを作ります。
+
+- マニフェストは `manifest(base)` が、`package.json`・`src/app-name.ts`・`tokens.css` の値（`tools/page-meta.ts` の `PAGE`）と、Vite が解決した base から作る。`<link rel="manifest">` は `transformIndexHtml` で `index.html` に入れる。開発サーバーも同じマニフェストを返す
+- 保存する一覧は、`generateBundle` で出力のファイルと `public/` のファイルから `precache(files)` が作る。`config.json` とサービスワーカー自身は除き、`index.html` は `./` として保存する。キャッシュの名前に、全ファイルの中身のハッシュを入れる。名前の変わらないサンプルやアイコンを作り直しても、新しい版になるようにするため
+- サービスワーカーは `src/service-worker.ts` に書き、プラグインが Vite の `transformWithOxc` で型を外し、一覧とハッシュを前に置いて `sw.js` にする。何も import しない。型の検査は画面と同じ DOM の型で行い、使うサービスワーカーの型だけを自前で宣言する
+- `install` で一覧を HTTP のキャッシュを通さず（`cache: 'reload'`）保存し、設定ファイルも取得して保存する（最初に開いたページはまだサービスワーカーの管理外で、ページが読んだ設定ファイルは保存されないため。ページと同じく `Accept: application/json` を付け、失敗しても入れること自体は続ける）。`activate` で古い名前のキャッシュを消す。設定ファイルは版によらない別のキャッシュに置き、版が替わっても最後に読めたものを残す。`skipWaiting` と `clients.claim` は使わない
+- ページへの移動は、クエリ文字列を除いた URL がページのものなら保存したページを返す
+- `main.ts` が、`import.meta.env.PROD` のときだけ、`load` の後に `${BASE_URL}sw.js` を登録する。登録に失敗しても（ストレージを使えないプライベートウィンドウなど）、オンラインではそのまま動く
 
 ### base path とビルド
 
@@ -219,8 +303,9 @@ pull_request（作成・更新）・push（main だけ）
 - **範囲外の値を丸めて受け入れない**: 書き間違いに気づけるようにするため（パラメーターの `clampLevel` などは使わない）
 - **関係の崩れた組をまとめて既定値に戻す**: 片方だけ戻すと、書いた人の意図とも既定値とも違う組み合わせになるため
 - **トリムと補正を 0 dB 以下に限る**: 既定の釣り合いより大きくして、クリップしない保証を崩しにくくするため。とはいえ、クリップしないことと試聴の確認を保証するのは既定値だけで、設定ファイルで変えた値の音は保証しない
-- **`Accept: application/json` を付ける**: Vite の開発サーバーは、`Accept` に `*/*` か `text/html` を含むリクエストで、ないファイルの代わりに `index.html` を返す（SPA のフォールバック）ため。Content-Type も確かめるのは、配布先のサーバーが同じことをしても「ファイルなし」と見なすため。`cache: 'no-store'` は、値を書き換えて開き直したときに古いファイルを使わないようにするため
+- **`Accept: application/json` を付ける**: Vite の開発サーバーは、`Accept` に `*/*` か `text/html` を含むリクエストで、ないファイルの代わりに `index.html` を返す（SPA のフォールバック）ため。Content-Type も確かめるのは、配布先のサーバーが同じことをしても「ファイルなし」と見なすため。`cache: 'no-cache'` は、開くたびにサーバーに確かめ直し、値を書き換えて開き直したときに古いファイルを使わないようにするため。`no-store` でも同じだが、Firefox（Playwright の Firefox で確かめた）ではオフラインのとき要求がサービスワーカーを通らずに失敗し、設定ファイルを読めない警告が出た
 - **設定ファイルを配布しない**: 手元で試した設定ファイルがコミットされて配布されないよう、`public/config.json` を `.gitignore` に入れ、CI でも `dist/config.json` がないことを確かめる
+- **共有する URL に言語を含めない**: 共有するのはシードだけ、という決まりを保ち、受け取った人が自分の言語で読めるようにするため
 - **共有するのはシードだけにする**: クエリ文字列で指定できるのはシードだけで、パラメーターや設定ファイルの値が違えば同じシードでも展開は変わる。再生中は欄ではなく鳴っている展開のシードを使うのは、欄は再生中にも書き換えられ、次に停止から再生したときに効くので、欄の値だと聴いている展開と違う URL になるため
 - **ダイアログの外で閉じる**: メニューと違い、ダイアログは値を調整する場所ではなく、閉じても失うものがないため。`pointerdown` も確かめるのは、URL の欄で文字を選びながら外までドラッグしたときに閉じないようにするため
 - **コピーに `execCommand('copy')` を使わない**: 非推奨のため。クリップボードの API は HTTPS でない配布先や、開発サーバーに LAN の IP で接続したときに使えないので、選択して手でコピーするよう促す
@@ -232,8 +317,21 @@ pull_request（作成・更新）・push（main だけ）
 - **再開でも `Tone.start()` を待つ**: システムに止められた AudioContext は、ユーザーの操作でしか起こせない。ロック画面の再生ボタンも操作として扱われるので、ロック中でも再開できる
 - **ロック画面から再生した後に Safari に戻っても、AudioContext を作り直さない**: 1.0.0 では、戻った後に音が表示や操作より遅れて鳴り、Safari を閉じるまで続くことがあった（[Issue #1](https://github.com/Double-oxygeN/rholydd-sequencer/issues/1)）。遅れている間も `outputLatency`・`baseLatency`・`getOutputTimestamp` と `currentTime` の差は変わらず、ページから遅れを知る手段はなかった。描画の予約を溜めないようにし、鳴り終えたオシレーターと音源が溜まらないようにした後は、iOS の実機で再現しなくなった。原因は確かめていないが、音の経路をすべて組み直す大きな変更は要らなくなった
 - **`navigator.audioSession` を使わない**: 消音のスイッチで音が止まらないことを実機で確かめたため。メディア操作のための無音の `audio` 要素が鳴っていることで、音の扱いがすでに再生用になっていると考えられる
+- **アートワークに 192 と 512 の2つを渡す**: OS が、表示する大きさに近いものを選べるようにするため。ホーム画面のアイコンと同じファイルを使い、画像を増やさない
 - **曲名に加えてシードを出す**: ロック画面からでも、気に入った展開のシードを控えられるようにするため
-- **ドラムサンプルを自作の合成音にする**: 外部のサンプルを使わないので、ライセンスの条件が増えないため
+- **ドラムサンプルを自作の合成音にする**: 外部のサンプルを使わないので、ライセンスの条件が増えないため。アイコンと画像も同じ理由で自作にする
+- **アイコンの絵柄をマスで描いたニシブッポウソウにする**: 名前の由来と、シーケンサーのマス目の両方を表すため
+- **PNG を Playwright で描き、コミットする**: 画像を変換する依存を増やさないため。SVG を描けるブラウザは E2E テストですでに使っている。ビルドと CI に Chromium の起動を加えないよう、作った PNG はコミットする
+- **共有用の画像の説明を英語にする**: 画像の中の文字は、リンクを受け取った人の言語に合わせて変えられないので、読める人の多い英語にするため
+- **プレビューのメタデータをビルドのときに書き込む**: プレビューを作る側（SNS やチャットのクローラー）は JavaScript を動かさないため
+- **`og:url` と `og:image` を `homepage` から作る**: 絶対 URL が要るため。base path を `name` から作るのと同じく、配布先を変えるときに `package.json` だけを直せば済むようにする。`--base` で別の場所に配るときは、プレビューの URL が配布先を指さない
+- **プレビューの説明を `description` と共通にする**: 説明を二重に持たないため
+- **シードのついた URL で別のプレビューにしない**: 静的な配布では、クエリ文字列でメタデータを変えられないため
+- **サービスワーカーを自前で書く**: 保存するのはビルドの出力とサンプルとアイコンだけで、Workbox の機能（ルーティングの規則、期限つきのキャッシュなど）を使わない。依存を増やさず、保存の規則を表に書ける程度に保つため
+- **新しい版を、タブをすべて閉じるまで使わない**: 聴いている途中で版を切り替えたり、読み直したりしないため。`skipWaiting` で切り替えると、読み込み済みのスクリプトと、保存した版の残りのファイルが食い違う。その代わり、タブを開いたままにしている間は古い版のまま。知らせる表示は、画面を絞る方針から置かない
+- **`config.json` をネットワーク優先で保存する**: つながっているときは、開くたびに読み直す今の振る舞いを保つため。オフラインで既定値に戻ると、配布先が決めた初期値と違う状態で始まり、読めなかった警告も出てしまう。ないときの 404 も保存するのは、配布先から消えた設定ファイルを、オフラインで使い続けないため
+- **インストールの案内を置かない**: 初期画面に置くものを増やさないため（[画面](./screen.md#決定理由) の「画面を絞る」）
+- **開発サーバーでは登録しない**: 保存した古い版が、書き換えたコードの確認を邪魔しないため
 - **base path を `package.json` の `name` から作る**: GitHub Pages はプロジェクトのリポジトリをその名前の下に配るので、リポジトリ名を変えるときに `package.json` だけを直せば済むようにするため
 - **E2E テストを配布と同じビルドに対して回す**: base path の誤り（サンプルや設定ファイルが読めない、共有する URL がずれる）を配布の前に見つけるため。ビルドを1回にして、確かめたものと配布するものを一致させる
 - **ブランチへのプッシュごとには回さない**: 作業中のプッシュのたびに3つのブラウザの E2E テストを回すと、Actions の時間を消費するわりに得るものが少ないため。レビューに出すプルリクエストと、配布する main で確かめる

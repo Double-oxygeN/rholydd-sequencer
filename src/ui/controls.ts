@@ -4,6 +4,7 @@ import type { ParamStore } from '../params/store.ts';
 import { clampUnit } from '../units.ts';
 import { showValue } from './dom.ts';
 import { icon, iconButton, setIcon } from './icons.ts';
+import type { Messages } from './messages.ts';
 
 /** Where playback stands: no session while stopped. */
 export type PlaybackState = PlaybackSession['state'] | 'stopped';
@@ -14,11 +15,11 @@ export type PlaybackState = PlaybackSession['state'] | 'stopped';
  */
 export type ControlsState = PlaybackState | 'loading';
 
-const PLAY_BUTTON: Readonly<Record<ControlsState, readonly [IconNode, string]>> = {
-  loading: [Play, '再生'],
-  stopped: [Play, '再生'],
-  playing: [Pause, '一時停止'],
-  paused: [Play, '再開'],
+const PLAY_BUTTON: Readonly<Record<ControlsState, readonly [IconNode, 'play' | 'pause' | 'resume']>> = {
+  loading: [Play, 'play'],
+  stopped: [Play, 'play'],
+  playing: [Pause, 'pause'],
+  paused: [Play, 'resume'],
 };
 
 export interface Controls {
@@ -29,16 +30,16 @@ export interface Controls {
 }
 
 /** One button plays, pauses and resumes; stop sits apart, since it throws the place in the piece away. */
-export function createControls(store: ParamStore): Controls {
+export function createControls(store: ParamStore, messages: Messages): Controls {
   const element = document.createElement('div');
   element.className = 'controls';
-  const play = iconButton(Play, '再生', 'play');
-  const stop = iconButton(Square, '停止', 'stop');
+  const play = iconButton(Play, messages.play, 'play');
+  const stop = iconButton(Square, messages.stop, 'stop');
 
   // Kept out of the parameters' menu: it shapes how loud the listener hears, never what plays.
   const volume = document.createElement('input');
-  Object.assign(volume, { type: 'range', min: '0', max: '1', step: '0.01', title: '音量' });
-  volume.setAttribute('aria-label', '音量');
+  Object.assign(volume, { type: 'range', min: '0', max: '1', step: '0.01', title: messages.volume });
+  volume.setAttribute('aria-label', messages.volume);
   volume.addEventListener('input', () => store.update({ volume: clampUnit(Number(volume.value)) }));
   const volumeIcon = document.createElement('span');
   volumeIcon.className = 'volume-icon';
@@ -51,7 +52,7 @@ export function createControls(store: ParamStore): Controls {
   const render = () => {
     const { volume: level } = store.get();
     volume.value = String(level);
-    showValue(volume, value, `${Math.round(level * 100)}%`);
+    showValue(volume, value, messages.percent(level));
     slider.style.setProperty('--value', String(level));
     volumeIcon.replaceChildren(icon(level > 0 ? Volume2 : VolumeX));
   };
@@ -64,7 +65,8 @@ export function createControls(store: ParamStore): Controls {
 
   element.append(play, stop, volumeLabel);
   const show = (state: ControlsState) => {
-    setIcon(play, ...PLAY_BUTTON[state]);
+    const [node, label] = PLAY_BUTTON[state];
+    setIcon(play, node, messages[label]);
     play.classList.toggle('playing', state === 'playing');
     // A press while loading is dropped rather than held over: the status line already says that the samples load.
     play.disabled = state === 'loading';

@@ -13,7 +13,8 @@ button.play.playing {
   color: var(--bg);
 }
 
-button:disabled {
+button:disabled,
+button[aria-disabled='true'] {
   opacity: 0.45;
   cursor: default;
 }

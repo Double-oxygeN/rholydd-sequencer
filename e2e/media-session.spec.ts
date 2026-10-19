@@ -55,3 +55,21 @@ test('changes playback as the buttons would when the OS sends play, pause and st
   await press(page, 'play');
   await expect(playButton(page)).toHaveAccessibleName('一時停止');
 });
+
+test('shows the app icon in two sizes beside the title while playing', async ({ page }) => {
+  await page.addInitScript(recordHandlers);
+  await openPage(page);
+  await startPlayback(page);
+  const artwork = await page.evaluate(() =>
+    (navigator.mediaSession.metadata?.artwork ?? []).map(({ src, sizes, type }) => ({ src, sizes, type })),
+  );
+  expect(artwork.map(({ sizes, type }) => ({ sizes, type }))).toEqual([
+    { sizes: '192x192', type: 'image/png' },
+    { sizes: '512x512', type: 'image/png' },
+  ]);
+  for (const { src } of artwork) {
+    const response = await page.request.get(new URL(src, page.url()).href);
+    expect(response.status(), src).toBe(200);
+    expect(response.headers()['content-type']).toBe('image/png');
+  }
+});

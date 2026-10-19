@@ -18,41 +18,54 @@ import { createShareDialog } from './ui/share.ts';
 import { createSpectrumView } from './ui/spectrum.ts';
 import { createViews } from './ui/views.ts';
 import { linkMediaSession } from './ui/media-session.ts';
+import { MESSAGES, pickLanguage, type Messages } from './ui/messages.ts';
 import { interruptionCommand, mediaCommand, toggleCommand, type AudioState, type PlaybackCommand } from './ui/playback.ts';
 import './ui/styles/index.css';
 
 const SAMPLE_BASE_URL = `${import.meta.env.BASE_URL}samples/drums/`;
 const CONFIG_URL = `${import.meta.env.BASE_URL}config.json`;
+// Two sizes, the home screen icon's own files, so that the OS picks the one nearer what it shows.
+const ARTWORK: readonly MediaImage[] = [192, 512].map((size) => ({
+  src: `${import.meta.env.BASE_URL}icons/icon-${size}.png`,
+  sizes: `${size}x${size}`,
+  type: 'image/png',
+}));
 
-async function boot(root: HTMLElement) {
+async function boot(root: HTMLElement, messages: Messages) {
   releaseEndedOscillators();
   disposeEndedSourcesOnTimers();
   configureAudioContext();
   const { value: config, warnings } = await loadConfig(CONFIG_URL);
   for (const warning of warnings) console.warn(warning);
   const store = createParamStore(initialParams(config, seedFromQuery(location.search)));
-  const controls = createControls(store);
-  const panel = createPanel(store);
-  const position = createPositionView();
+  const controls = createControls(store, messages);
+  const panel = createPanel(store, messages);
+  const position = createPositionView(messages);
   controls.element.append(position.counters);
-  const grid = createStepGrid();
-  const spectrum = createSpectrumView();
-  const views = createViews({ sequencer: grid.element, spectrum: spectrum.element });
-  const mixerView = createMixerView(store);
+  const grid = createStepGrid(messages);
+  const spectrum = createSpectrumView(messages);
+  const views = createViews({ sequencer: grid.element, spectrum: spectrum.element }, messages);
+  const mixerView = createMixerView(store, messages);
 
   const title = document.createElement('h1');
-  title.textContent = APP_NAME;
+  // Decoration only: the name beside it already says which app this is, and would be read out twice.
+  const logo = new Image(32, 32);
+  logo.src = `${import.meta.env.BASE_URL}icons/icon.svg`;
+  logo.alt = '';
+  const name = document.createElement('span');
+  name.textContent = APP_NAME;
+  title.append(logo, name);
   const status = document.createElement('p');
   status.className = 'status';
   // In the page from the start, so that screen readers read out what is written into it later.
   status.setAttribute('role', 'status');
-  status.textContent = 'サンプルを読み込み中…';
-  const menu = createOffCanvasMenu({ parameters: panel.element, mixer: mixerView.element });
+  status.textContent = messages.loadingSamples;
+  const menu = createOffCanvasMenu({ parameters: panel.element, mixer: mixerView.element }, messages);
   let session: PlaybackSession | null = null;
   // The seed field may change during playback and only applies from the next start, so a session shares its own.
   let sessionSeed = store.get().seed;
   const playingSeed = () => (session === null ? store.get().seed : sessionSeed);
-  const share = createShareDialog(new URL(import.meta.env.BASE_URL, location.href).href, playingSeed);
+  const share = createShareDialog(new URL(import.meta.env.BASE_URL, location.href).href, playingSeed, messages);
   // The buttons fixed at the top right come right after the heading, as they appear, so that Tab reaches them in
   // the order the page reads; the menu follows its button, to be next once it opens.
   const header = document.createElement('header');
@@ -60,7 +73,7 @@ async function boot(root: HTMLElement) {
   root.append(header, menu.element, controls.element, position.element, views.element, status, share.element);
 
   const instruments = await loadInstruments(SAMPLE_BASE_URL, store.get().mixer, config.sound);
-  status.textContent = warnings.length > 0 ? '設定ファイルの一部の値を無視しました（詳細はコンソール）' : '';
+  status.textContent = warnings.length > 0 ? messages.configIgnored : '';
   instruments.setVolume(store.get().volume);
   instruments.onLevel((report) => mixerView.showLevel(report));
   let mixer = store.get().mixer;
@@ -85,7 +98,7 @@ async function boot(root: HTMLElement) {
   };
   views.onChange(drawSpectrum);
   const playbackState = (): PlaybackState => session?.state ?? 'stopped';
-  const media = linkMediaSession((action) => {
+  const media = linkMediaSession(messages, ARTWORK, (action) => {
     const command = mediaCommand(action, playbackState());
     if (command !== null) void run(command);
   });
@@ -138,9 +151,23 @@ async function boot(root: HTMLElement) {
   controls.onStop(() => void run('stop'));
 }
 
+// The build alone, so that a kept old version never gets in the way of checking edited code on the dev server.
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch((error: unknown) => {
+      // Refused where storage is off, as in some private windows; the page still plays online.
+      console.warn(error);
+    });
+  });
+}
+
 const root = document.getElementById('app');
 if (root !== null) {
-  boot(root).catch((error: unknown) => {
-    root.textContent = `起動に失敗しました: ${String(error)}`;
+  // Read here alone, as location is: the language is the browser's to tell, and the page offers no switch.
+  const language = pickLanguage(navigator.languages);
+  document.documentElement.lang = language;
+  const messages = MESSAGES[language];
+  boot(root, messages).catch((error: unknown) => {
+    root.textContent = messages.bootFailed(String(error));
   });
 }

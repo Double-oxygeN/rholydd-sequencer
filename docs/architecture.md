@@ -66,11 +66,16 @@ tools/simulate ──▶ tools/simulation ──▶ generators/ensemble
 | `src/engine/patches.ts` | 音色ごとのシンセの設定と、その制約 |
 | `src/engine/tuning.ts` | 音の調整用の数値の型と既定値 |
 | `src/params/store.ts`・`mixer.ts` | パラメーター、ミキサー、ダッキングの設定 |
+| `src/params/reset.ts` | メニューの既定値に戻すボタンが戻す値と、既定値との一致 |
 | `src/params/config.ts`・`decode.ts`・`load-config.ts` | 設定ファイルのスキーマ、検証の部品、読み込み |
 | `src/params/query.ts` | クエリ文字列のシードと共有する URL |
+| `src/ui/messages.ts` | 画面の文言の表（日本語と英語）と、ブラウザの言語から画面の言語を選ぶ `pickLanguage` |
 | `src/ui/*` | 画面の部品（[画面](./interface/screen.md)） |
 | `tools/simulate.ts`・`tools/simulation/*` | 音声なしの長時間の生成と統計 |
 | `tools/make-samples.ts` | ドラムサンプルの合成 |
+| `tools/make-icons.ts` | アイコンと共有用の画像の PNG を描く |
+| `tools/page-meta.ts` | 共有したリンクのプレビューのメタデータを `index.html` に書き込む Vite のプラグイン |
+| `tools/web-app.ts`・`src/service-worker.ts` | マニフェストと、オフラインで開くためのサービスワーカーをビルドのときに作る Vite のプラグインと、サービスワーカーの本体 |
 | `tools/base-path.ts` | 配布する base path |
 
 ## 2bar ごとの生成の流れ

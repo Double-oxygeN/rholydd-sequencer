@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { openMenu, openPage, shareDialog, shareToggle, startPlayback } from './support.ts';
+import { openMenu, openPage, resetMixer, shareDialog, shareToggle, startPlayback } from './support.ts';
 
 async function violations(page: Page): Promise<string[]> {
   const results = await new AxeBuilder({ page })
@@ -25,6 +25,9 @@ test('finds nothing to report with the menu open', async ({ page }) => {
   await openMenu(page);
   expect(await violations(page)).toEqual([]);
   await page.getByRole('tab', { name: 'ミキサー' }).click();
+  expect(await violations(page)).toEqual([]);
+  await page.getByRole('button', { name: 'キック ミュート' }).click();
+  await resetMixer(page).click();
   expect(await violations(page)).toEqual([]);
 });
 

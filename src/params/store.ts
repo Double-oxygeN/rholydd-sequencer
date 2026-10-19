@@ -43,6 +43,8 @@ export const DEFAULT_LIVE_PARAMS: LiveParams = {
 };
 
 export interface ParamStore {
+  /** The values the page opened with, which the menu's resets put back. */
+  readonly initial: Params;
   get(): Params;
   update(patch: Partial<Params>): void;
   subscribe(listener: (params: Params) => void): () => void;
@@ -52,6 +54,7 @@ export function createParamStore(initial: Params): ParamStore {
   let params = initial;
   const listeners = new Set<(params: Params) => void>();
   return {
+    initial,
     get: () => params,
     update(patch) {
       params = { ...params, ...patch };

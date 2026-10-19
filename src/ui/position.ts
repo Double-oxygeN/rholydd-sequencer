@@ -2,6 +2,7 @@ import { STEPS_PER_BAR, STEPS_PER_PAIR, type Step } from '../generators/types.ts
 import { cycleScenes, type CycleLayout } from '../structure/arrangement.ts';
 import type { Context } from '../structure/conductor.ts';
 import { PAIRS_PER_SECTION } from '../structure/form.ts';
+import type { CounterText, Messages } from './messages.ts';
 
 export interface PositionView {
   readonly element: HTMLElement;
@@ -16,22 +17,22 @@ export interface PositionView {
  * than what the sequencer shows: 2 bars, or the one bar playing on narrow screens (style.css picks the meter). The
  * scene colours stand in for scene names.
  */
-export function createPositionView(): PositionView {
+export function createPositionView(messages: Messages): PositionView {
   const element = document.createElement('div');
   element.className = 'position';
   const cycle = sceneMeter();
   const pairs = sectionMeter(PAIRS_PER_SECTION, 'pair-meter');
   const bars = sectionMeter(PAIRS_PER_SECTION * BARS_PER_PAIR, 'bar-meter');
   // Pictures of the place in the piece: the counters say it in words, so screen readers hear only what each shows.
-  picture(cycle.element, 'サイクルの位置');
-  picture(pairs.element, '8小節の位置');
-  picture(bars.element, '8小節の位置');
+  picture(cycle.element, messages.cyclePosition);
+  picture(pairs.element, messages.sectionPosition);
+  picture(bars.element, messages.sectionPosition);
   element.append(cycle.element, pairs.element, bars.element);
 
   const counters = document.createElement('div');
   counters.className = 'counters';
-  const barCount = counter('小節');
-  const cycleCount = counter('サイクル');
+  const barCount = counter(messages.barCount);
+  const cycleCount = counter(messages.cycleCount);
   counters.append(barCount.element, cycleCount.element);
 
   const clear = () => {
@@ -62,15 +63,20 @@ export function createPositionView(): PositionView {
   };
 }
 
-function counter(unit: string) {
+function counter(text: (n: number) => CounterText) {
   const element = document.createElement('span');
   element.className = 'counter';
+  const before = document.createTextNode('');
   const value = document.createElement('strong');
-  element.append(value, unit);
+  const after = document.createTextNode('');
+  element.append(before, value, after);
   return {
     element,
     set(n: number) {
+      const words = text(n);
+      before.data = words.before;
       value.textContent = String(n);
+      after.data = words.after;
     },
   };
 }
