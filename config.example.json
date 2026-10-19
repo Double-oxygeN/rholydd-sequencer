@@ -141,6 +141,18 @@
         "pad": 0.6,
         "pickup": 0.9
       }
+    },
+    "cymbal": {
+      "crash": {
+        "drop": 1,
+        "dropPhrase": 0.8,
+        "intro": 0.7,
+        "build": 0.7
+      },
+      "ride": {
+        "accent": 0.7,
+        "soft": 0.45
+      }
     }
   },
   "sound": {

@@ -1,4 +1,5 @@
 import type { ChordTone } from '../structure/chords.ts';
+import type { CrashPlace } from './cymbal/index.ts';
 import { DEFAULT_STRUCTURE_TUNING, type StructureTuning } from '../structure/tuning.ts';
 import type { UnitInterval, Weight } from '../units.ts';
 import type { FillLength, PhraseFillLength } from './drums/fill.ts';
@@ -21,10 +22,17 @@ export interface LineTuning {
   readonly velocity: Readonly<Record<'sub' | 'reese' | 'stab' | 'pad' | 'pickup', Velocity>>;
 }
 
+export interface CymbalTuning {
+  readonly crash: Readonly<Record<CrashPlace, Velocity>>;
+  /** The ride's beats, and its offbeat 8ths when it plays every 8th. */
+  readonly ride: { readonly accent: Velocity; readonly soft: Velocity };
+}
+
 /** Every number of generation that listening tunes. */
 export interface GenerationTuning extends StructureTuning {
   readonly fill: FillTuning;
   readonly lines: LineTuning;
+  readonly cymbal: CymbalTuning;
 }
 
 const unit = (x: number) => x as UnitInterval;
@@ -44,5 +52,10 @@ export const DEFAULT_GENERATION_TUNING: GenerationTuning = {
     // Leans on the root and the 5th more than the sub does, so the two basses rarely sound a 3rd against each other.
     reeseToneWeights: { root: weight(0.6), third: weight(0.1), fifth: weight(0.2), seventh: weight(0.1) },
     velocity: { sub: velocity(0.8), reese: velocity(0.8), stab: velocity(0.7), pad: velocity(0.6), pickup: velocity(0.9) },
+  },
+  cymbal: {
+    // Strongest where the drop lands, the boundary the whole build leads up to.
+    crash: { drop: velocity(1), dropPhrase: velocity(0.8), intro: velocity(0.7), build: velocity(0.7) },
+    ride: { accent: velocity(0.7), soft: velocity(0.45) },
   },
 };

@@ -55,6 +55,7 @@ const BASELINE_PARTS = {
   reese: ({ reese }) => reese,
   stab: ({ stab }) => stab,
   pad: ({ pad }) => pad,
+  cymbal: ({ cymbal }) => cymbal,
   heard: ({ heard }) => heard,
   fx: ({ fx }) => fx,
 } as const satisfies Record<string, (pair: GeneratedPair) => unknown>;

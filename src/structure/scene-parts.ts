@@ -1,12 +1,13 @@
 import { changesScene, type IntroOrder, type LeadSections, type Scene, type SceneRole, type ScenePlace } from './arrangement.ts';
 
-export type Voice = 'kick' | 'snare' | 'hat' | 'ghost' | 'sub' | 'reese' | 'stab' | 'pad';
+export type Voice = 'kick' | 'snare' | 'hat' | 'ghost' | 'crash' | 'ride' | 'sub' | 'reese' | 'stab' | 'pad';
 
+// The ride is left to the drop's role, as only the second drop of a cycle plays it.
 const PLAYS: Readonly<Record<Scene, ReadonlySet<Voice>>> = {
-  intro: new Set(['kick', 'snare', 'hat', 'ghost', 'sub', 'pad']),
+  intro: new Set(['kick', 'snare', 'hat', 'ghost', 'crash', 'sub', 'pad']),
   // The basses leave so that the drop's first sub lands on empty low end.
-  build: new Set(['kick', 'snare', 'hat', 'ghost', 'stab', 'pad']),
-  drop: new Set(['kick', 'snare', 'hat', 'ghost', 'sub', 'reese', 'stab', 'pad']),
+  build: new Set(['kick', 'snare', 'hat', 'ghost', 'crash', 'stab', 'pad']),
+  drop: new Set(['kick', 'snare', 'hat', 'ghost', 'crash', 'sub', 'reese', 'stab', 'pad']),
   breakdown: new Set(['hat', 'stab', 'pad']),
 };
 
@@ -71,6 +72,8 @@ function hatDensity(lineup: IntroLineup): HatDensity | null {
 function lineupPlays(lineup: IntroLineup, voice: Voice): boolean {
   switch (voice) {
     case 'pad':
+    // Only ever placed in the last 8 bars, where everything plays.
+    case 'crash':
       return true;
     case 'sub':
       return lineup.sub;
@@ -80,6 +83,7 @@ function lineupPlays(lineup: IntroLineup, voice: Voice): boolean {
     case 'snare':
     case 'ghost':
       return lineup.drums.includes(voice);
+    case 'ride':
     case 'reese':
     case 'stab':
       return false;
@@ -88,6 +92,8 @@ function lineupPlays(lineup: IntroLineup, voice: Voice): boolean {
 
 /** Whether a part sounds in the scene. Every part is still generated; this only decides what is heard. */
 export function plays(role: SceneRole, voice: Voice): boolean {
+  // Sets the second drop apart from the first, whose theme it brings back with a new groove.
+  if (voice === 'ride') return role.scene === 'drop' && role.drop === 'second';
   if (role.scene === 'intro' && !lineupPlays(introLineup(role), voice)) return false;
   return PLAYS[role.scene].has(voice);
 }

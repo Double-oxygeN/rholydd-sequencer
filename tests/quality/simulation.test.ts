@@ -46,6 +46,10 @@ describe('simulation: report', () => {
     expect(Object.values(arrangement.introOrders).every((n) => n > 0)).toBe(true);
     expect(Object.values(arrangement.introOpeningHitsPerBar).every((n) => n > 0)).toBe(true);
     expect(arrangement.misplaced).toBe(0);
+    expect(Object.values(report.cymbal.crashes).every((n) => n > 0)).toBe(true);
+    expect(Object.values(report.cymbal.rideStyles).every((n) => n > 0)).toBe(true);
+    for (const scene of ['intro', 'build', 'breakdown'] as const) expect(arrangement.scenes[scene].cymbalsPerBar.ride).toBe(0);
+    expect(arrangement.scenes.breakdown.cymbalsPerBar.crash).toBe(0);
     expect(arrangement.scenes.breakdown.notesPerPair.sub).toBe(0);
     expect(arrangement.scenes.breakdown.drumHitsPerBar).toBeLessThan(arrangement.scenes.drop.drumHitsPerBar);
     const leadIns = [arrangement.leadIns.first, arrangement.leadIns.second];

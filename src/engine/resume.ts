@@ -1,4 +1,4 @@
-import type { NoteEvent, Step, StepLength } from '../generators/types.ts';
+import { isStrike, type NoteEvent, type Step, type StepLength } from '../generators/types.ts';
 
 /**
  * What is left to play of 2 bars from a step on. A note sounding across the step plays again from there for the
@@ -8,7 +8,7 @@ export function eventsFrom(events: readonly NoteEvent[], from: Step): readonly N
   if (from === 0) return events;
   return events.flatMap((event): NoteEvent[] => {
     if (event.step >= from) return [event];
-    if (event.instrument === 'drums' || event.step + event.length <= from) return [];
+    if (isStrike(event) || event.step + event.length <= from) return [];
     return [{ ...event, step: from, length: (event.step + event.length - from) as StepLength }];
   });
 }

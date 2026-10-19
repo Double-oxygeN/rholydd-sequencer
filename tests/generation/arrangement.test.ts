@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { patternsEqual } from '../../src/generators/drums/pattern.ts';
 import { createEnsemble } from '../../src/generators/ensemble.ts';
-import type { NoteEvent } from '../../src/generators/types.ts';
+import { isStrike, type NoteEvent } from '../../src/generators/types.ts';
 import { hash, toSeed } from '../../src/random/rng.ts';
 import {
   DROP_LEAD_INS,
@@ -80,15 +80,15 @@ function lineupOf(role: SceneRole): string[] {
 
 const runs = SEEDS.flatMap((seed) => PARAM_SETS.map((params) => ({ params, pairs: run(seed, LONG_BARS, () => params) })));
 
-const voiceOf = (event: NoteEvent) => (event.instrument === 'drums' ? event.part : event.instrument);
+const voiceOf = (event: NoteEvent) => (isStrike(event) ? event.part : event.instrument);
 
-const endOf = (event: NoteEvent) => (event.instrument === 'drums' ? event.step + 1 : event.step + event.length);
+const endOf = (event: NoteEvent) => (isStrike(event) ? event.step + 1 : event.step + event.length);
 
 // The table of parts per scene in the requirements, written out again so that a mistake in the code's table shows.
 const PARTS_BY_SCENE: Readonly<Record<string, readonly string[]>> = {
-  intro: ['kick', 'snare', 'hat', 'ghost', 'sub', 'pad'],
-  build: ['kick', 'snare', 'hat', 'ghost', 'stab', 'pad'],
-  drop: ['kick', 'snare', 'hat', 'ghost', 'sub', 'reese', 'stab', 'pad'],
+  intro: ['kick', 'snare', 'hat', 'ghost', 'crash', 'sub', 'pad'],
+  build: ['kick', 'snare', 'hat', 'ghost', 'crash', 'stab', 'pad'],
+  drop: ['kick', 'snare', 'hat', 'ghost', 'crash', 'ride', 'sub', 'reese', 'stab', 'pad'],
   breakdown: ['hat', 'stab', 'pad'],
 };
 
@@ -109,8 +109,8 @@ function generateBars(seed: number, bars: number): (readonly NoteEvent[])[] {
 
 /** The same note, whether or not the gap before a drop shortened it. */
 function sameOnset(a: NoteEvent, b: NoteEvent): boolean {
-  if (a.instrument === 'drums' || b.instrument === 'drums') {
-    return a.instrument === 'drums' && b.instrument === 'drums' && a.part === b.part && a.step === b.step;
+  if (isStrike(a) || isStrike(b)) {
+    return isStrike(a) && isStrike(b) && a.instrument === b.instrument && a.part === b.part && a.step === b.step;
   }
   return a.instrument === b.instrument && a.step === b.step;
 }
@@ -329,7 +329,7 @@ describe('arrangement: parts per scene', () => {
         const role = ctx.sceneRole;
         if (role.scene !== 'intro') continue;
         for (const event of heard) {
-          const allowed = event.instrument === 'drums' ? playsHit(role, event) : plays(role, event.instrument);
+          const allowed = event.instrument === 'drums' ? playsHit(role, event) : plays(role, voiceOf(event));
           if (allowed) continue;
           announced++;
           expect(event).toMatchObject({ part: 'snare', layer: 'fill' });
@@ -413,10 +413,10 @@ describe('arrangement: parts per scene', () => {
   });
 
   // A scene leaves out the parts it does not play and empties the beat before a drop, adding only the pickup.
-  it('plays the composed drum layers followed by the pitched parts, as far as the scene lets them sound', () => {
+  it('plays the composed drum layers followed by the cymbals and the pitched parts, as far as the scene lets them sound', () => {
     expect(generateBars(42, 256)).toEqual(run(42, 256).map((pair) => pair.heard));
     for (const pair of run(42, 1024)) {
-      const generated = [...pair.events, ...pair.pitched];
+      const generated = [...pair.events, ...pair.cymbal.hits, ...pair.pitched];
       const sources = pair.heard
         .filter((event) => event !== PICKUP)
         .map((event) => generated.find((g) => sameOnset(g, event)));

@@ -51,6 +51,20 @@ export interface DrumHit {
   readonly layer: Layer;
 }
 
+/**
+ * Cymbals are an instrument of their own rather than drum parts: their places follow from the scene and the form,
+ * with none of the drums' weights, mutations, thinning or fills.
+ */
+export const CYMBALS = ['crash', 'ride'] as const;
+export type Cymbal = (typeof CYMBALS)[number];
+
+export interface CymbalHit {
+  readonly instrument: 'cymbal';
+  readonly step: Step;
+  readonly part: Cymbal;
+  readonly velocity: Velocity;
+}
+
 export interface SubNote {
   readonly instrument: 'sub';
   readonly step: Step;
@@ -84,7 +98,13 @@ export interface PadChord {
 }
 
 export type PitchedEvent = SubNote | ReeseNote | StabHit | PadChord;
-export type NoteEvent = DrumHit | PitchedEvent;
+/** Events with no length: struck once and left to ring out. */
+export type StrikeEvent = DrumHit | CymbalHit;
+export type NoteEvent = StrikeEvent | PitchedEvent;
+
+export function isStrike(event: NoteEvent): event is StrikeEvent {
+  return event.instrument === 'drums' || event.instrument === 'cymbal';
+}
 
 /** Steps taken over by a fill and the one part, if any, that keeps playing there. */
 export interface FillSpan {

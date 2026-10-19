@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { NoteEvent } from '../../src/generators/types.ts';
+import { isStrike, type NoteEvent } from '../../src/generators/types.ts';
 import { hash, toSeed } from '../../src/random/rng.ts';
 import {
   BORROWED_SYMBOLS,
@@ -300,7 +300,7 @@ describe('harmony: modulation', () => {
         if (shiftOf(pair, DEFAULT_KEY) !== 0) modulated++;
         if (isBorrowed(chordOf(pair.ctx))) continue;
         for (const event of pair.heard) {
-          if (event.instrument === 'drums') continue;
+          if (isStrike(event)) continue;
           for (const pitch of 'pitch' in event ? [event.pitch] : event.voicing) {
             expect(degreeOf(pair.ctx.key, pitch)).toBeDefined();
           }
@@ -320,7 +320,7 @@ describe('harmony: modulation', () => {
           // Folding into a fixed range reorders the tones of a chord, so the pitch classes compare as sets.
           const classes = (events: readonly NoteEvent[], shift: number) =>
             events.flatMap((e) =>
-              e.instrument === 'drums'
+              isStrike(e)
                 ? []
                 : [[...new Set(('pitch' in e ? [e.pitch] : e.voicing).map((p) => (((p - shift) % 12) + 12) % 12))].sort()],
             );

@@ -170,6 +170,10 @@ const CONFIG_SCHEMA: ObjectSchema<Config> = {
       reeseToneWeights: toneWeights,
       velocity: { sub: velocity, reese: velocity, stab: velocity, pad: velocity, pickup: velocity },
     },
+    cymbal: {
+      crash: { drop: velocity, dropPhrase: velocity, intro: velocity, build: velocity },
+      ride: { accent: velocity, soft: velocity },
+    },
   },
   sound: {
     trimDb: {

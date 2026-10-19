@@ -1,3 +1,4 @@
+import { CRASH_PLACES, RIDE_STYLES, crashPlace, type CrashPlace, type RideStyle } from '../../src/generators/cymbal/index.ts';
 import { ALL_FILL_KINDS, FILL_LENGTHS, type FillKind, type FillLength } from '../../src/generators/drums/fill.ts';
 import { motifCell, patternsEqual, type Pattern } from '../../src/generators/drums/pattern.ts';
 import { slotsOf } from '../../src/generators/drums/weights.ts';
@@ -11,7 +12,7 @@ import { STAB_HIGHEST, STAB_LOWEST } from '../../src/generators/stab/index.ts';
 import { STAB_STYLES, type StabStyle } from '../../src/generators/stab/styles.ts';
 import { HIGHEST_PITCH, LOWEST_PITCH } from '../../src/generators/sub/pitch.ts';
 import { SUB_STYLES, type SubStyle } from '../../src/generators/sub/styles.ts';
-import { PARTS, type Layer, type NoteEvent, type Part, type PitchedEvent } from '../../src/generators/types.ts';
+import { CYMBALS, PARTS, type Cymbal, type Layer, type NoteEvent, type Part, type PitchedEvent } from '../../src/generators/types.ts';
 import type { Seed } from '../../src/random/rng.ts';
 import {
   BARS_PER_SECTION,
@@ -152,6 +153,12 @@ export interface SimulationReport {
     /** Heard events of parts that their scene leaves out, apart from the snare rolls announcing the drums. Always 0. */
     readonly misplaced: number;
   };
+  readonly cymbal: {
+    /** Heard crashes at each place where the form puts one. */
+    readonly crashes: Record<CrashPlace, number>;
+    /** Number of cycles riding in each style. */
+    readonly rideStyles: Record<RideStyle, number>;
+  };
   /** For each part with a table of sounds, the cycles that played each sound and the cycle starts that changed it. */
   readonly timbre: Record<keyof CycleTimbre, { readonly cycles: Record<string, number>; readonly changes: number }>;
   /** Number of effects of each kind. Risers and sweeps count one segment per 2 bars. */
@@ -183,6 +190,8 @@ interface SceneStats {
   readonly drumHitsPerBar: number;
   /** Heard notes per 2 bars of each pitched part. A chord counts as one. */
   readonly notesPerPair: Record<PitchedPart, number>;
+  /** Heard cymbal hits per bar. */
+  readonly cymbalsPerBar: Record<Cymbal, number>;
 }
 
 export const SCENES: readonly Scene[] = ['intro', 'build', 'drop', 'breakdown'];
@@ -271,6 +280,11 @@ export function simulate({
   const sceneNotes = Object.fromEntries(
     SCENES.map((scene) => [scene, { sub: 0, reese: 0, stab: 0, pad: 0 }]),
   ) as Record<Scene, Record<PitchedPart, number>>;
+  const sceneCymbals = Object.fromEntries(
+    SCENES.map((scene) => [scene, Object.fromEntries(CYMBALS.map((cymbal) => [cymbal, 0]))]),
+  ) as Record<Scene, Record<Cymbal, number>>;
+  const crashes = Object.fromEntries(CRASH_PLACES.map((place) => [place, 0])) as Record<CrashPlace, number>;
+  const rideStyles = Object.fromEntries(RIDE_STYLES.map((style) => [style, 0])) as Record<RideStyle, number>;
   let misplaced = 0;
   const timbre = Object.fromEntries(
     TIMBRE_PARTS.map((part) => [part, { cycles: Object.fromEntries(TIMBRE_TABLES[part].map((name) => [name, 0])), changes: 0 }]),
@@ -293,7 +307,7 @@ export function simulate({
 
   for (let i = 0; i < pairs; i++) {
     const start = performance.now();
-    const { ctx, drumLayers: layers, sub, reese, stab, pad, events, fx } = ensemble.next(live);
+    const { ctx, drumLayers: layers, sub, reese, stab, pad, cymbal, events, fx } = ensemble.next(live);
     const elapsed = performance.now() - start;
     totalMs += elapsed;
     maxMs = Math.max(maxMs, elapsed);
@@ -306,6 +320,7 @@ export function simulate({
       leads[`${ctx.layout.intro * BARS_PER_SECTION}/${ctx.layout.breakdown * BARS_PER_SECTION}`]! += 1;
       extensions[extensionOf(ctx.layout)]++;
       introOrders[ctx.layout.introOrder]++;
+      rideStyles[cymbal.style]++;
       for (const part of TIMBRE_PARTS) {
         timbre[part].cycles[ctx.timbre[part]]! += 1;
         if (previousTimbre !== undefined && previousTimbre[part] !== ctx.timbre[part]) timbre[part].changes++;
@@ -328,8 +343,14 @@ export function simulate({
     }
     for (const event of events) {
       if (event.instrument === 'drums') sceneDrums[scene]++;
+      else if (event.instrument === 'cymbal') sceneCymbals[scene][event.part]++;
       else sceneNotes[scene][event.instrument]++;
-      const allowed = event.instrument === 'drums' ? playsHit(ctx.sceneRole, event) : plays(ctx.sceneRole, event.instrument);
+      const place = event.instrument === 'cymbal' && event.part === 'crash' ? crashPlace(ctx) : null;
+      if (place !== null) crashes[place]++;
+      const allowed =
+        event.instrument === 'drums'
+          ? playsHit(ctx.sceneRole, event)
+          : plays(ctx.sceneRole, event.instrument === 'cymbal' ? event.part : event.instrument);
       const announcement = event.instrument === 'drums' && event.part === 'snare' && event.layer === 'fill';
       if (!allowed && !(announcesSnare(ctx) && announcement)) misplaced++;
     }
@@ -489,12 +510,16 @@ export function simulate({
               notesPerPair: Object.fromEntries(
                 PITCHED_PARTS.map((part) => [part, notes[part] / Math.max(1, bars / 2)]),
               ) as Record<PitchedPart, number>,
+              cymbalsPerBar: Object.fromEntries(
+                CYMBALS.map((cymbal) => [cymbal, sceneCymbals[scene][cymbal] / Math.max(1, bars)]),
+              ) as Record<Cymbal, number>,
             },
           ];
         }),
       ) as Record<Scene, SceneStats>,
       misplaced,
     },
+    cymbal: { crashes, rideStyles },
     timbre,
     fx: fxCounts,
     fills,
@@ -504,7 +529,8 @@ export function simulate({
 }
 
 /**
- * What a 2-bar unit sounds like apart from the chord it is played on. Layers do not change what is heard, and bass
+ * What a 2-bar unit sounds like apart from the chord it is played on, and apart from a crash, which marks the
+ * boundary the 2 bars start on rather than changing the loop. Layers do not change what is heard, and bass
  * pitches count as tones of the chord, so that repeat units on different chords count as repeats. The stab and the
  * pad count by position only: a tension on one chord and not the next changes which tones they sound.
  */
@@ -512,9 +538,11 @@ function heardShape(ctx: Context, events: readonly NoteEvent[]): string {
   const chord = chordOf(ctx);
   const fromRoot = (pitch: number) => CHORD_TONES.find((tone) => chordToneClass(ctx.key, chord, tone) === pitch % 12);
   return events
+    .filter((e) => !(e.instrument === 'cymbal' && e.part === 'crash'))
     .map((e) => {
       switch (e.instrument) {
         case 'drums':
+        case 'cymbal':
           return `d${e.step}:${e.part}:${e.velocity}`;
         case 'sub':
         case 'reese':

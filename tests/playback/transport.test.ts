@@ -13,7 +13,7 @@ import { NOTHING_PENDING, locate, pairSource, playheadAt, type ScheduledPair } f
 import { eventsFrom } from '../../src/engine/resume.ts';
 import { DEFAULT_SOUND_TUNING } from '../../src/engine/tuning.ts';
 import { createEnsemble, type EnsemblePair } from '../../src/generators/ensemble.ts';
-import { ALL_STEPS, type NoteEvent, type Step } from '../../src/generators/types.ts';
+import { ALL_STEPS, isStrike, type NoteEvent, type Step } from '../../src/generators/types.ts';
 import { toSeed } from '../../src/random/rng.ts';
 import { DEFAULT_KEY } from '../../src/structure/key.ts';
 import { DEFAULT_LIVE, TUNING, run } from '../support/helpers.ts';
@@ -80,13 +80,27 @@ const COMPARED = (timeline: ReturnType<typeof timelineOf>, time: number): readon
 const uninterrupted = timelineOf(pairs.flatMap((fx, i) => fxAutomation(fx, at(i, 0) as Seconds, STEP, FX)));
 
 describe('transport: resuming the events of 2 bars', () => {
+  it('strikes again after a resume exactly the cymbals that would have come from the step on, and never one before it', () => {
+    let resumedCrashes = 0;
+    for (const { heard } of run(42, 1024)) {
+      const cymbals = heard.filter((e) => e.instrument === 'cymbal');
+      for (const from of ALL_STEPS) {
+        const left = eventsFrom(heard, from).filter((e) => e.instrument === 'cymbal');
+        expect(left).toEqual(cymbals.filter((e) => e.step >= from));
+        if (from > 0 && cymbals.some((e) => e.part === 'crash')) resumedCrashes++;
+      }
+    }
+    // A crash on step 0 is never struck twice by a pause and resume later in the same 2 bars.
+    expect(resumedCrashes).toBeGreaterThan(0);
+  });
+
   it('keeps what starts from the step on, replays what sounds across it for the rest, and drops the rest', () => {
     for (const { heard } of run(7, 256)) {
       for (const from of ALL_STEPS) {
         const left = eventsFrom(heard, from);
         const expected = heard.flatMap((e): NoteEvent[] => {
           if (e.step >= from) return [e];
-          if (e.instrument === 'drums' || e.step + e.length <= from) return [];
+          if (isStrike(e) || e.step + e.length <= from) return [];
           return [{ ...e, step: from, length: (e.step + e.length - from) as typeof e.length }];
         });
         expect(left).toEqual(expected);
