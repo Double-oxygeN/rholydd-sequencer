@@ -32,11 +32,20 @@ export function loadDrumBuffers(drumSamplesUrl: string): DrumBuffers {
 
 export type DrumSamplers = Readonly<Record<Sample, Tone.Sampler>>;
 
+/**
+ * Evens out samples that share a channel, as the sound tables do for synths. Listening put the ride 2 dB under the
+ * crash; the channel's trim would have taken the crash down with it, and lower velocities would change what a seed
+ * generates.
+ */
+export const SAMPLE_GAIN_DB: Readonly<Record<Sample, number>> = { kick: 0, snare: 0, hat: 0, ghost: 0, crash: 0, ride: -2 };
+
 export function createSamplers(buffers: DrumBuffers, to: Readonly<Record<Sample, Tone.InputNode>>): DrumSamplers {
   return Object.fromEntries(
     SAMPLES.map((sample) => [
       sample,
-      new Tone.Sampler({ urls: { [ROOT_NOTE]: buffers[sample] }, release: 0.02 }).connect(to[sample]),
+      new Tone.Sampler({ urls: { [ROOT_NOTE]: buffers[sample] }, release: 0.02, volume: SAMPLE_GAIN_DB[sample] }).connect(
+        to[sample],
+      ),
     ]),
   ) as Record<Sample, Tone.Sampler>;
 }
