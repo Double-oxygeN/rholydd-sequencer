@@ -1,5 +1,5 @@
-import { GAP_START, changesScene, dropLeadIn, hasGap, type GapLeadIn } from '../structure/arrangement.ts';
-import { plays, playsHit } from '../structure/scene-parts.ts';
+import { GAP_START, dropLeadIn, hasGap, type GapLeadIn } from '../structure/arrangement.ts';
+import { announcesSnare, plays, playsHit } from '../structure/scene-parts.ts';
 import type { PadChord, ContextWithDrums, DrumHit, NoteEvent, PitchedEvent, Step, StepLength, Velocity } from './types.ts';
 
 /** Every pitched part as generated for the 2 bars, before the scene decides what is heard. */
@@ -21,10 +21,9 @@ export function pickupHit(velocity: Velocity): DrumHit {
  */
 export function arrange(ctx: ContextWithDrums, parts: PitchedParts, pickupVelocity: Velocity): readonly NoteEvent[] {
   const role = ctx.sceneRole;
-  // The breakdown's last fill brings the snare back early to announce the drums.
-  const announcesDrums = role.scene === 'breakdown' && changesScene(ctx);
+  const announces = announcesSnare(ctx);
   const drums = ctx.drums.hits.filter(
-    (hit) => playsHit(role, hit) || (announcesDrums && hit.part === 'snare' && hit.layer === 'fill'),
+    (hit) => playsHit(role, hit) || (announces && hit.part === 'snare' && hit.layer === 'fill'),
   );
   const pitched = [...parts.sub, ...parts.reese, ...parts.stab, parts.pad].filter((event) => plays(role, event.instrument));
   const leadIn = dropLeadIn(ctx);

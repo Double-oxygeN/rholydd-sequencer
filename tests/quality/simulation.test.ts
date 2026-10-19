@@ -43,6 +43,8 @@ describe('simulation: report', () => {
     expect(Object.values(arrangement.lengths).every((n) => n > 0)).toBe(true);
     expect(Object.values(arrangement.leads).every((n) => n > 0)).toBe(true);
     expect(Object.values(arrangement.extensions).every((n) => n > 0)).toBe(true);
+    expect(Object.values(arrangement.introOrders).every((n) => n > 0)).toBe(true);
+    expect(Object.values(arrangement.introOpeningHitsPerBar).every((n) => n > 0)).toBe(true);
     expect(arrangement.misplaced).toBe(0);
     expect(arrangement.scenes.breakdown.notesPerPair.sub).toBe(0);
     expect(arrangement.scenes.breakdown.drumHitsPerBar).toBeLessThan(arrangement.scenes.drop.drumHitsPerBar);

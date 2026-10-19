@@ -26,7 +26,7 @@ import {
   type IntroOrder,
   type Scene,
 } from '../../src/structure/arrangement.ts';
-import { plays, playsHit } from '../../src/structure/scene-parts.ts';
+import { announcesSnare, plays, playsHit } from '../../src/structure/scene-parts.ts';
 import { chordOf, type Context, type LiveParams } from '../../src/structure/conductor.ts';
 import { SECTIONS_PER_PHRASE, type SectionIn32 } from '../../src/structure/form.ts';
 import {
@@ -144,10 +144,12 @@ export interface SimulationReport {
     readonly extensions: Record<DropExtension, number>;
     /** Number of cycles opening with each intro order. */
     readonly introOrders: Record<IntroOrder, number>;
+    /** Heard drum hits per bar in the first 8 bars of the intros of each order. */
+    readonly introOpeningHitsPerBar: Record<IntroOrder, number>;
     /** Number of builds that led into each drop of a cycle in each way. */
     readonly leadIns: Record<DropOrdinal, Record<DropLeadIn, number>>;
     readonly scenes: Record<Scene, SceneStats>;
-    /** Heard events of parts that their scene leaves out, apart from the snare roll ending a breakdown. Always 0. */
+    /** Heard events of parts that their scene leaves out, apart from the snare rolls announcing the drums. Always 0. */
     readonly misplaced: number;
   };
   /** For each part with a table of sounds, the cycles that played each sound and the cycle starts that changed it. */
@@ -260,6 +262,8 @@ export function simulate({
   ) as Record<string, number>;
   const extensions: Record<DropExtension, number> = { none: 0, first: 0, second: 0, both: 0 };
   const introOrders = Object.fromEntries(INTRO_ORDERS.map((order) => [order, 0])) as Record<IntroOrder, number>;
+  const openingBars = Object.fromEntries(INTRO_ORDERS.map((order) => [order, 0])) as Record<IntroOrder, number>;
+  const openingHits = Object.fromEntries(INTRO_ORDERS.map((order) => [order, 0])) as Record<IntroOrder, number>;
   const leadInCounts = () => Object.fromEntries(DROP_LEAD_INS.map((leadIn) => [leadIn, 0])) as Record<DropLeadIn, number>;
   const leadIns: Record<DropOrdinal, Record<DropLeadIn, number>> = { first: leadInCounts(), second: leadInCounts() };
   const sceneBars = Object.fromEntries(SCENES.map((scene) => [scene, 0])) as Record<Scene, number>;
@@ -318,12 +322,16 @@ export function simulate({
     previousKey = ctx.key;
     const { scene } = ctx.sceneRole;
     sceneBars[scene] += 2;
+    if (ctx.sceneRole.scene === 'intro' && ctx.sceneRole.index === 0) {
+      openingBars[ctx.sceneRole.introOrder] += 2;
+      openingHits[ctx.sceneRole.introOrder] += events.filter((event) => event.instrument === 'drums').length;
+    }
     for (const event of events) {
       if (event.instrument === 'drums') sceneDrums[scene]++;
       else sceneNotes[scene][event.instrument]++;
       const allowed = event.instrument === 'drums' ? playsHit(ctx.sceneRole, event) : plays(ctx.sceneRole, event.instrument);
-      const announcesDrums = event.instrument === 'drums' && event.part === 'snare' && event.layer === 'fill';
-      if (!allowed && !(scene === 'breakdown' && announcesDrums)) misplaced++;
+      const announcement = event.instrument === 'drums' && event.part === 'snare' && event.layer === 'fill';
+      if (!allowed && !(announcesSnare(ctx) && announcement)) misplaced++;
     }
     for (const event of fx) fxCounts[event.fx]++;
     const leadIn = dropLeadIn(ctx);
@@ -465,6 +473,9 @@ export function simulate({
       leads,
       extensions,
       introOrders,
+      introOpeningHitsPerBar: Object.fromEntries(
+        INTRO_ORDERS.map((order) => [order, openingHits[order] / Math.max(1, openingBars[order])]),
+      ) as Record<IntroOrder, number>,
       leadIns,
       scenes: Object.fromEntries(
         SCENES.map((scene): [Scene, SceneStats] => {
