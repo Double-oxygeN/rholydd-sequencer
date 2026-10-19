@@ -67,6 +67,7 @@
 | `subRhythm` | 11 | `timbre` | 22 |
 | | | `dropLeadIn` | 23 |
 | | | `harmonyColor` | 24 |
+| | | `introOrder` | 25 |
 
 2bar の関係には `REL = { repeat: 1, variant: 2 }` を、ドラムのパートには `PART_TAG = { kick: 1, snare: 2, hat: 3, ghost: 4 }` を使います。
 
@@ -86,6 +87,7 @@
 | 間引き | `hash(section, TAG.thin, PART_TAG[パート])` |
 | レイアウト | `hash(cycle, TAG.layout)` |
 | ドロップの入り方 | `hash(cycle, TAG.dropLeadIn)` |
+| イントロの入り順 | `hash(cycle, TAG.introOrder)` |
 | 主進行の選択 | `hash(cycle, TAG.progression)` |
 | 転換進行の選択 | `hash(phrase, TAG.progression)` |
 | 色付け | 主進行は `hash(cycle, TAG.harmonyColor)`、転換進行は `hash(phrase, TAG.harmonyColor)` |
