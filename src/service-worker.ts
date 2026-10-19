@@ -36,8 +36,22 @@ const precached = new Set(PRECACHE.map((path) => new URL(path, scope.location.hr
 scope.addEventListener('install', (event) => {
   // Past the HTTP cache, which could hand over an index.html older than the scripts it names.
   const requests = [...precached].map((url) => new Request(url, { cache: 'reload' }));
-  event.waitUntil(caches.open(FILES).then((cache) => cache.addAll(requests)));
+  event.waitUntil(Promise.all([caches.open(FILES).then((cache) => cache.addAll(requests)), keepConfigFile()]));
 });
+
+/**
+ * The page that installs this worker fetched the config file before any worker was there to keep it, so it is
+ * fetched again here: otherwise a device that opened the page once would start offline from the code's defaults.
+ */
+async function keepConfigFile(): Promise<void> {
+  try {
+    // JSON only, as the page asks: a server that answers a missing file with index.html must not have that kept.
+    const response = await fetch(new Request(CONFIG_URL, { cache: 'no-cache', headers: { Accept: 'application/json' } }));
+    await (await caches.open(CONFIG)).put(CONFIG_URL, response);
+  } catch {
+    // Kept on the next opening instead; the files must not fail to install over the config file.
+  }
+}
 
 // No skipWaiting and no clients.claim: a new version waits until every tab of the old one has closed, so that no
 // piece changes version mid-play, and no page runs scripts of one version with the files of another.

@@ -33,10 +33,8 @@ test('starts offline from the config file last read online', async ({ page, cont
   // Only Chromium lets context.route see the requests a service worker sends.
   test.skip(browserName !== 'chromium', 'the config file can only be served to the service worker in Chromium');
   await context.route('**/config.json', (route) => route.fulfill({ json: { params: { bpm: 160 } } }));
+  // Opened once only: the first opening is not the service worker's yet, so the worker keeps the file as it installs.
   await openAndKeep(page);
-  // The first opening is not the service worker's yet, so the file is kept from the next one.
-  await page.reload();
-  await openPage(page);
   await context.setOffline(true);
   await page.reload();
   await openPage(page);
