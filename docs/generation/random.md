@@ -68,6 +68,7 @@
 | | | `dropLeadIn` | 23 |
 | | | `harmonyColor` | 24 |
 | | | `introOrder` | 25 |
+| | | `rideStyle` | 26 |
 
 2bar の関係には `REL = { repeat: 1, variant: 2 }` を、ドラムのパートには `PART_TAG = { kick: 1, snare: 2, hat: 3, ghost: 4 }` を使います。
 
@@ -93,6 +94,7 @@
 | 色付け | 主進行は `hash(cycle, TAG.harmonyColor)`、転換進行は `hash(phrase, TAG.harmonyColor)` |
 | 移調 | `hash(cycle, TAG.modulation)` |
 | 音色 | `hash(cycle, TAG.timbre)` |
+| ライドの型 | `hash(cycle, TAG.rideStyle)` |
 | 音程のあるパートの型 | A 系は `hash(cycle, TAG.xxxStyle)`、B は `hash(phrase, TAG.xxxStyle)` |
 | 音程のあるパートのフレーズ（リズムと音高） | A 系は `hash(cycle, TAG.xxxRhythm / xxxPitch, REL[2bar の関係])`、B は `hash(section, …)` |
 

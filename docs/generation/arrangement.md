@@ -39,12 +39,15 @@
 | スネア | ○（入り順に従う） | ○ | ○ | ×（最後のフィルだけ鳴らす） |
 | ハイハット | ○（入り順に従う） | ○ | ○ | ○ |
 | ゴースト | ○（入り順に従う） | ○ | ○ | × |
+| クラッシュ | ○（最後の8bar の頭） | ○（ブレイクダウンの後のビルドの頭） | ○（ドロップの頭と、延長した2つ目の32bar の頭） | × |
+| ライド | × | × | ○（ドロップ2だけ） | × |
 | サブベース | ○（入り順に従う） | × | ○ | × |
 | リースベース | × | × | ○ | × |
 | スタブ | × | ○ | ○ | ○ |
 | パッド | ○ | ○ | ○ | ○ |
 
 - リースベースはドロップだけに置き、ドロップの「顔」にする。リースベースが聞こえたらドロップだと分かるようにするため
+- クラッシュとライドの位置は [ドラム](./drums.md#シンバル) に書く。ライドはドロップの役割（`drop: 'second'`）で決まるので、`plays` がシーンの表とは別に判定する
 - ビルドではサブベースとリースベースを抜き、低域を空ける。ドロップの頭でサブベースが戻ったときの落差を最大にするため
 - ブレイクダウンでは、ハイハットとスタブ・パッドで進行を聴かせる。ドロップと同じ主進行を和声だけで聴かせておくと、ドロップ2で主題が戻ったと感じやすくなる
 
@@ -186,7 +189,7 @@ type IntroOpenings = { 2: readonly [IntroLineup]; 3: readonly [IntroLineup, Intr
 | `drawIntroOrder(previous, cycleSeed, m32)` | `hash(cycleSeed, TAG.introOrder)` から「替えるかの判定」「入り順」の2つを引く。最初のサイクルでも、替えないときも2つとも引く |
 | `cycleScenes(layout)` | サイクルの8bar ごとの `SceneRole` の列。イントロには `introOrder`、イントロの後のビルドには `leadIns.first`、ブレイクダウンの後のビルドには `leadIns.second` |
 | `sceneEnergy(role, sectionIn32, depth, tuning)` | シーンのエネルギー（`structure/energy.ts`） |
-| `plays(role, voice)`・`playsHit(role, hit)` | シーンで鳴らすパート。イントロでは `introLineup(role)` の編成に絞り、8分の位置だけのハイハットでは奇数ステップを鳴らさない（`structure/scene-parts.ts`） |
+| `plays(role, voice)`・`playsHit(role, hit)` | シーンで鳴らすパート。ライドはドロップ2だけ。イントロでは `introLineup(role)` の編成に絞り、8分の位置だけのハイハットでは奇数ステップを鳴らさない（`structure/scene-parts.ts`） |
 | `introLineup(role)` | イントロの8bar の編成。最後の8bar は `FULL_INTRO`、それより前は `INTRO_OPENINGS[introOrder][sections][index]` |
 | `announcesSnare(place)` | 8bar の終わりのフィルの層のスネアを先に鳴らすか。ブレイクダウンの最後の8bar と、次の8bar でスネアが入るイントロの8bar |
 | `changesScene(ctx)` | 8bar の終わりで、次のシーンが今と異なる |
