@@ -73,6 +73,9 @@ export function createSequencer(
           case 'drums':
             instruments.drum(event.part, time, event.velocity);
             break;
+          case 'cymbal':
+            instruments.cymbal(event.part, time, event.velocity);
+            break;
           case 'sub':
             instruments.sub(event.pitch, time, seconds, event.velocity);
             break;

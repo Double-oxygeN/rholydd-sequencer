@@ -36,6 +36,13 @@
       "pan": -0.15,
       "send": 0.1
     },
+    "cymbal": {
+      "level": 0,
+      "muted": false,
+      "soloed": false,
+      "pan": -0.25,
+      "send": 0.15
+    },
     "sub": {
       "level": 0,
       "muted": false,
@@ -161,6 +168,7 @@
       "snare": -10,
       "hat": -14,
       "ghost": -8,
+      "cymbal": -18,
       "sub": -6,
       "reese": -10,
       "stab": -13,

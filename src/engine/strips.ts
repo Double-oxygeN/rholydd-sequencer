@@ -51,7 +51,8 @@ export interface Buses {
   readonly reverb: Tone.InputNode;
 }
 
-const DRUM_CHANNELS: readonly ChannelId[] = PARTS;
+// The cymbals are glued to the drums by the same compressor.
+const DRUM_CHANNELS: readonly ChannelId[] = [...PARTS, 'cymbal'];
 
 export function createStrips(mixer: MixerSettings, trimDb: SoundTuning['trimDb'], buses: Buses): Record<ChannelId, Strip> {
   const audible = audibleChannels(mixer);

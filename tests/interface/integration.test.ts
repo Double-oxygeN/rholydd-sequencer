@@ -1,13 +1,16 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_CONFIG, decodeConfig, initialParams, parseConfigText } from '../../src/params/config.ts';
+import { DEFAULT_CONFIG, decodeConfig, initialParams, parseConfigText, type Config } from '../../src/params/config.ts';
+import { CHANNEL_IDS } from '../../src/params/mixer.ts';
 import { loadConfig } from '../../src/params/load-config.ts';
 import { seedFromQuery, shareUrl } from '../../src/params/query.ts';
 import { toSeed } from '../../src/random/rng.ts';
+import { DEFAULT_KEY } from '../../src/structure/key.ts';
 import { SILENCE, SILENT_SAMPLE, silentWav } from '../../src/ui/media-session.ts';
 import { APP_NAME } from '../../src/app-name.ts';
 import { PAGE, pageMetaTags } from '../../tools/page-meta.ts';
 import { manifest, precache } from '../../tools/web-app.ts';
+import { DEFAULT_LIVE, run } from '../support/helpers.ts';
 
 describe('integration: initial seed', () => {
   it('reads a valid seed from the query string and nothing else', () => {
@@ -86,6 +89,33 @@ describe('integration: config file', () => {
     expect(decodeConfig({})).toEqual({ value: DEFAULT_CONFIG, warnings: [] });
   });
 
+  // Written for a version without them, as a config file kept from before they came would be.
+  const LATER_KEYS: readonly (readonly string[])[] = [
+    ['mixer', 'cymbal'],
+    ['sound', 'trimDb', 'cymbal'],
+    ['generation', 'cymbal'],
+  ];
+
+  it('reads a file written before the cymbals without a word, keeping their defaults', () => {
+    const older = structuredClone(example) as Record<string, unknown>;
+    for (const path of LATER_KEYS) {
+      const parent = path.slice(0, -1).reduce<Record<string, unknown>>((o, key) => o[key] as Record<string, unknown>, older);
+      delete parent[path.at(-1)!];
+    }
+    expect(decodeConfig(older)).toEqual({ value: DEFAULT_CONFIG, warnings: [] });
+  });
+
+  it('generates the same events whatever the file sets for the mixer and the sound', () => {
+    const everyChannel = (settings: object) => Object.fromEntries(CHANNEL_IDS.map((id) => [id, settings]));
+    const loud = decodeConfig({ mixer: everyChannel({ level: 6, muted: true }), sound: { trimDb: { cymbal: -3, kick: 0 } } });
+    const soloed = decodeConfig({ mixer: { ...everyChannel({ level: -40 }), cymbal: { soloed: true, pan: 1, send: 1 } } });
+    expect(loud.value.generation).toEqual(DEFAULT_CONFIG.generation);
+    const events = (config: Config) =>
+      run(42, 512, () => DEFAULT_LIVE, DEFAULT_KEY, config.generation).map(({ heard }) => heard);
+    expect(events(loud.value)).toEqual(events(DEFAULT_CONFIG));
+    expect(events(soloed.value)).toEqual(events(DEFAULT_CONFIG));
+  });
+
   it('writes every key with its default in the example file', () => {
     expect(decodeConfig(example)).toEqual({ value: DEFAULT_CONFIG, warnings: [] });
     expect(leaves(example)).toHaveLength(leaves(DEFAULT_CONFIG).length);
@@ -146,6 +176,10 @@ describe('integration: config file', () => {
       { generation: { lines: { velocity: { sub: 0 } } } },
       { sound: { trimDb: { kick: 1 } } },
       { sound: { fx: { lowpass: { openHz: 30000 } } } },
+      { mixer: { cymbal: { pan: -1.5 } } },
+      { sound: { trimDb: { cymbal: 0.5 } } },
+      { generation: { cymbal: { crash: { drop: 1.1 } } } },
+      { generation: { cymbal: { ride: { soft: 0 } } } },
     ]) {
       const { value, warnings } = decodeConfig(raw);
       expect(value).toEqual(DEFAULT_CONFIG);

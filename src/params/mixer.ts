@@ -56,6 +56,8 @@ export interface MixerSettings {
   readonly snare: SendingChannel;
   readonly hat: SendingChannel;
   readonly ghost: SendingChannel;
+  /** Crashes and the ride. */
+  readonly cymbal: SendingChannel;
   readonly sub: Channel;
   readonly reese: SendingChannel;
   readonly stab: SendingChannel;
@@ -74,6 +76,7 @@ export const CHANNEL_IDS: readonly ChannelId[] = [
   'snare',
   'hat',
   'ghost',
+  'cymbal',
   'sub',
   'reese',
   'stab',
@@ -120,6 +123,8 @@ export const DEFAULT_MIXER: MixerSettings = {
   snare: wet(0, 0.15),
   hat: wet(0.2, 0.1),
   ghost: wet(-0.15, 0.1),
+  // Across from the hats, so that a ride over them stays apart.
+  cymbal: wet(-0.25, 0.15),
   sub: dry(),
   reese: wet(0, 0),
   stab: wet(-0.2, 0.35),

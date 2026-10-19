@@ -1,5 +1,5 @@
 import * as Tone from 'tone';
-import { PARTS, type Part, type Pitch } from '../generators/types.ts';
+import { CYMBALS, PARTS, type Cymbal, type Part, type Pitch } from '../generators/types.ts';
 import type { CycleTimbre, PadTimbre, ReeseTimbre, StabTimbre } from '../structure/timbre.ts';
 import {
   CHORD_POLYPHONY,
@@ -18,23 +18,27 @@ export const ROOT_NOTE = 'C3';
 // A mono synth may click or drop the next note when a release and an attack land on the same instant.
 const LEGATO_GAP_SECONDS = 0.005;
 
-export type DrumBuffers = Readonly<Record<Part, Tone.ToneAudioBuffer>>;
+/** Everything played from a sample of the kit: the drums and the cymbals. */
+export type Sample = Part | Cymbal;
+const SAMPLES: readonly Sample[] = [...PARTS, ...CYMBALS];
+
+export type DrumBuffers = Readonly<Record<Sample, Tone.ToneAudioBuffer>>;
 
 export function loadDrumBuffers(drumSamplesUrl: string): DrumBuffers {
   return Object.fromEntries(
-    PARTS.map((part) => [part, new Tone.ToneAudioBuffer(`${drumSamplesUrl}${part}.wav`)]),
-  ) as Record<Part, Tone.ToneAudioBuffer>;
+    SAMPLES.map((sample) => [sample, new Tone.ToneAudioBuffer(`${drumSamplesUrl}${sample}.wav`)]),
+  ) as Record<Sample, Tone.ToneAudioBuffer>;
 }
 
-export type DrumSamplers = Readonly<Record<Part, Tone.Sampler>>;
+export type DrumSamplers = Readonly<Record<Sample, Tone.Sampler>>;
 
-export function createSamplers(buffers: DrumBuffers, to: Readonly<Record<Part, Tone.InputNode>>): DrumSamplers {
+export function createSamplers(buffers: DrumBuffers, to: Readonly<Record<Sample, Tone.InputNode>>): DrumSamplers {
   return Object.fromEntries(
-    PARTS.map((part) => [
-      part,
-      new Tone.Sampler({ urls: { [ROOT_NOTE]: buffers[part] }, release: 0.02 }).connect(to[part]),
+    SAMPLES.map((sample) => [
+      sample,
+      new Tone.Sampler({ urls: { [ROOT_NOTE]: buffers[sample] }, release: 0.02 }).connect(to[sample]),
     ]),
-  ) as Record<Part, Tone.Sampler>;
+  ) as Record<Sample, Tone.Sampler>;
 }
 
 export type ChordPart = 'stab' | 'pad';
