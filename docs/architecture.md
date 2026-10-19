@@ -69,6 +69,7 @@ tools/simulate ──▶ tools/simulation ──▶ generators/ensemble
 | `src/params/reset.ts` | メニューの既定値に戻すボタンが戻す値と、既定値との一致 |
 | `src/params/config.ts`・`decode.ts`・`load-config.ts` | 設定ファイルのスキーマ、検証の部品、読み込み |
 | `src/params/query.ts` | クエリ文字列のシードと共有する URL |
+| `src/ui/messages.ts` | 画面の文言の表（日本語と英語）と、ブラウザの言語から画面の言語を選ぶ `pickLanguage` |
 | `src/ui/*` | 画面の部品（[画面](./interface/screen.md)） |
 | `tools/simulate.ts`・`tools/simulation/*` | 音声なしの長時間の生成と統計 |
 | `tools/make-samples.ts` | ドラムサンプルの合成 |
