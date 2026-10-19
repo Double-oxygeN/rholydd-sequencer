@@ -1,5 +1,7 @@
 # Rholydd Sequencer
 
+![Rholydd Sequencer のアイコン（シーケンサーのマスで描いた鳥）と、名前と「Endless generative drum & bass」の文字](public/icons/share.png)
+
 ## 概要
 
 Rholydd Sequencer（発音：/ˈr̥ɔlɨð ˈsiːkwənsə/）は、パラメーターを設定するだけでドラムンベースのビートをランダムに展開しながら永久に鳴らし続ける、ブラウザ向けの生成シーケンサーです。完全なランダムではなく、2bar・8bar・32bar・サイクルのそれぞれの単位でまとまりのある展開になるよう変化率を制御します。
