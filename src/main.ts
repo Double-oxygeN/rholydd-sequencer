@@ -145,6 +145,16 @@ async function boot(root: HTMLElement, messages: Messages) {
   controls.onStop(() => void run('stop'));
 }
 
+// The build alone, so that a kept old version never gets in the way of checking edited code on the dev server.
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch((error: unknown) => {
+      // Refused where storage is off, as in some private windows; the page still plays online.
+      console.warn(error);
+    });
+  });
+}
+
 const root = document.getElementById('app');
 if (root !== null) {
   // Read here alone, as location is: the language is the browser's to tell, and the page offers no switch.

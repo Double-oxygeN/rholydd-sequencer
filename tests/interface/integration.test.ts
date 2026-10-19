@@ -6,7 +6,8 @@ import { seedFromQuery, shareUrl } from '../../src/params/query.ts';
 import { toSeed } from '../../src/random/rng.ts';
 import { SILENCE, SILENT_SAMPLE, silentWav } from '../../src/ui/media-session.ts';
 import { APP_NAME } from '../../src/app-name.ts';
-import { pageMetaTags } from '../../tools/page-meta.ts';
+import { PAGE, pageMetaTags } from '../../tools/page-meta.ts';
+import { manifest, precache } from '../../tools/web-app.ts';
 
 describe('integration: initial seed', () => {
   it('reads a valid seed from the query string and nothing else', () => {
@@ -231,6 +232,48 @@ describe('integration: link previews', () => {
     expect(themes).toEqual([
       { content: light, media: '(prefers-color-scheme: light)' },
       { content: dark, media: '(prefers-color-scheme: dark)' },
+    ]);
+  });
+});
+
+describe('integration: installing and offline', () => {
+  const files = [
+    { path: 'index.html', content: '<html>' },
+    { path: 'assets/index-abc.js', content: 'code' },
+    { path: 'samples/drums/kick.wav', content: new Uint8Array([1, 2, 3]) },
+    { path: 'config.json', content: '{}' },
+    { path: 'sw.js', content: 'worker' },
+  ];
+
+  it('keeps every file but the config file and the service worker, the page as ./ for any query to match', () => {
+    expect(precache(files).paths).toEqual(['assets/index-abc.js', './', 'samples/drums/kick.wav']);
+  });
+
+  it('makes a new version whenever a file changes, even one that keeps its name', () => {
+    const { version } = precache(files);
+    expect(precache(files.toReversed()).version).toBe(version);
+    const resampled = files.map((file) => (file.path.endsWith('.wav') ? { ...file, content: new Uint8Array([9]) } : file));
+    expect(precache(resampled).version).not.toBe(version);
+    // The config file is read afresh anyway, so a local one never makes a version of its own.
+    const configured = files.map((file) => (file.path === 'config.json' ? { ...file, content: '{"params":{}}' } : file));
+    expect(precache(configured).version).toBe(version);
+  });
+
+  it('starts the installed page at the base path with no seed, in its own window', () => {
+    const app = manifest('/somewhere/');
+    expect(app).toMatchObject({
+      name: PAGE.name,
+      description: PAGE.description,
+      start_url: '/somewhere/',
+      scope: '/somewhere/',
+      display: 'standalone',
+      theme_color: PAGE.colors.light,
+      background_color: PAGE.colors.light,
+    });
+    expect(app.icons).toEqual([
+      { src: '/somewhere/icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+      { src: '/somewhere/icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+      { src: '/somewhere/icons/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
     ]);
   });
 });

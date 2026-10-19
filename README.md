@@ -16,6 +16,7 @@ Rholydd Sequencer（発音：/ˈr̥ɔlɨð ˈsiːkwənsə/）は、パラメー�
 - **DnB らしさの維持**: ステップごとの重み表とパートごとの変わりやすさにより、ランダムでもジャンルの文法を崩しません。
 - **メディア操作**: メディアキーや OS のロック画面・通知から、再生・一時停止・停止できます。
 - **英語の画面**: ブラウザの言語が日本語でなければ、画面を英語で表示します。
+- **ホーム画面への追加とオフライン**: ブラウザのメニューからホーム画面やアプリの一覧に追加できます。一度開いた端末なら、オフラインでも開いて再生できます。新しい版は、ページのタブをすべて閉じて開き直したときから使われます。
 - **再現性**: シードを保存すれば、同じ展開をもう一度聴くことができます。`?seed=12345` のように URL で初期シードを指定でき、右上の共有ボタンから、聴いている展開のシードを含めた URL をコピーできます。
 
 ## 対応環境
@@ -27,7 +28,7 @@ Rholydd Sequencer（発音：/ˈr̥ɔlɨð ˈsiːkwənsə/）は、パラメー�
 | Safari | macOS・iOS の最新版 |
 | Chrome | Android の最新版 |
 
-Web Audio API と AudioWorklet が必要です。
+Web Audio API と AudioWorklet が必要です。オフラインで開くには、Service Worker が必要です（プライベートウィンドウなど、使えない環境ではオンラインでだけ開けます）。
 
 **ブラウザごとの制約**
 
@@ -58,6 +59,7 @@ rholydd-sequencer/
 │   └── icons/                 # アイコンの元の SVG と、そこから tools/make-icons.ts で描いた PNG
 ├── src/
 │   ├── main.ts                # 画面の組み立てと再生の操作
+│   ├── service-worker.ts      # オフラインで開くためのサービスワーカー
 │   ├── app-name.ts            # アプリの名前
 │   ├── units.ts               # brand 型の基盤、0〜1 の値
 │   ├── random/rng.ts          # シード付きの乱数、シードの派生
@@ -71,6 +73,7 @@ rholydd-sequencer/
 │   ├── make-samples.ts        # ドラムサンプルの合成
 │   ├── make-icons.ts          # アイコンと共有用の画像を PNG に描く
 │   ├── page-meta.ts           # 共有したリンクのプレビューのメタデータ
+│   ├── web-app.ts             # マニフェストとサービスワーカーを作る
 │   └── base-path.ts           # 配布する base path
 ├── tests/                     # 単体テスト（generation・playback・interface・quality）
 ├── e2e/                       # E2E テスト（Playwright）

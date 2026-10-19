@@ -1,9 +1,9 @@
 # 連携（設定ファイル・URL・共有・メディア操作・配布）
 
-ページの外とのつながりをまとめます。設定ファイル、クエリ文字列のシード、共有のダイアログ、OS のメディア操作、ドラムサンプル、アイコンと画像、配布と CI/CD です。
+ページの外とのつながりをまとめます。設定ファイル、クエリ文字列のシード、共有のダイアログ、OS のメディア操作、ドラムサンプル、アイコンと画像、配布、ホーム画面への追加とオフライン、CI/CD です。
 
-関係するコード: `src/params/config.ts`、`src/params/decode.ts`、`src/params/load-config.ts`、`src/params/query.ts`、`src/ui/share.ts`、`src/ui/media-session.ts`、`src/ui/playback.ts`、`src/app-name.ts`、`config.example.json`、`tools/make-samples.ts`、`tools/make-icons.ts`、`tools/page-meta.ts`、`public/icons/*`、`index.html`、`tools/base-path.ts`、`vite.config.ts`、`.github/workflows/ci.yml`
-関係するテスト: `tests/interface/integration.test.ts`、`tests/interface/screen.test.ts`（再生の命令）、`e2e/startup.spec.ts`、`e2e/share.spec.ts`、`e2e/link-preview.spec.ts`、`e2e/media-session.spec.ts`
+関係するコード: `src/params/config.ts`、`src/params/decode.ts`、`src/params/load-config.ts`、`src/params/query.ts`、`src/ui/share.ts`、`src/ui/media-session.ts`、`src/ui/playback.ts`、`src/app-name.ts`、`config.example.json`、`tools/make-samples.ts`、`tools/make-icons.ts`、`tools/page-meta.ts`、`tools/web-app.ts`、`src/service-worker.ts`、`public/icons/*`、`index.html`、`tools/base-path.ts`、`vite.config.ts`、`.github/workflows/ci.yml`
+関係するテスト: `tests/interface/integration.test.ts`、`tests/interface/screen.test.ts`（再生の命令）、`e2e/startup.spec.ts`、`e2e/share.spec.ts`、`e2e/link-preview.spec.ts`、`e2e/media-session.spec.ts`、`e2e/offline.spec.ts`
 
 ## 振る舞い
 
@@ -161,6 +161,36 @@ iOS では、画面をロックしたときと、ほかのアプリやホーム�
 | CD | main の更新で、CI が通ったら配布する |
 | リリース | `v` で始まるタグを main に付け、GitHub Releases に利用者目線のリリースノートを手で書く（[リリースの確認](../quality/release-checklist.md)） |
 
+### ホーム画面への追加とオフライン
+
+ホーム画面やアプリの一覧に追加して開けます。一度開いた端末なら、オフラインでも開いて再生できます。
+
+**マニフェスト**（`manifest.webmanifest`）
+
+| 項目 | 値 |
+| --- | --- |
+| `name`・`short_name` | アプリの名前 |
+| `description` | `package.json` の `description` |
+| `start_url`・`scope` | base path（`/rholydd-sequencer/`） |
+| `display` | `standalone` |
+| `icons` | `icon-192.png`・`icon-512.png` と、マスカブルの `icon-maskable-512.png` |
+| `theme_color`・`background_color` | 明るい配色の `--bg` |
+
+- インストールを促すボタンや案内は画面に置かない。ブラウザのメニューから追加する
+- ホーム画面から開いたときは、`?seed=` のない URL で開く（`start_url` にクエリを持たせない）
+
+**サービスワーカーの応答**（`sw.js`）
+
+| 要求 | 応答 |
+| --- | --- |
+| ページ（`?seed=` のついた URL を含む）・スクリプト・スタイル・AudioWorklet・ドラムサンプル・アイコン・共有用の画像・マニフェスト | 事前に保存した版。ネットワークには行かない |
+| `config.json` | ネットワークを先に試し、届いた応答（ないときの 404 を含む）を保存する。つながらなければ保存した応答を、それもなければ 404 を返す |
+| それ以外 | ネットワークに任せる |
+
+- オフラインで開いても、設定ファイルを読めなかった警告を出さない。配布先に設定ファイルがあれば、最後に読めたものを使う
+- 新しい版を配布した後に開くと、サービスワーカーが裏で新しい版を保存する。保存した新しい版は、そのページのタブをすべて閉じた後に開いたときから使う。再生中に版が切り替わったり、ページが読み直されたりはしない。「新しい版があります」のような表示は置かない
+- 登録は、ビルドしたページだけで行う。開発サーバーでは登録しない
+
 ## 実装
 
 ### 設定ファイル
@@ -191,7 +221,7 @@ async function loadConfig(url: string): Promise<Decoded<Config>>;
 | JSON として読めない | 既定値と警告 |
 | 読めた | `decodeConfig` の結果 |
 
-`fetch` には `Accept: application/json` と `cache: 'no-store'` を付けます。
+`fetch` には `Accept: application/json` と `cache: 'no-cache'` を付けます。
 
 ### 共有とシード
 
@@ -236,6 +266,17 @@ function interruptionCommand(audio: AudioState, state: PlaybackState): PlaybackC
 
 小さな Vite のプラグイン（`pageMeta`）が、`transformIndexHtml` でビルドと開発サーバーの `index.html` にメタデータを書き込みます。値は `package.json` の `description`・`homepage`、`src/app-name.ts` の名前、`tokens.css` の `--bg` から作ります。`tests/interface/integration.test.ts` が、`theme-color` と `tokens.css` の一致と、各値の出どころを確かめます。
 
+### マニフェストとサービスワーカー（`tools/web-app.ts`、`src/service-worker.ts`）
+
+Vite のプラグイン（`webApp`）が、ビルドのときにマニフェストとサービスワーカーを作ります。
+
+- マニフェストは `manifest(base)` が、`package.json`・`src/app-name.ts`・`tokens.css` の値（`tools/page-meta.ts` の `PAGE`）と、Vite が解決した base から作る。`<link rel="manifest">` は `transformIndexHtml` で `index.html` に入れる。開発サーバーも同じマニフェストを返す
+- 保存する一覧は、`generateBundle` で出力のファイルと `public/` のファイルから `precache(files)` が作る。`config.json` とサービスワーカー自身は除き、`index.html` は `./` として保存する。キャッシュの名前に、全ファイルの中身のハッシュを入れる。名前の変わらないサンプルやアイコンを作り直しても、新しい版になるようにするため
+- サービスワーカーは `src/service-worker.ts` に書き、プラグインが Vite の `transformWithOxc` で型を外し、一覧とハッシュを前に置いて `sw.js` にする。何も import しない。型の検査は画面と同じ DOM の型で行い、使うサービスワーカーの型だけを自前で宣言する
+- `install` で一覧を HTTP のキャッシュを通さず（`cache: 'reload'`）保存し、`activate` で古い名前のキャッシュを消す。設定ファイルは版によらない別のキャッシュに置き、版が替わっても最後に読めたものを残す。`skipWaiting` と `clients.claim` は使わない
+- ページへの移動は、クエリ文字列を除いた URL がページのものなら保存したページを返す
+- `main.ts` が、`import.meta.env.PROD` のときだけ、`load` の後に `${BASE_URL}sw.js` を登録する。登録に失敗しても（ストレージを使えないプライベートウィンドウなど）、オンラインではそのまま動く
+
 ### base path とビルド
 
 `tools/base-path.ts` が `package.json` の `name` から `/〈name〉/` を作り、`vite.config.ts` が `build` と `preview`（`isPreview`）の `base` にします。開発サーバー（`npm run dev`）はルートで開きます。サンプル・設定ファイル・共有する URL は `import.meta.env.BASE_URL` を基準にします。別の場所に配布するときは `npm run build -- --base /path/` で上書きできます。
@@ -262,7 +303,7 @@ pull_request（作成・更新）・push（main だけ）
 - **範囲外の値を丸めて受け入れない**: 書き間違いに気づけるようにするため（パラメーターの `clampLevel` などは使わない）
 - **関係の崩れた組をまとめて既定値に戻す**: 片方だけ戻すと、書いた人の意図とも既定値とも違う組み合わせになるため
 - **トリムと補正を 0 dB 以下に限る**: 既定の釣り合いより大きくして、クリップしない保証を崩しにくくするため。とはいえ、クリップしないことと試聴の確認を保証するのは既定値だけで、設定ファイルで変えた値の音は保証しない
-- **`Accept: application/json` を付ける**: Vite の開発サーバーは、`Accept` に `*/*` か `text/html` を含むリクエストで、ないファイルの代わりに `index.html` を返す（SPA のフォールバック）ため。Content-Type も確かめるのは、配布先のサーバーが同じことをしても「ファイルなし」と見なすため。`cache: 'no-store'` は、値を書き換えて開き直したときに古いファイルを使わないようにするため
+- **`Accept: application/json` を付ける**: Vite の開発サーバーは、`Accept` に `*/*` か `text/html` を含むリクエストで、ないファイルの代わりに `index.html` を返す（SPA のフォールバック）ため。Content-Type も確かめるのは、配布先のサーバーが同じことをしても「ファイルなし」と見なすため。`cache: 'no-cache'` は、開くたびにサーバーに確かめ直し、値を書き換えて開き直したときに古いファイルを使わないようにするため。`no-store` でも同じだが、Firefox（Playwright の Firefox で確かめた）ではオフラインのとき要求がサービスワーカーを通らずに失敗し、設定ファイルを読めない警告が出た
 - **設定ファイルを配布しない**: 手元で試した設定ファイルがコミットされて配布されないよう、`public/config.json` を `.gitignore` に入れ、CI でも `dist/config.json` がないことを確かめる
 - **共有する URL に言語を含めない**: 共有するのはシードだけ、という決まりを保ち、受け取った人が自分の言語で読めるようにするため
 - **共有するのはシードだけにする**: クエリ文字列で指定できるのはシードだけで、パラメーターや設定ファイルの値が違えば同じシードでも展開は変わる。再生中は欄ではなく鳴っている展開のシードを使うのは、欄は再生中にも書き換えられ、次に停止から再生したときに効くので、欄の値だと聴いている展開と違う URL になるため
@@ -286,6 +327,11 @@ pull_request（作成・更新）・push（main だけ）
 - **`og:url` と `og:image` を `homepage` から作る**: 絶対 URL が要るため。base path を `name` から作るのと同じく、配布先を変えるときに `package.json` だけを直せば済むようにする。`--base` で別の場所に配るときは、プレビューの URL が配布先を指さない
 - **プレビューの説明を `description` と共通にする**: 説明を二重に持たないため
 - **シードのついた URL で別のプレビューにしない**: 静的な配布では、クエリ文字列でメタデータを変えられないため
+- **サービスワーカーを自前で書く**: 保存するのはビルドの出力とサンプルとアイコンだけで、Workbox の機能（ルーティングの規則、期限つきのキャッシュなど）を使わない。依存を増やさず、保存の規則を表に書ける程度に保つため
+- **新しい版を、タブをすべて閉じるまで使わない**: 聴いている途中で版を切り替えたり、読み直したりしないため。`skipWaiting` で切り替えると、読み込み済みのスクリプトと、保存した版の残りのファイルが食い違う。その代わり、タブを開いたままにしている間は古い版のまま。知らせる表示は、画面を絞る方針から置かない
+- **`config.json` をネットワーク優先で保存する**: つながっているときは、開くたびに読み直す今の振る舞いを保つため。オフラインで既定値に戻ると、配布先が決めた初期値と違う状態で始まり、読めなかった警告も出てしまう。ないときの 404 も保存するのは、配布先から消えた設定ファイルを、オフラインで使い続けないため
+- **インストールの案内を置かない**: 初期画面に置くものを増やさないため（[画面](./screen.md#決定理由) の「画面を絞る」）
+- **開発サーバーでは登録しない**: 保存した古い版が、書き換えたコードの確認を邪魔しないため
 - **base path を `package.json` の `name` から作る**: GitHub Pages はプロジェクトのリポジトリをその名前の下に配るので、リポジトリ名を変えるときに `package.json` だけを直せば済むようにするため
 - **E2E テストを配布と同じビルドに対して回す**: base path の誤り（サンプルや設定ファイルが読めない、共有する URL がずれる）を配布の前に見つけるため。ビルドを1回にして、確かめたものと配布するものを一致させる
 - **ブランチへのプッシュごとには回さない**: 作業中のプッシュのたびに3つのブラウザの E2E テストを回すと、Actions の時間を消費するわりに得るものが少ないため。レビューに出すプルリクエストと、配布する main で確かめる

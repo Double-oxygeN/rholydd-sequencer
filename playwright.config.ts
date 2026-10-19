@@ -16,6 +16,9 @@ export default defineConfig({
   use: {
     baseURL: `http://localhost:${PORT}${BASE_PATH}`,
     trace: 'retain-on-failure',
+    // A service worker would answer the requests that the tests replace with page.route, differently in each browser.
+    // offline.spec.ts lets it run.
+    serviceWorkers: 'block',
   },
   projects: [
     {

@@ -75,6 +75,7 @@ tools/simulate ──▶ tools/simulation ──▶ generators/ensemble
 | `tools/make-samples.ts` | ドラムサンプルの合成 |
 | `tools/make-icons.ts` | アイコンと共有用の画像の PNG を描く |
 | `tools/page-meta.ts` | 共有したリンクのプレビューのメタデータを `index.html` に書き込む Vite のプラグイン |
+| `tools/web-app.ts`・`src/service-worker.ts` | マニフェストと、オフラインで開くためのサービスワーカーをビルドのときに作る Vite のプラグインと、サービスワーカーの本体 |
 | `tools/base-path.ts` | 配布する base path |
 
 ## 2bar ごとの生成の流れ
