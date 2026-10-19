@@ -16,7 +16,7 @@ const BACKGROUND = '#141416';
  */
 const MASKABLE_SCALE = 0.76;
 /** The shared image says what the page is in English, which more of the people a link reaches can read. */
-const TAGLINE = 'Generative drum & bass that plays on until you stop it';
+const TAGLINE = 'Endless generative drum & bass';
 
 interface Image {
   readonly file: string;
