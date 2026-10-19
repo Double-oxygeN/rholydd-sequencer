@@ -96,6 +96,7 @@ Media Session API で、再生の状態と曲名をブラウザと OS に伝え�
 
 - 操作は画面のボタンと同じ動作にし、どちらから操作しても画面とメディア操作の表示がそろう
 - 曲名はアプリの名前、アーティストの欄に鳴っている展開のシードを出す
+- 再生中と一時停止中は、アートワークとしてアプリのアイコン（`icon-192.png`・`icon-512.png`）を渡す。停止中は曲名と一緒に消す
 - ヘッドホンが抜けたときなど、ブラウザが無音の `audio` 要素を止めたときは一時停止する
 
 ### システムによる中断
@@ -189,10 +190,11 @@ type PlaybackCommand = 'start' | 'pause' | 'resume' | 'stop';
 type MediaAction = 'play' | 'pause' | 'stop';
 function toggleCommand(state: PlaybackState): Exclude<PlaybackCommand, 'stop'>;   // 再生のボタン
 function mediaCommand(action: MediaAction, state: PlaybackState): PlaybackCommand | null;
-function linkMediaSession(onAction: (action: MediaAction) => void): MediaSessionLink;
+function linkMediaSession(messages: Messages, artwork: readonly MediaImage[], onAction: (action: MediaAction) => void): MediaSessionLink;
 ```
 
 - `navigator.mediaSession` がないブラウザでは、何もしない
+- アートワークの URL は `main.ts` が `import.meta.env.BASE_URL` から作って渡す。ページの URL を読むのは `main.ts` だけにするため
 - `show(state, seed)` は `playbackState` と `metadata` を更新する。停止中は `metadata` を消す。`setPositionState` は呼ばない（曲に終わりがないため）
 - 無音の `audio` 要素は、10秒・8bit モノラルの無音の WAV（`silentWav()`）の Blob の URL を `loop` で鳴らし、`hidden` にして文書に置く。要素の `muted` と音量は変えない
 - 再生中は `audio.play()`、一時停止中と停止では、鳴っているときだけ `audio.pause()` を呼ぶ。`play()` が拒否されても、音は Web Audio API から出ているので無視する
@@ -249,6 +251,7 @@ pull_request（作成・更新）・push（main だけ）
 - **再開でも `Tone.start()` を待つ**: システムに止められた AudioContext は、ユーザーの操作でしか起こせない。ロック画面の再生ボタンも操作として扱われるので、ロック中でも再開できる
 - **ロック画面から再生した後に Safari に戻っても、AudioContext を作り直さない**: 1.0.0 では、戻った後に音が表示や操作より遅れて鳴り、Safari を閉じるまで続くことがあった（[Issue #1](https://github.com/Double-oxygeN/rholydd-sequencer/issues/1)）。遅れている間も `outputLatency`・`baseLatency`・`getOutputTimestamp` と `currentTime` の差は変わらず、ページから遅れを知る手段はなかった。描画の予約を溜めないようにし、鳴り終えたオシレーターと音源が溜まらないようにした後は、iOS の実機で再現しなくなった。原因は確かめていないが、音の経路をすべて組み直す大きな変更は要らなくなった
 - **`navigator.audioSession` を使わない**: 消音のスイッチで音が止まらないことを実機で確かめたため。メディア操作のための無音の `audio` 要素が鳴っていることで、音の扱いがすでに再生用になっていると考えられる
+- **アートワークに 192 と 512 の2つを渡す**: OS が、表示する大きさに近いものを選べるようにするため。ホーム画面のアイコンと同じファイルを使い、画像を増やさない
 - **曲名に加えてシードを出す**: ロック画面からでも、気に入った展開のシードを控えられるようにするため
 - **ドラムサンプルを自作の合成音にする**: 外部のサンプルを使わないので、ライセンスの条件が増えないため。アイコンと画像も同じ理由で自作にする
 - **アイコンの絵柄をマスで描いたニシブッポウソウにする**: 名前の由来と、シーケンサーのマス目の両方を表すため。鳥を三角形や曲線で描いた案は、16px で細部がつぶれるか、鳥に見えなかった

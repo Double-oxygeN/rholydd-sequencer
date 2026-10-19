@@ -58,7 +58,11 @@ const NO_LINK: MediaSessionLink = { show() {} };
  * to pages playing an audio element, never to Web Audio alone, so a silent element loops while the piece plays. The
  * sound itself stays on Web Audio: sending it through the element would change its path and its latency.
  */
-export function linkMediaSession(messages: Messages, onAction: (action: MediaAction) => void): MediaSessionLink {
+export function linkMediaSession(
+  messages: Messages,
+  artwork: readonly MediaImage[],
+  onAction: (action: MediaAction) => void,
+): MediaSessionLink {
   if (!('mediaSession' in navigator)) return NO_LINK;
   const session = navigator.mediaSession;
   for (const action of MEDIA_ACTIONS) {
@@ -82,7 +86,10 @@ export function linkMediaSession(messages: Messages, onAction: (action: MediaAct
   return {
     show(state, seed) {
       session.playbackState = MEDIA_STATE[state];
-      session.metadata = state === 'stopped' ? null : new MediaMetadata({ title: APP_NAME, artist: messages.mediaArtist(seed) });
+      session.metadata =
+        state === 'stopped'
+          ? null
+          : new MediaMetadata({ title: APP_NAME, artist: messages.mediaArtist(seed), artwork: [...artwork] });
       held = state === 'playing';
       if (held) {
         audio.play().catch((error: unknown) => {

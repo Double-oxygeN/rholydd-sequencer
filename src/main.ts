@@ -24,6 +24,12 @@ import './ui/styles/index.css';
 
 const SAMPLE_BASE_URL = `${import.meta.env.BASE_URL}samples/drums/`;
 const CONFIG_URL = `${import.meta.env.BASE_URL}config.json`;
+// Two sizes, the home screen icon's own files, so that the OS picks the one nearer what it shows.
+const ARTWORK: readonly MediaImage[] = [192, 512].map((size) => ({
+  src: `${import.meta.env.BASE_URL}icons/icon-${size}.png`,
+  sizes: `${size}x${size}`,
+  type: 'image/png',
+}));
 
 async function boot(root: HTMLElement, messages: Messages) {
   releaseEndedOscillators();
@@ -86,7 +92,7 @@ async function boot(root: HTMLElement, messages: Messages) {
   };
   views.onChange(drawSpectrum);
   const playbackState = (): PlaybackState => session?.state ?? 'stopped';
-  const media = linkMediaSession(messages, (action) => {
+  const media = linkMediaSession(messages, ARTWORK, (action) => {
     const command = mediaCommand(action, playbackState());
     if (command !== null) void run(command);
   });
