@@ -16,12 +16,14 @@ import type { Seed } from '../../src/random/rng.ts';
 import {
   BARS_PER_SECTION,
   DROP_LEAD_INS,
+  INTRO_ORDERS,
   cycleSections,
   dropLeadIn,
   refreshesReference,
   type CycleLayout,
   type DropLeadIn,
   type DropOrdinal,
+  type IntroOrder,
   type Scene,
 } from '../../src/structure/arrangement.ts';
 import { plays, playsHit } from '../../src/structure/scene-parts.ts';
@@ -140,6 +142,8 @@ export interface SimulationReport {
     /** Number of cycles per pair of intro and breakdown lengths in bars, such as "24/16". */
     readonly leads: Record<string, number>;
     readonly extensions: Record<DropExtension, number>;
+    /** Number of cycles opening with each intro order. */
+    readonly introOrders: Record<IntroOrder, number>;
     /** Number of builds that led into each drop of a cycle in each way. */
     readonly leadIns: Record<DropOrdinal, Record<DropLeadIn, number>>;
     readonly scenes: Record<Scene, SceneStats>;
@@ -255,6 +259,7 @@ export function simulate({
     LEAD_BARS.flatMap((intro) => LEAD_BARS.map((breakdown) => [`${intro}/${breakdown}`, 0])),
   ) as Record<string, number>;
   const extensions: Record<DropExtension, number> = { none: 0, first: 0, second: 0, both: 0 };
+  const introOrders = Object.fromEntries(INTRO_ORDERS.map((order) => [order, 0])) as Record<IntroOrder, number>;
   const leadInCounts = () => Object.fromEntries(DROP_LEAD_INS.map((leadIn) => [leadIn, 0])) as Record<DropLeadIn, number>;
   const leadIns: Record<DropOrdinal, Record<DropLeadIn, number>> = { first: leadInCounts(), second: leadInCounts() };
   const sceneBars = Object.fromEntries(SCENES.map((scene) => [scene, 0])) as Record<Scene, number>;
@@ -296,6 +301,7 @@ export function simulate({
       cycleLengths[(cycleSections(ctx.layout) * BARS_PER_SECTION) as CycleBars]++;
       leads[`${ctx.layout.intro * BARS_PER_SECTION}/${ctx.layout.breakdown * BARS_PER_SECTION}`]! += 1;
       extensions[extensionOf(ctx.layout)]++;
+      introOrders[ctx.layout.introOrder]++;
       for (const part of TIMBRE_PARTS) {
         timbre[part].cycles[ctx.timbre[part]]! += 1;
         if (previousTimbre !== undefined && previousTimbre[part] !== ctx.timbre[part]) timbre[part].changes++;
@@ -458,6 +464,7 @@ export function simulate({
       lengths: cycleLengths,
       leads,
       extensions,
+      introOrders,
       leadIns,
       scenes: Object.fromEntries(
         SCENES.map((scene): [Scene, SceneStats] => {

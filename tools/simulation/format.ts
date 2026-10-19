@@ -98,6 +98,7 @@ function formatArrangement({ arrangement, fx, timbre }: SimulationReport): strin
     `  length:     ${Object.entries(arrangement.lengths).map(([bars, n]) => `${bars} bars ${n}`).join('  ')}`,
     `  intro/breakdown bars: ${Object.entries(arrangement.leads).map(([lead, n]) => `${lead} ${n}`).join('  ')}`,
     `  extended drops: ${Object.entries(arrangement.extensions).map(([which, n]) => `${which} ${n}`).join('  ')}`,
+    `  intro orders: ${Object.entries(arrangement.introOrders).map(([order, n]) => `${order} ${n}`).join('  ')}`,
     ...(['first', 'second'] as const).map(
       (drop) =>
         `  lead-ins into the ${drop} drop: ${DROP_LEAD_INS.map((leadIn) => `${leadIn} ${arrangement.leadIns[drop][leadIn]}`).join('  ')}`,

@@ -6,9 +6,11 @@ import { hash, toSeed } from '../../src/random/rng.ts';
 import {
   DROP_LEAD_INS,
   GAP_START,
+  INTRO_ORDERS,
   changesScene,
   cycleScenes,
   cycleSections,
+  drawIntroOrder,
   drawLayout,
   dropLeadIn,
   type CycleLayout,
@@ -33,6 +35,7 @@ import {
 
 const LAYOUT: CycleLayout = {
   intro: 3,
+  introOrder: 'hats',
   breakdown: 2,
   firstDrop: 2,
   secondDrop: 1,
@@ -92,7 +95,7 @@ describe('arrangement: cycle layout', () => {
 
   it('numbers the sections within each scene and the phrases within each drop', () => {
     const scenes = cycleScenes(LAYOUT);
-    expect(scenes[0]).toEqual({ scene: 'intro', sections: 3, index: 0 });
+    expect(scenes[0]).toEqual({ scene: 'intro', introOrder: 'hats', sections: 3, index: 0 });
     expect(scenes[3]).toEqual({ scene: 'build', leadIn: 'pickup', sections: 1, index: 0 });
     expect(scenes[4]).toEqual({ scene: 'drop', drop: 'first', phrases: 2, phrase: 0 });
     expect(scenes[8]).toEqual({ scene: 'drop', drop: 'first', phrases: 2, phrase: 1 });
@@ -107,7 +110,7 @@ describe('arrangement: cycle layout', () => {
     let longBreakdowns = 0;
     const draws = 6000;
     for (let n = 0; n < draws; n++) {
-      const layout = drawLayout(hash(n), TUNING.layout);
+      const layout = drawLayout(hash(n), TUNING.layout, 'beat');
       const bars = cycleSections(layout) * 8;
       lengths.set(bars, (lengths.get(bars) ?? 0) + 1);
       if (layout.intro === 3) longIntros++;
@@ -123,7 +126,7 @@ describe('arrangement: cycle layout', () => {
     const counts = { first: new Map<string, number>(), second: new Map<string, number>() };
     const draws = 6000;
     for (let n = 0; n < draws; n++) {
-      const { leadIns } = drawLayout(hash(n), TUNING.layout);
+      const { leadIns } = drawLayout(hash(n), TUNING.layout, 'beat');
       expect(leadIns.second).not.toBe(leadIns.first);
       for (const drop of ['first', 'second'] as const) counts[drop].set(leadIns[drop], (counts[drop].get(leadIns[drop]) ?? 0) + 1);
     }
@@ -175,6 +178,62 @@ describe('arrangement: cycles and scenes', () => {
     expect([...seen].sort()).toEqual(
       ['lead 2/2', 'lead 2/3', 'lead 3/2', 'lead 3/3', 'drop 1/1', 'drop 1/2', 'drop 2/1', 'drop 2/2'].sort(),
     );
+  });
+});
+
+describe('arrangement: intro order', () => {
+  const draws = 6000;
+
+  it('draws every order about equally often for the first cycle', () => {
+    const counts = new Map<string, number>();
+    for (let n = 0; n < draws; n++) {
+      const order = drawIntroOrder(undefined, hash(n), clampUnit(0));
+      counts.set(order, (counts.get(order) ?? 0) + 1);
+    }
+    expect([...counts.keys()].sort()).toEqual([...INTRO_ORDERS].sort());
+    for (const count of counts.values()) expect(count / draws).toBeCloseTo(1 / 3, 1);
+  });
+
+  it('keeps the previous order when m32 is 0 and always changes it when m32 is 1', () => {
+    for (let n = 0; n < draws; n++) {
+      for (const previous of INTRO_ORDERS) {
+        expect(drawIntroOrder(previous, hash(n), clampUnit(0))).toBe(previous);
+        expect(drawIntroOrder(previous, hash(n), clampUnit(1))).not.toBe(previous);
+      }
+    }
+  });
+
+  it('changes the order about m32 of the time, to either of the others', () => {
+    const changes = new Map<string, number>();
+    for (let n = 0; n < draws; n++) {
+      const order = drawIntroOrder('beat', hash(n), clampUnit(0.5));
+      if (order !== 'beat') changes.set(order, (changes.get(order) ?? 0) + 1);
+    }
+    const changed = [...changes.values()].reduce((a, b) => a + b, 0);
+    expect(changed / draws).toBeCloseTo(0.5, 1);
+    for (const count of changes.values()) expect(count / changed).toBeCloseTo(1 / 2, 1);
+  });
+
+  it('gives every 8 bars of an intro the order of its cycle, which changes only under m32', () => {
+    for (const { params, pairs } of runs) {
+      const cycles = cyclesOf(pairs);
+      for (const cycle of cycles) {
+        for (const { ctx } of cycle) {
+          if (ctx.sceneRole.scene === 'intro') expect(ctx.sceneRole.introOrder).toBe(ctx.layout.introOrder);
+        }
+      }
+      const orders = cycles.map((cycle) => cycle[0]!.ctx.layout.introOrder);
+      for (let i = 1; i < orders.length; i++) {
+        if (params.m32 === 0) expect(orders[i]).toBe(orders[0]);
+        if (params.m32 === 1) expect(orders[i]).not.toBe(orders[i - 1]);
+      }
+    }
+  });
+
+  it('opens with every order over long runs', () => {
+    const seen = new Set<string>();
+    for (const seed of SEEDS) for (const { ctx } of run(seed, 8192)) seen.add(ctx.layout.introOrder);
+    expect([...seen].sort()).toEqual([...INTRO_ORDERS].sort());
   });
 });
 
@@ -314,7 +373,7 @@ describe('arrangement: scene energy', () => {
   });
 
   it('keeps every intro low', () => {
-    for (const index of [0, 1, 2] as const) expect(energy({ scene: 'intro', sections: 3, index })).toBe(0.5);
+    for (const index of [0, 1, 2] as const) expect(energy({ scene: 'intro', introOrder: 'beat', sections: 3, index })).toBe(0.5);
   });
 
   it('keeps every scene at full energy when the depth is 0', () => {

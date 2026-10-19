@@ -3,6 +3,7 @@ import type { Brand, UnitInterval } from '../units.ts';
 import {
   cycleScenes,
   cycleSections,
+  drawIntroOrder,
   drawLayout,
   type CycleIndex,
   type CycleLayout,
@@ -212,7 +213,7 @@ function nextCycle(
 ): CycleState {
   const index = (previous === undefined ? 0 : previous.index + 1) as CycleIndex;
   const seed = hash(master, TAG.cycle, index);
-  const layout = drawLayout(seed, tuning.layout);
+  const layout = drawLayout(seed, tuning.layout, drawIntroOrder(previous?.layout.introOrder, seed, m32));
   return {
     index,
     seed,

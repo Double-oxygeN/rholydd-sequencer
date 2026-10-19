@@ -87,6 +87,7 @@ function counter(text: (n: number) => CounterText) {
  */
 const PREVIEW_LAYOUT: CycleLayout = {
   intro: 2,
+  introOrder: 'beat',
   breakdown: 2,
   firstDrop: 1,
   secondDrop: 1,
