@@ -323,6 +323,13 @@ describe('sound: solo', () => {
     expect(audible.reverbReturn).toBe(true);
   });
 
+  it('solos the cymbals like any other channel, keeping the reverb return', () => {
+    const audible = audibleChannels(withFlags(['cymbal']));
+    for (const id of SOLOABLE_IDS) expect(audible[id]).toBe(id === 'cymbal');
+    expect(audible.reverbReturn).toBe(true);
+    expect(audibleChannels(withFlags(['cymbal'], ['cymbal'])).cymbal).toBe(false);
+  });
+
   it('lets a mute win over a solo, on the reverb return too', () => {
     expect(audibleChannels(withFlags(['snare'], ['snare'])).snare).toBe(false);
     expect(audibleChannels(withFlags(['snare'], ['reverbReturn'])).reverbReturn).toBe(false);

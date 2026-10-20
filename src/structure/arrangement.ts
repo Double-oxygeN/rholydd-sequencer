@@ -1,5 +1,5 @@
 import { TAG, createRng, hash, weightedIndex, type Seed } from '../random/rng.ts';
-import type { Brand } from '../units.ts';
+import type { Brand, UnitInterval } from '../units.ts';
 import { SECTIONS_PER_PHRASE, type PairIn8 } from './form.ts';
 import { DROP_EXTENSIONS, type DropExtension, type LayoutTuning } from './tuning.ts';
 
@@ -23,9 +23,17 @@ export type DropLeadIn = (typeof DROP_LEAD_INS)[number];
 /** Lead-ins that stop the drums for the last beat. */
 export type GapLeadIn = Exclude<DropLeadIn, 'straight'>;
 
+/**
+ * Which parts the intro starts with and brings in before its last 8 bars, where every part plays: the drums with the
+ * hats on the 8ths, the hats alone, or the kick with the hats on the 8ths.
+ */
+export const INTRO_ORDERS = ['beat', 'hats', 'kick'] as const;
+export type IntroOrder = (typeof INTRO_ORDERS)[number];
+
 /** The cycle's length follows from the drops, so it is never stored apart from them. */
 export interface CycleLayout {
   readonly intro: LeadSections;
+  readonly introOrder: IntroOrder;
   readonly breakdown: LeadSections;
   readonly firstDrop: DropPhrases;
   readonly secondDrop: DropPhrases;
@@ -39,7 +47,7 @@ export type DropPosition = { readonly phrases: 1; readonly phrase: 0 } | { reado
 
 /** Positions pair with lengths so that no position can lie past the end of its scene. */
 export type SceneRole =
-  | ({ readonly scene: 'intro' } & LeadPosition)
+  | ({ readonly scene: 'intro'; readonly introOrder: IntroOrder } & LeadPosition)
   /** Always followed by a drop, whose lead-in every 2 bars of the build need to pace the riser. */
   | ({ readonly scene: 'build'; readonly leadIn: DropLeadIn } & BuildPosition)
   | ({ readonly scene: 'drop'; readonly drop: DropOrdinal } & DropPosition)
@@ -60,14 +68,31 @@ const EXTENDED_DROPS: Readonly<Record<DropExtension, readonly [DropPhrases, Drop
   both: [2, 2],
 };
 
-/** Draws the intro length, the breakdown length and the drop extension, in that order, then the lead-ins. */
-export function drawLayout(cycleSeed: Seed, tuning: LayoutTuning): CycleLayout {
+/**
+ * Draws the intro length, the breakdown length and the drop extension, in that order, then the lead-ins. The intro
+ * order is drawn apart (drawIntroOrder), as it carries over from the previous cycle.
+ */
+export function drawLayout(cycleSeed: Seed, tuning: LayoutTuning, introOrder: IntroOrder): CycleLayout {
   const rng = createRng(hash(cycleSeed, TAG.layout));
   const intro: LeadSections = rng.float() < tuning.longIntroChance ? 3 : 2;
   const breakdown: LeadSections = rng.float() < tuning.longBreakdownChance ? 3 : 2;
   const extension = DROP_EXTENSIONS[weightedIndex(rng.float(), DROP_EXTENSIONS.map((e) => tuning.dropExtension[e])) ?? 0]!;
   const [firstDrop, secondDrop] = EXTENDED_DROPS[extension];
-  return { intro, breakdown, firstDrop, secondDrop, leadIns: drawLeadIns(cycleSeed) };
+  return { intro, introOrder, breakdown, firstDrop, secondDrop, leadIns: drawLeadIns(cycleSeed) };
+}
+
+/**
+ * The intro is part of a track's face, so like the main progression and the sounds it changes under m32, and a
+ * change always leaves the previous order out. Both draws are made every cycle so that the stream never depends on
+ * the outcome. Unlike the lead-ins, which set the two drops of a cycle against each other, a cycle has one intro.
+ */
+export function drawIntroOrder(previous: IntroOrder | undefined, cycleSeed: Seed, m32: UnitInterval): IntroOrder {
+  const rng = createRng(hash(cycleSeed, TAG.introOrder));
+  const changeRoll = rng.float();
+  const orderRoll = rng.float();
+  if (previous !== undefined && changeRoll >= m32) return previous;
+  const candidates = INTRO_ORDERS.filter((order) => order !== previous);
+  return candidates[Math.floor(orderRoll * candidates.length)] ?? INTRO_ORDERS[0];
 }
 
 // A seed of their own keeps the draws of the layout above as they were.
@@ -81,7 +106,7 @@ function drawLeadIns(cycleSeed: Seed): CycleLayout['leadIns'] {
 /** One role per 8-bar section of the cycle. */
 export function cycleScenes(layout: CycleLayout): readonly SceneRole[] {
   return [
-    ...lead(layout.intro).map((position): SceneRole => ({ scene: 'intro', ...position })),
+    ...lead(layout.intro).map((position): SceneRole => ({ scene: 'intro', introOrder: layout.introOrder, ...position })),
     ...build(layout.intro, layout.leadIns.first),
     ...drop('first', layout.firstDrop),
     ...lead(layout.breakdown).map((position): SceneRole => ({ scene: 'breakdown', ...position })),

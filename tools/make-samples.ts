@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { Part } from '../src/generators/types.ts';
+import type { Cymbal, Part } from '../src/generators/types.ts';
 import { createRng, toSeed, type Rng } from '../src/random/rng.ts';
 
 // The kit is synthesized here rather than taken from a sample pack, so that it ships under the repository's own
@@ -80,6 +80,35 @@ function hat(rng: Rng): Signal {
   return envelope(biquad(biquad(noise(rng, 0.09), 'highpass', 7000, 0.7), 'highpass', 7000, 0.7), (t) => decay(t, 0.018));
 }
 
+// The six detuned square waves of the TR-808's cymbal: none is a whole multiple of another, so they ring metallic
+// rather than as a chord.
+const METAL_HZ = [205.3, 304.4, 369.6, 522.7, 540, 800] as const;
+
+function metal(rng: Rng, seconds: number): Signal {
+  const phases = METAL_HZ.map(() => rng.float());
+  return render(seconds, (t) =>
+    METAL_HZ.reduce((sum, hz, i) => sum + Math.sign(Math.sin(2 * Math.PI * (hz * t + phases[i]!))), 0) / METAL_HZ.length,
+  );
+}
+
+function crash(rng: Rng): Signal {
+  const seconds = 2.5;
+  const tone = biquad(biquad(metal(rng, seconds), 'highpass', 3000, 0.7), 'bandpass', 7000, 0.5);
+  const wash = biquad(noise(rng, seconds), 'highpass', 4000, 0.7);
+  // A burst at the hit, then a long wash that carries over the next bars.
+  return envelope(mix([tone, 1], [wash, 0.8]), (t) => 0.4 * decay(t, 0.05) + 0.6 * decay(t, 0.8));
+}
+
+function ride(rng: Rng): Signal {
+  const seconds = 1.5;
+  const metallic = metal(rng, seconds);
+  // The high partials ring longer than the wash, giving each stroke the ping that keeps the ride a beat to follow.
+  const ping = envelope(biquad(metallic, 'bandpass', 4500, 2.5), (t) => decay(t, 0.35));
+  const wash = envelope(biquad(biquad(metallic, 'highpass', 3000, 0.7), 'bandpass', 8000, 0.6), (t) => decay(t, 0.25));
+  const hiss = envelope(biquad(noise(rng, seconds), 'highpass', 7000, 0.7), (t) => decay(t, 0.12));
+  return mix([ping, 1.2], [wash, 0.6], [hiss, 0.25]);
+}
+
 const KIT: Readonly<Record<Part, (rng: Rng) => Signal>> = {
   kick,
   snare: (rng) => snareLike(rng, 0.3, 0.05, 0.08),
@@ -108,9 +137,12 @@ function wav(signal: Signal): Buffer {
   return Buffer.concat([header, data]);
 }
 
+// Kept apart from the drums' table, whose order numbers their seeds, so that adding cymbals left the drums unchanged.
+const CYMBAL_KIT: Readonly<Record<Cymbal, (rng: Rng) => Signal>> = { crash, ride };
+
 mkdirSync(OUT_DIR, { recursive: true });
-Object.entries(KIT).forEach(([part, synth], i) => {
-  const file = join(OUT_DIR, `${part}.wav`);
+[...Object.entries(KIT), ...Object.entries(CYMBAL_KIT)].forEach(([name, synth], i) => {
+  const file = join(OUT_DIR, `${name}.wav`);
   writeFileSync(file, wav(finish(synth(createRng(toSeed(i + 1))))));
   console.log(`wrote ${file}`);
 });

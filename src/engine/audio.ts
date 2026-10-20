@@ -1,6 +1,6 @@
 import * as Tone from 'tone';
 import type { FxEvent } from '../generators/fx/index.ts';
-import type { Part, Pitch, Step, Velocity, Voicing } from '../generators/types.ts';
+import type { Cymbal, Part, Pitch, Step, Velocity, Voicing } from '../generators/types.ts';
 import { CHANNEL_IDS, audibleChannels, type DuckingSettings, type MixerSettings } from '../params/mixer.ts';
 import type { CycleTimbre, ReeseTimbre } from '../structure/timbre.ts';
 import { clampUnit, type UnitInterval } from '../units.ts';
@@ -50,6 +50,7 @@ const LOOK_AHEAD_SECONDS = 0.25;
 
 export interface Instruments {
   drum(part: Part, time: number, velocity: Velocity): void;
+  cymbal(part: Cymbal, time: number, velocity: Velocity): void;
   sub(pitch: Pitch, time: number, seconds: number, velocity: Velocity): void;
   reese(timbre: ReeseTimbre, pitch: Pitch, time: number, seconds: number, velocity: Velocity): void;
   chord<P extends ChordPart>(
@@ -129,7 +130,15 @@ export async function loadInstruments(
 
   const strips = createStrips(mixer, sound.trimDb, { drums: drumBus, mix: mixBus, reverb: reverbIn });
   const drumBuffers = loadDrumBuffers(drumSamplesUrl);
-  const drumInputs = { kick: strips.kick.input, snare: strips.snare.input, hat: strips.hat.input, ghost: strips.ghost.input };
+  const drumInputs = {
+    kick: strips.kick.input,
+    snare: strips.snare.input,
+    hat: strips.hat.input,
+    ghost: strips.ghost.input,
+    // One channel for both: they share a band and only ever sound together where a crash lands in the second drop.
+    crash: strips.cymbal.input,
+    ride: strips.cymbal.input,
+  };
   let samplers = createSamplers(drumBuffers, drumInputs);
   // Tone.Compressor has no sidechain input, so the kick's dips are scheduled on plain gains instead.
   const ducks: Record<DuckedPart, Tone.Gain> = {
@@ -177,6 +186,9 @@ export async function loadInstruments(
 
   return {
     drum(part, time, velocity) {
+      samplers[part].triggerAttack(ROOT_NOTE, time, velocity);
+    },
+    cymbal(part, time, velocity) {
       samplers[part].triggerAttack(ROOT_NOTE, time, velocity);
     },
     sub(pitch, time, seconds, velocity) {

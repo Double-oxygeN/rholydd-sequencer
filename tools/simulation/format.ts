@@ -79,6 +79,11 @@ export function formatReport(report: SimulationReport): string {
     '',
     ...formatStyles('Stab', report.stab.styles),
     '',
+    'Cymbals',
+    `  crashes heard: ${Object.entries(report.cymbal.crashes).map(([place, n]) => `${place} ${n}`).join('  ')}`,
+    `  ride styles (cycles): ${Object.entries(report.cymbal.rideStyles).map(([style, n]) => `${style} ${n}`).join('  ')}`,
+    `  hits per bar by scene: ${SCENES.map((scene) => `${scene} ${Object.entries(report.arrangement.scenes[scene].cymbalsPerBar).map(([c, n]) => `${c} ${n.toFixed(2)}`).join(' ')}`).join('  ')}`,
+    '',
     'Fills (per 8 bars)',
     ...Object.entries(report.fills).map(([kind, count]) => `  ${kind.padEnd(10)} ${String(count).padStart(6)}`),
     '',
@@ -98,6 +103,8 @@ function formatArrangement({ arrangement, fx, timbre }: SimulationReport): strin
     `  length:     ${Object.entries(arrangement.lengths).map(([bars, n]) => `${bars} bars ${n}`).join('  ')}`,
     `  intro/breakdown bars: ${Object.entries(arrangement.leads).map(([lead, n]) => `${lead} ${n}`).join('  ')}`,
     `  extended drops: ${Object.entries(arrangement.extensions).map(([which, n]) => `${which} ${n}`).join('  ')}`,
+    `  intro orders: ${Object.entries(arrangement.introOrders).map(([order, n]) => `${order} ${n}`).join('  ')}`,
+    `  drum hits per bar in the intro's first 8 bars: ${Object.entries(arrangement.introOpeningHitsPerBar).map(([order, n]) => `${order} ${n.toFixed(2)}`).join('  ')}`,
     ...(['first', 'second'] as const).map(
       (drop) =>
         `  lead-ins into the ${drop} drop: ${DROP_LEAD_INS.map((leadIn) => `${leadIn} ${arrangement.leadIns[drop][leadIn]}`).join('  ')}`,

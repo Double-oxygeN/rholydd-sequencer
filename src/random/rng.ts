@@ -51,6 +51,8 @@ export const TAG = {
   timbre: 22,
   dropLeadIn: 23,
   harmonyColor: 24,
+  introOrder: 25,
+  rideStyle: 26,
 } as const;
 export const REL = { repeat: 1, variant: 2 } as const;
 

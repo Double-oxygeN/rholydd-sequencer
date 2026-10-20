@@ -57,6 +57,7 @@ export const DEFAULT_SOUND_TUNING: SoundTuning = {
     snare: db(-10),
     hat: db(-14),
     ghost: db(-8),
+    cymbal: db(-18),
     sub: db(-6),
     reese: db(-10),
     stab: db(-13),

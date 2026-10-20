@@ -41,6 +41,21 @@ test('shows mutes and solos as pressed on their buttons', async ({ page }) => {
   await expect(mute).toHaveAttribute('aria-pressed', 'false');
 });
 
+for (const channel of ['シンバル']) {
+  test(`has a row for the ${channel} channel, telling its mute and solo`, async ({ page }) => {
+    await openPage(page);
+    await openMenu(page);
+    await page.getByRole('tab', { name: 'ミキサー' }).click();
+    await expect(page.getByRole('slider', { name: `${channel} 音量` })).toBeVisible();
+    for (const control of ['ミュート', 'ソロ']) {
+      const button = page.getByRole('button', { name: `${channel} ${control}` });
+      await expect(button).toHaveAttribute('aria-pressed', 'false');
+      await button.click();
+      await expect(button).toHaveAttribute('aria-pressed', 'true');
+    }
+  });
+}
+
 test('puts the parameters back to the values the page opened with, unavailable while they are there', async ({ page }) => {
   await openPage(page);
   await openMenu(page);

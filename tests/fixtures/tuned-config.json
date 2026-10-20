@@ -70,6 +70,18 @@
         "pad": 0.5,
         "pickup": 0.8
       }
+    },
+    "cymbal": {
+      "crash": {
+        "drop": 0.9,
+        "dropPhrase": 0.7,
+        "intro": 0.6,
+        "build": 0.8
+      },
+      "ride": {
+        "accent": 0.8,
+        "soft": 0.5
+      }
     }
   }
 }

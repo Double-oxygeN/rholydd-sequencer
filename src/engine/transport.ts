@@ -1,7 +1,7 @@
 import * as Tone from 'tone';
 import { heardDrums } from '../generators/arrange.ts';
 import { createEnsemble, type EnsemblePair, type SessionSettings } from '../generators/ensemble.ts';
-import { STEPS_PER_BAR, STEPS_PER_PAIR, type NoteEvent, type Step } from '../generators/types.ts';
+import { STEPS_PER_BAR, STEPS_PER_PAIR, isStrike, type NoteEvent, type Step } from '../generators/types.ts';
 import type { Bpm } from '../params/store.ts';
 import type { DuckingSettings } from '../params/mixer.ts';
 import type { Context, LiveParams } from '../structure/conductor.ts';
@@ -68,10 +68,13 @@ export function createSequencer(
       const at = (step: number) => pairStart + step * stepSeconds;
       for (const event of events) {
         const time = at(event.step);
-        const seconds = event.instrument === 'drums' ? 0 : event.length * stepSeconds;
+        const seconds = isStrike(event) ? 0 : event.length * stepSeconds;
         switch (event.instrument) {
           case 'drums':
             instruments.drum(event.part, time, event.velocity);
+            break;
+          case 'cymbal':
+            instruments.cymbal(event.part, time, event.velocity);
             break;
           case 'sub':
             instruments.sub(event.pitch, time, seconds, event.velocity);

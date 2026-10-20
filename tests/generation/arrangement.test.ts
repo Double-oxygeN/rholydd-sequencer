@@ -1,23 +1,26 @@
 import { describe, expect, it } from 'vitest';
 import { patternsEqual } from '../../src/generators/drums/pattern.ts';
 import { createEnsemble } from '../../src/generators/ensemble.ts';
-import type { NoteEvent } from '../../src/generators/types.ts';
+import { isStrike, type NoteEvent } from '../../src/generators/types.ts';
 import { hash, toSeed } from '../../src/random/rng.ts';
 import {
   DROP_LEAD_INS,
   GAP_START,
+  INTRO_ORDERS,
   changesScene,
   cycleScenes,
   cycleSections,
+  drawIntroOrder,
   drawLayout,
   dropLeadIn,
   type CycleLayout,
+  type IntroOrder,
   type SceneRole,
 } from '../../src/structure/arrangement.ts';
 import { sceneEnergy } from '../../src/structure/energy.ts';
 import { SECTIONS_PER_PHRASE } from '../../src/structure/form.ts';
 import { ALL_KEYS, DEFAULT_KEY } from '../../src/structure/key.ts';
-import { plays, playsHit } from '../../src/structure/scene-parts.ts';
+import { announcesSnare, plays, playsHit } from '../../src/structure/scene-parts.ts';
 import { PAD_TIMBRES, REESE_TIMBRES, STAB_TIMBRES } from '../../src/structure/timbre.ts';
 import { clampUnit } from '../../src/units.ts';
 import {
@@ -33,6 +36,7 @@ import {
 
 const LAYOUT: CycleLayout = {
   intro: 3,
+  introOrder: 'hats',
   breakdown: 2,
   firstDrop: 2,
   secondDrop: 1,
@@ -41,17 +45,50 @@ const LAYOUT: CycleLayout = {
 
 const LONG_BARS = 2048;
 
+const FULL_INTRO = ['kick', 'snare', 'hat', 'ghost', 'sub', 'pad'];
+
+// The table of intro lineups in the specs, written out again so that a mistake in the code's table shows. hat8 is
+// the hats on the 8ths alone.
+const INTRO_LINEUPS: Readonly<Record<IntroOrder, Readonly<Record<2 | 3, readonly (readonly string[])[]>>>> = {
+  beat: {
+    2: [['kick', 'snare', 'hat8', 'pad'], FULL_INTRO],
+    3: [['kick', 'snare', 'hat8', 'pad'], FULL_INTRO, FULL_INTRO],
+  },
+  hats: {
+    2: [['hat', 'pad'], FULL_INTRO],
+    3: [['hat', 'pad'], ['kick', 'snare', 'hat', 'ghost', 'pad'], FULL_INTRO],
+  },
+  kick: {
+    2: [['kick', 'hat8', 'pad'], FULL_INTRO],
+    3: [['kick', 'hat8', 'pad'], ['kick', 'snare', 'hat', 'pad'], FULL_INTRO],
+  },
+};
+
+const STEPS = Array.from({ length: 32 }, (_, step) => step);
+
+/** The voices that sound in the role, the hats written hat8 when they keep to the 8ths. */
+function lineupOf(role: SceneRole): string[] {
+  return (['kick', 'snare', 'hat', 'ghost', 'sub', 'reese', 'stab', 'pad'] as const).flatMap((voice) => {
+    if (voice === 'sub' || voice === 'reese' || voice === 'stab' || voice === 'pad') return plays(role, voice) ? [voice] : [];
+    const steps = STEPS.filter((step) => playsHit(role, { part: voice, step }));
+    if (steps.length === 32) return [voice];
+    if (steps.length === 16 && steps.every((step) => step % 2 === 0)) return [`${voice}8`];
+    expect(steps).toEqual([]);
+    return [];
+  });
+}
+
 const runs = SEEDS.flatMap((seed) => PARAM_SETS.map((params) => ({ params, pairs: run(seed, LONG_BARS, () => params) })));
 
-const voiceOf = (event: NoteEvent) => (event.instrument === 'drums' ? event.part : event.instrument);
+const voiceOf = (event: NoteEvent) => (isStrike(event) ? event.part : event.instrument);
 
-const endOf = (event: NoteEvent) => (event.instrument === 'drums' ? event.step + 1 : event.step + event.length);
+const endOf = (event: NoteEvent) => (isStrike(event) ? event.step + 1 : event.step + event.length);
 
 // The table of parts per scene in the requirements, written out again so that a mistake in the code's table shows.
 const PARTS_BY_SCENE: Readonly<Record<string, readonly string[]>> = {
-  intro: ['kick', 'snare', 'hat', 'ghost', 'sub', 'pad'],
-  build: ['kick', 'snare', 'hat', 'ghost', 'stab', 'pad'],
-  drop: ['kick', 'snare', 'hat', 'ghost', 'sub', 'reese', 'stab', 'pad'],
+  intro: ['kick', 'snare', 'hat', 'ghost', 'crash', 'sub', 'pad'],
+  build: ['kick', 'snare', 'hat', 'ghost', 'crash', 'stab', 'pad'],
+  drop: ['kick', 'snare', 'hat', 'ghost', 'crash', 'ride', 'sub', 'reese', 'stab', 'pad'],
   breakdown: ['hat', 'stab', 'pad'],
 };
 
@@ -72,8 +109,8 @@ function generateBars(seed: number, bars: number): (readonly NoteEvent[])[] {
 
 /** The same note, whether or not the gap before a drop shortened it. */
 function sameOnset(a: NoteEvent, b: NoteEvent): boolean {
-  if (a.instrument === 'drums' || b.instrument === 'drums') {
-    return a.instrument === 'drums' && b.instrument === 'drums' && a.part === b.part && a.step === b.step;
+  if (isStrike(a) || isStrike(b)) {
+    return isStrike(a) && isStrike(b) && a.instrument === b.instrument && a.part === b.part && a.step === b.step;
   }
   return a.instrument === b.instrument && a.step === b.step;
 }
@@ -92,7 +129,7 @@ describe('arrangement: cycle layout', () => {
 
   it('numbers the sections within each scene and the phrases within each drop', () => {
     const scenes = cycleScenes(LAYOUT);
-    expect(scenes[0]).toEqual({ scene: 'intro', sections: 3, index: 0 });
+    expect(scenes[0]).toEqual({ scene: 'intro', introOrder: 'hats', sections: 3, index: 0 });
     expect(scenes[3]).toEqual({ scene: 'build', leadIn: 'pickup', sections: 1, index: 0 });
     expect(scenes[4]).toEqual({ scene: 'drop', drop: 'first', phrases: 2, phrase: 0 });
     expect(scenes[8]).toEqual({ scene: 'drop', drop: 'first', phrases: 2, phrase: 1 });
@@ -107,7 +144,7 @@ describe('arrangement: cycle layout', () => {
     let longBreakdowns = 0;
     const draws = 6000;
     for (let n = 0; n < draws; n++) {
-      const layout = drawLayout(hash(n), TUNING.layout);
+      const layout = drawLayout(hash(n), TUNING.layout, 'beat');
       const bars = cycleSections(layout) * 8;
       lengths.set(bars, (lengths.get(bars) ?? 0) + 1);
       if (layout.intro === 3) longIntros++;
@@ -123,7 +160,7 @@ describe('arrangement: cycle layout', () => {
     const counts = { first: new Map<string, number>(), second: new Map<string, number>() };
     const draws = 6000;
     for (let n = 0; n < draws; n++) {
-      const { leadIns } = drawLayout(hash(n), TUNING.layout);
+      const { leadIns } = drawLayout(hash(n), TUNING.layout, 'beat');
       expect(leadIns.second).not.toBe(leadIns.first);
       for (const drop of ['first', 'second'] as const) counts[drop].set(leadIns[drop], (counts[drop].get(leadIns[drop]) ?? 0) + 1);
     }
@@ -178,6 +215,62 @@ describe('arrangement: cycles and scenes', () => {
   });
 });
 
+describe('arrangement: intro order', () => {
+  const draws = 6000;
+
+  it('draws every order about equally often for the first cycle', () => {
+    const counts = new Map<string, number>();
+    for (let n = 0; n < draws; n++) {
+      const order = drawIntroOrder(undefined, hash(n), clampUnit(0));
+      counts.set(order, (counts.get(order) ?? 0) + 1);
+    }
+    expect([...counts.keys()].sort()).toEqual([...INTRO_ORDERS].sort());
+    for (const count of counts.values()) expect(count / draws).toBeCloseTo(1 / 3, 1);
+  });
+
+  it('keeps the previous order when m32 is 0 and always changes it when m32 is 1', () => {
+    for (let n = 0; n < draws; n++) {
+      for (const previous of INTRO_ORDERS) {
+        expect(drawIntroOrder(previous, hash(n), clampUnit(0))).toBe(previous);
+        expect(drawIntroOrder(previous, hash(n), clampUnit(1))).not.toBe(previous);
+      }
+    }
+  });
+
+  it('changes the order about m32 of the time, to either of the others', () => {
+    const changes = new Map<string, number>();
+    for (let n = 0; n < draws; n++) {
+      const order = drawIntroOrder('beat', hash(n), clampUnit(0.5));
+      if (order !== 'beat') changes.set(order, (changes.get(order) ?? 0) + 1);
+    }
+    const changed = [...changes.values()].reduce((a, b) => a + b, 0);
+    expect(changed / draws).toBeCloseTo(0.5, 1);
+    for (const count of changes.values()) expect(count / changed).toBeCloseTo(1 / 2, 1);
+  });
+
+  it('gives every 8 bars of an intro the order of its cycle, which changes only under m32', () => {
+    for (const { params, pairs } of runs) {
+      const cycles = cyclesOf(pairs);
+      for (const cycle of cycles) {
+        for (const { ctx } of cycle) {
+          if (ctx.sceneRole.scene === 'intro') expect(ctx.sceneRole.introOrder).toBe(ctx.layout.introOrder);
+        }
+      }
+      const orders = cycles.map((cycle) => cycle[0]!.ctx.layout.introOrder);
+      for (let i = 1; i < orders.length; i++) {
+        if (params.m32 === 0) expect(orders[i]).toBe(orders[0]);
+        if (params.m32 === 1) expect(orders[i]).not.toBe(orders[i - 1]);
+      }
+    }
+  });
+
+  it('opens with every order over long runs', () => {
+    const seen = new Set<string>();
+    for (const seed of SEEDS) for (const { ctx } of run(seed, 8192)) seen.add(ctx.layout.introOrder);
+    expect([...seen].sort()).toEqual([...INTRO_ORDERS].sort());
+  });
+});
+
 describe('arrangement: lead-ins', () => {
   it('leads into each drop every way over long runs, never the same way into both drops of a cycle', () => {
     const seen = { first: new Set<string>(), second: new Set<string>() };
@@ -198,18 +291,68 @@ describe('arrangement: lead-ins', () => {
 });
 
 describe('arrangement: parts per scene', () => {
-  it('opens every intro on kick, snare and hats on the 8ths alone, with the sub coming in after 8 bars', () => {
-    const [opening, next] = cycleScenes(LAYOUT);
-    const hits = (role: SceneRole, part: 'kick' | 'snare' | 'hat' | 'ghost') =>
-      Array.from({ length: 32 }, (_, step) => step).filter((step) => playsHit(role, { part, step }));
-    expect(hits(opening!, 'kick')).toHaveLength(32);
-    expect(hits(opening!, 'snare')).toHaveLength(32);
-    expect(hits(opening!, 'hat')).toEqual(Array.from({ length: 16 }, (_, i) => i * 2));
-    expect(hits(opening!, 'ghost')).toEqual([]);
-    expect(plays(opening!, 'sub')).toBe(false);
-    expect(hits(next!, 'hat')).toHaveLength(32);
-    expect(hits(next!, 'ghost')).toHaveLength(32);
-    expect(plays(next!, 'sub')).toBe(true);
+  it('plays in each 8 bars of an intro the lineup its order and length lay out, everything in the last', () => {
+    for (const order of INTRO_ORDERS) {
+      for (const sections of [2, 3] as const) {
+        const roles = cycleScenes({ ...LAYOUT, intro: sections, introOrder: order }).slice(0, sections);
+        expect(roles.map(lineupOf), `${order} over ${sections * 8} bars`).toEqual(INTRO_LINEUPS[order][sections]);
+      }
+    }
+  });
+
+  it('keeps some drums and the pad in every 8 bars of every intro, never ghosts before the snare nor the sub before the kick', () => {
+    for (const order of INTRO_ORDERS) {
+      for (const sections of [2, 3] as const) {
+        const lineups = cycleScenes({ ...LAYOUT, intro: sections, introOrder: order }).slice(0, sections).map(lineupOf);
+        const entry = (voice: string) => lineups.findIndex((lineup) => lineup.includes(voice));
+        for (const lineup of lineups) {
+          expect(lineup.some((voice) => ['kick', 'snare', 'hat', 'hat8', 'ghost'].includes(voice))).toBe(true);
+          expect(lineup).toContain('pad');
+          if (lineup.includes('ghost')) expect(lineup).toContain('snare');
+          if (lineup.includes('sub')) expect(lineup).toContain('kick');
+        }
+        expect(entry('ghost')).toBeGreaterThanOrEqual(entry('snare'));
+        expect(entry('sub')).toBeGreaterThanOrEqual(entry('kick'));
+      }
+    }
+  });
+
+  it('opens each intro order with a lineup of its own', () => {
+    const openings = INTRO_ORDERS.map((order) => JSON.stringify(lineupOf(cycleScenes({ ...LAYOUT, introOrder: order })[0]!)));
+    expect(new Set(openings).size).toBe(INTRO_ORDERS.length);
+  });
+
+  it('plays in every intro only what its lineup lets through, but for the fill announcing the snare', () => {
+    let announced = 0;
+    for (const { pairs } of runs) {
+      for (const { ctx, heard } of pairs) {
+        const role = ctx.sceneRole;
+        if (role.scene !== 'intro') continue;
+        for (const event of heard) {
+          const allowed = event.instrument === 'drums' ? playsHit(role, event) : plays(role, voiceOf(event));
+          if (allowed) continue;
+          announced++;
+          expect(event).toMatchObject({ part: 'snare', layer: 'fill' });
+          expect(ctx.isSectionEnd).toBe(true);
+          expect(plays({ ...role, index: role.index + 1 } as SceneRole, 'snare')).toBe(true);
+        }
+      }
+    }
+    expect(announced).toBeGreaterThan(0);
+  });
+
+  it('announces the snare of an intro\'s next 8 bars only where it comes in', () => {
+    for (const order of INTRO_ORDERS) {
+      for (const sections of [2, 3] as const) {
+        const roles = cycleScenes({ ...LAYOUT, intro: sections, introOrder: order });
+        roles.slice(0, sections).forEach((role, i) => {
+          const place = { sceneRole: role, nextScene: roles[i + 1]!.scene, isSectionEnd: true };
+          const comesIn = !plays(role, 'snare') && plays(roles[i + 1]!, 'snare');
+          expect(announcesSnare(place), `${order} ${i}/${sections}`).toBe(comesIn);
+          expect(announcesSnare({ ...place, isSectionEnd: false })).toBe(false);
+        });
+      }
+    }
   });
 
   it('plays only the parts of the scene, apart from the snare roll that ends a breakdown', () => {
@@ -237,24 +380,6 @@ describe('arrangement: parts per scene', () => {
     for (const [scene, parts] of Object.entries(PARTS_BY_SCENE)) {
       for (const part of parts) expect(heardIn.get(scene)?.has(part), `${part} in ${scene}`).toBe(true);
     }
-  });
-
-  it('opens every intro without the sub and ghosts and with the hat on the 8ths, for 8 bars only', () => {
-    let openings = 0;
-    for (const { pairs } of runs) {
-      for (const { ctx, heard, sub } of pairs) {
-        if (ctx.sceneRole.scene !== 'intro') continue;
-        const opening = ctx.sceneRole.index === 0;
-        if (opening) openings++;
-        if (sub.notes.length > 0) expect(heard.some((event) => event.instrument === 'sub')).toBe(!opening);
-        const drums = heard.filter((event) => event.instrument === 'drums');
-        if (!opening) continue;
-        expect(drums.filter((hit) => hit.part === 'ghost')).toEqual([]);
-        expect(drums.filter((hit) => hit.part === 'hat' && hit.step % 2 === 1)).toEqual([]);
-      }
-    }
-    // Every cycle opens this way, not just the first.
-    expect(openings).toBeGreaterThan(runs.length * 4 * 2);
   });
 
   it('leaves of the last beat before every drop what its lead-in keeps, whatever the fill intensity', () => {
@@ -288,10 +413,10 @@ describe('arrangement: parts per scene', () => {
   });
 
   // A scene leaves out the parts it does not play and empties the beat before a drop, adding only the pickup.
-  it('plays the composed drum layers followed by the pitched parts, as far as the scene lets them sound', () => {
+  it('plays the composed drum layers followed by the cymbals and the pitched parts, as far as the scene lets them sound', () => {
     expect(generateBars(42, 256)).toEqual(run(42, 256).map((pair) => pair.heard));
     for (const pair of run(42, 1024)) {
-      const generated = [...pair.events, ...pair.pitched];
+      const generated = [...pair.events, ...pair.cymbal.hits, ...pair.pitched];
       const sources = pair.heard
         .filter((event) => event !== PICKUP)
         .map((event) => generated.find((g) => sameOnset(g, event)));
@@ -314,7 +439,7 @@ describe('arrangement: scene energy', () => {
   });
 
   it('keeps every intro low', () => {
-    for (const index of [0, 1, 2] as const) expect(energy({ scene: 'intro', sections: 3, index })).toBe(0.5);
+    for (const index of [0, 1, 2] as const) expect(energy({ scene: 'intro', introOrder: 'beat', sections: 3, index })).toBe(0.5);
   });
 
   it('keeps every scene at full energy when the depth is 0', () => {

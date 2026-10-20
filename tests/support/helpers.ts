@@ -1,5 +1,6 @@
 import type { PairLayers } from '../../src/generators/drums/index.ts';
 import { pickupHit } from '../../src/generators/arrange.ts';
+import type { CymbalLine } from '../../src/generators/cymbal/index.ts';
 import { createEnsemble } from '../../src/generators/ensemble.ts';
 import { DEFAULT_GENERATION_TUNING, type GenerationTuning } from '../../src/generators/tuning.ts';
 import type { FxEvent } from '../../src/generators/fx/index.ts';
@@ -47,6 +48,7 @@ export interface GeneratedPair {
   readonly reese: ReeseLine;
   readonly stab: StabLine;
   readonly pad: PadChord;
+  readonly cymbal: CymbalLine;
   /** Every pitched event as generated: sub, reese, stab and pad. */
   readonly pitched: readonly PitchedEvent[];
   /** What is heard after the scene picks its parts. */
@@ -64,9 +66,9 @@ export function run(
 ): GeneratedPair[] {
   const ensemble = createEnsemble({ seed: toSeed(seed), initialKey, tuning });
   return Array.from({ length: Math.ceil(bars / 2) }, (_, i) => {
-    const { ctx, drumLayers, sub, reese, stab, pad, events, fx } = ensemble.next(live(i));
+    const { ctx, drumLayers, sub, reese, stab, pad, cymbal, events, fx } = ensemble.next(live(i));
     const pitched = [...sub.notes, ...reese.notes, ...stab.hits, pad];
-    return { ctx, layers: drumLayers, events: ctx.drums.hits, sub, reese, stab, pad, pitched, heard: events, fx };
+    return { ctx, layers: drumLayers, events: ctx.drums.hits, sub, reese, stab, pad, cymbal, pitched, heard: events, fx };
   });
 }
 

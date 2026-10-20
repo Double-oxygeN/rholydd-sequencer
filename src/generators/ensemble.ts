@@ -3,6 +3,7 @@ import { createConductor, type LiveParams } from '../structure/conductor.ts';
 import type { Key } from '../structure/key.ts';
 import type { GenerationTuning } from './tuning.ts';
 import { arrange } from './arrange.ts';
+import { createCymbalGenerator, type CymbalLine } from './cymbal/index.ts';
 import { createDrumGenerator, drumOutcome, type PairLayers } from './drums/index.ts';
 import { fxEvents, type FxEvent } from './fx/index.ts';
 import { createPadGenerator } from './pad/index.ts';
@@ -25,6 +26,7 @@ export interface EnsemblePair {
   readonly reese: ReeseLine;
   readonly stab: StabLine;
   readonly pad: PadChord;
+  readonly cymbal: CymbalLine;
   /** What is heard: the parts the scene plays, with what the drop's lead-in leaves of the last beat of a build. */
   readonly events: readonly NoteEvent[];
   readonly fx: readonly FxEvent[];
@@ -48,6 +50,7 @@ export function createEnsemble({ seed, initialKey, tuning }: SessionSettings): E
   const reese = createReeseGenerator(tuning.lines);
   const stab = createStabGenerator(tuning.lines);
   const pad = createPadGenerator(tuning.lines);
+  const cymbal = createCymbalGenerator(tuning.cymbal);
   return {
     next(live) {
       const structure = conductor.next(live);
@@ -58,10 +61,11 @@ export function createEnsemble({ seed, initialKey, tuning }: SessionSettings): E
         reese: reese.generate(ctx),
         stab: stab.generate(ctx),
         pad: pad.generate(ctx),
+        cymbal: cymbal.generate(ctx),
       };
       const events = arrange(
         ctx,
-        { sub: pair.sub.notes, reese: pair.reese.notes, stab: pair.stab.hits, pad: pair.pad },
+        { sub: pair.sub.notes, reese: pair.reese.notes, stab: pair.stab.hits, pad: pair.pad, cymbal: pair.cymbal.hits },
         tuning.lines.velocity.pickup,
       );
       return { ctx, drumLayers, ...pair, events, fx: fxEvents(ctx, events) };

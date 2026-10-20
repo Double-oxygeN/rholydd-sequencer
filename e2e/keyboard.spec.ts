@@ -97,6 +97,23 @@ test('reaches both resets with Tab and keeps the focus on them once pressed', as
   await expect(resetMixer(page)).toBeFocused();
 });
 
+for (const [channel, before] of [['シンバル', 'ゴースト']]) {
+  test(`reaches the slider and the buttons of the ${channel} row with Tab alone`, async ({ page }) => {
+    await openPage(page);
+    await openMenu(page);
+    await page.getByRole('tab', { name: 'パラメーター' }).focus();
+    await page.keyboard.press('ArrowRight');
+    await page.getByRole('button', { name: `${before} ソロ` }).focus();
+    for (const target of [
+      page.getByRole('slider', { name: `${channel} 音量` }),
+      page.getByRole('button', { name: `${channel} ミュート` }),
+      page.getByRole('button', { name: `${channel} ソロ` }),
+    ]) {
+      await tabTo(page, target, 3);
+    }
+  });
+}
+
 /** Whether any of the centre and four inner corners of the focused element shows the element itself. */
 const focusInSight = (page: Page) =>
   page.evaluate(() => {

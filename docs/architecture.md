@@ -20,7 +20,7 @@
 ```
 ui ──▶ engine ──▶ generators/ensemble ──▶ structure ──▶ random
  │        │             │
- │        │             ├──▶ generators/drums, sub, reese, stab, pad ──▶ generators/line, generators/pitch
+ │        │             ├──▶ generators/drums, cymbal, sub, reese, stab, pad ──▶ generators/line, generators/pitch
  │        │             ├──▶ generators/arrange   （鳴らすパートの選別と溜め）
  │        │             └──▶ generators/fx        （FX のイベント）
  │        ├──▶ engine/playhead, resume, automation, ducking, clip   （Tone.js に依存しない）
@@ -50,6 +50,7 @@ tools/simulate ──▶ tools/simulation ──▶ generators/ensemble
 | `src/generators/tuning.ts` | パートの調整用の数値の型と既定値（フィル・ライン）と、生成全体の `GenerationTuning` |
 | `src/generators/ensemble.ts` | コンダクターと全生成器を決まった順に呼ぶ |
 | `src/generators/drums/*` | 重み表、基本パターン、変異、転換、間引き、装飾、フィル、合成 |
+| `src/generators/cymbal/index.ts` | クラッシュの位置とライドの型 |
 | `src/generators/line.ts`・`pitch.ts` | 音程のあるパートに共通の規則と、音域への折り返し |
 | `src/generators/sub`・`reese`・`stab`・`pad` | 音程のある4パート |
 | `src/generators/arrange.ts` | シーンで鳴らすパートの選別と、ドロップの入り方に従った溜め |
@@ -61,7 +62,7 @@ tools/simulate ──▶ tools/simulation ──▶ generators/ensemble
 | `src/engine/clip.ts`・`clip-worklet.ts` | リミッターの後のピークとクリップの計数 |
 | `src/engine/audio.ts` | 音の経路の組み立てと、トランスポートが使う `Instruments` |
 | `src/engine/strips.ts` | ミキサーのチャンネルと、フェーダーの動かし方 |
-| `src/engine/voices.ts` | パートごとのシンセとドラムのサンプラー |
+| `src/engine/voices.ts` | パートごとのシンセと、ドラムとシンバルのサンプラー |
 | `src/engine/effects.ts` | ライザー・スイープのノードと、オートメーションの適用 |
 | `src/engine/patches.ts` | 音色ごとのシンセの設定と、その制約 |
 | `src/engine/tuning.ts` | 音の調整用の数値の型と既定値 |
@@ -72,7 +73,7 @@ tools/simulate ──▶ tools/simulation ──▶ generators/ensemble
 | `src/ui/messages.ts` | 画面の文言の表（日本語と英語）と、ブラウザの言語から画面の言語を選ぶ `pickLanguage` |
 | `src/ui/*` | 画面の部品（[画面](./interface/screen.md)） |
 | `tools/simulate.ts`・`tools/simulation/*` | 音声なしの長時間の生成と統計 |
-| `tools/make-samples.ts` | ドラムサンプルの合成 |
+| `tools/make-samples.ts` | ドラムとシンバルのサンプルの合成 |
 | `tools/make-icons.ts` | アイコンと共有用の画像の PNG を描く |
 | `tools/page-meta.ts` | 共有したリンクのプレビューのメタデータを `index.html` に書き込む Vite のプラグイン |
 | `tools/web-app.ts`・`src/service-worker.ts` | マニフェストと、オフラインで開くためのサービスワーカーをビルドのときに作る Vite のプラグインと、サービスワーカーの本体 |
@@ -85,7 +86,7 @@ tools/simulate ──▶ tools/simulation ──▶ generators/ensemble
 1. コンダクターが、位置・役割・シーン・エネルギー・進行・キー・音色を持つ `Context` を作る
 2. ドラム生成器が、`Context` からドラムの確定結果（打音、フィル区間、フィルを適用する前のキック）を作る
 3. `Context` にドラムの確定結果を加えた `ContextWithDrums` を作る
-4. サブベース・リースベース・スタブ・パッドが、`ContextWithDrums` からノートを作る
+4. サブベース・リースベース・スタブ・パッドが、`ContextWithDrums` からノートを、シンバルの生成器がクラッシュとライドの打音を作る
 5. アレンジが、シーンで鳴らさないパートを取り除き、ドロップの入り方に従って溜めを空ける（実音側のイベント）
 6. FX 生成器が、`Context` と実音側のイベントから FX のイベントを作る
 
@@ -112,7 +113,7 @@ tools/simulate ──▶ tools/simulation ──▶ generators/ensemble
 | `ColoredChord` | コードとテンションの組 | 表にないテンション（アボイドノート）を表現できない |
 | `Context` | 位置・役割・シーン・進行・エネルギー・キー・音色・シード・ラッチしたパラメーター | コンダクターだけが作る |
 | `ContextWithDrums` | `Context` とドラムの確定結果 | アンサンブルだけが作る。ドラムより前の段階では使えない |
-| `NoteEvent` | `DrumHit \| SubNote \| ReeseNote \| StabHit \| PadChord` | `instrument` で判別する |
+| `NoteEvent` | `DrumHit \| CymbalHit \| SubNote \| ReeseNote \| StabHit \| PadChord` | `instrument` で判別する。長さを持たないのは打音（`DrumHit`・`CymbalHit`、`isStrike`）だけ |
 | `FxEvent` | ライザー・スイープ・インパクト・スロー・フィルターのリセット・溜め | `fx` で判別する |
 | `PlaybackSession` | 再生中と一時停止中の共用体 | 停止中のセッションは存在しない。一時停止中に一時停止するような操作は型で書けない |
 | `ResumePoint` | 保留の2bar と再開するステップ | 保留が空ならステップは 0 |
